@@ -50,7 +50,6 @@ internal static class ClaudeCodeTranscriptParser
                 return;
             }
 
-            state.HasNonSidechainActivity = true;
             switch (recordType)
             {
                 case "user":
@@ -127,6 +126,7 @@ internal static class ClaudeCodeTranscriptParser
         {
             // ⚠️ A-K3 This interruption marker is unverified and remains a provisional signal.
             state.HasSeenTurnEvent = true;
+            state.HasNonSidechainActivity = true;
             state.Turn = ClaudeCodeTurnStatus.Aborted;
             state.EndedWithQuestion = false;
             state.PendingTools.Clear();
@@ -136,6 +136,7 @@ internal static class ClaudeCodeTranscriptParser
         if (IsSlashCommandWrapper(text)) return;
 
         state.HasSeenTurnEvent = true;
+        state.HasNonSidechainActivity = true;
         state.Turn = ClaudeCodeTurnStatus.Running;
         state.EndedWithQuestion = false;
         state.PendingTools.Clear();
@@ -174,6 +175,7 @@ internal static class ClaudeCodeTranscriptParser
         }
 
         state.HasSeenTurnEvent = true;
+        state.HasNonSidechainActivity = true;
         state.Turn = ClaudeCodeTurnStatus.Running;
         state.EndedWithQuestion = false;
         var stopReason = ReadString(message, "stop_reason");

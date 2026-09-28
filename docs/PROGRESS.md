@@ -46,7 +46,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P3.1 Claude Code transcript parser ⚠️
 - [x] P3.2 Hook event sink (`--claude-hook`)
 - [x] P3.3 Opt-in hook installer
-- [ ] P3.4 ClaudeCodeTaskProvider
+- [x] P3.4 ClaudeCodeTaskProvider
 - [ ] P3.5 Dismiss control
 - [ ] P3.6 KNOWN_LIMITATIONS.md
 - [ ] Phase 3 acceptance 🧑
@@ -112,3 +112,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P3.1 — Added Claude Code path resolution, an in-memory transcript state/parser and task mapper, plus synthetic provisional fixtures. A-K2/A-K3 remain unverified; nested message fields, title field names and the interruption marker are isolated behind assumption comments. Only sanitized short title candidates and pending tool-use IDs are retained.
 - 2026-09-28 — P3.2 — Added the `--claude-hook` early-startup sink. It accepts only the four configured hook events, copies only the event/session ID/notification type plus an ingestion timestamp, caps stdin at 1 MB, and rotates the app-owned file to the last 200 lines above 256 KB. All hook errors remain silent with exit code 0.
 - 2026-09-28 — P3.3 — Added the opt-in hook setting and command preview, a JSON merger that preserves unrelated settings/hooks, a one-time settings backup and atomic replacement. Enabling hooks repairs partial installs; startup refreshes the command when the executable path changes. Malformed settings are refused without overwriting the file.
+- 2026-09-28 — P3.4 — Added recent transcript discovery, tail recovery, optional hook evidence, debounced file watching and periodic reconciliation. Registered Claude Code beside Codex outside demo mode; provider tests cover multiple sessions, hook attention clearing, transcript-only behavior, sidechain filtering and restart recovery. Build clean; 145 Core tests pass.

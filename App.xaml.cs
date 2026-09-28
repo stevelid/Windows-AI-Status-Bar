@@ -1,6 +1,8 @@
+using System.IO;
 using System.Windows;
 using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
+using StatusBar.Core.Claude;
 using StatusBar.Core.Codex;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
@@ -28,6 +30,8 @@ public partial class App : System.Windows.Application
     StatusBarState _taskState = StatusBarState.Empty;
     int? _agentStateRetentionMinutes;
     string? _agentStateCodexHomeOverride;
+    string? _agentStateClaudeHomeOverride;
+    bool _agentStateClaudeHooksEnabled;
     bool _agentStateDemoMode;
     bool _loginWindowOpen;
     bool _demoTasksRequested;
@@ -548,11 +552,16 @@ public partial class App : System.Windows.Application
     {
         var demoMode = _demoTasksRequested || _settings.DemoTasks;
         var codexHomeOverride = demoMode ? null : _settings.CodexHomeOverride;
+        var claudeHomeOverride = demoMode ? null : _settings.ClaudeCodeHomeOverride;
+        var claudeHooksEnabled = !demoMode && _settings.UseClaudeCodeHooks;
 
         if (_agentStateService is not null &&
             _agentStateRetentionMinutes == _settings.RecentlyCompletedMinutes &&
             _agentStateDemoMode == demoMode &&
-            (demoMode || string.Equals(_agentStateCodexHomeOverride, codexHomeOverride, StringComparison.OrdinalIgnoreCase)))
+            (demoMode ||
+                string.Equals(_agentStateCodexHomeOverride, codexHomeOverride, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_agentStateClaudeHomeOverride, claudeHomeOverride, StringComparison.OrdinalIgnoreCase) &&
+                _agentStateClaudeHooksEnabled == claudeHooksEnabled))
         {
             return;
         }
@@ -579,7 +588,14 @@ public partial class App : System.Windows.Application
         {
             _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
             _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
-            taskProviders = [_codexTaskProvider];
+            var claudeHookPath = claudeHooksEnabled
+                ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
+                : null;
+            taskProviders =
+            [
+                _codexTaskProvider,
+                new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath),
+            ];
         }
 
         _agentStateService = new AgentStateService(
@@ -591,6 +607,8 @@ public partial class App : System.Windows.Application
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
+        _agentStateClaudeHomeOverride = claudeHomeOverride;
+        _agentStateClaudeHooksEnabled = claudeHooksEnabled;
         _taskState = _agentStateService.Current;
         _agentStateService.StateChanged += OnTaskStateChanged;
         UpdateStrip();
