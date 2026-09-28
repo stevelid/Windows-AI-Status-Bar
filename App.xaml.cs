@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     UsageMonitor? _usageMonitor;
     AgentStateService? _agentStateService;
     DockController? _dockController;
+    DetailsPaneWindow? _detailsPane;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
     Settings _settings = null!;
@@ -173,6 +174,7 @@ public partial class App : System.Windows.Application
         _widget = new StatusStripWindow(_settings);
         _dockController = new DockController(_widget);
         _widget.ContextMenuRequested += ShowTrayContextMenu;
+        _widget.TogglePaneRequested += ToggleDetailsPane;
 
         UpdateService.CleanupOldBinary();
         UpdateService.CleanupStaleTemporaryDirectories();
@@ -480,6 +482,7 @@ public partial class App : System.Windows.Application
     {
         _widget.ApplyScale();
         _widget.ApplyAppearance();
+        if (_detailsPane?.IsVisible == true) _detailsPane.ApplyAppearance();
         _dockController?.Redock();
 
         if (!string.Equals(_chatGptServicePath, _settings.CodexExecutablePath, StringComparison.OrdinalIgnoreCase))
@@ -508,6 +511,7 @@ public partial class App : System.Windows.Application
 
     void HideWidget()
     {
+        _detailsPane?.Close();
         _settings.WidgetVisible = false;
         _settings.Save();
         _widget.Hide();
@@ -550,6 +554,7 @@ public partial class App : System.Windows.Application
             await _usageMonitor.DisposeAsync();
         if (_agentStateService is not null)
             await _agentStateService.DisposeAsync();
+        _detailsPane?.Close();
         DisposeChatGptService();
         _tray.Visible = false;
         _tray.Dispose();
@@ -641,7 +646,24 @@ public partial class App : System.Windows.Application
     void UpdateStrip()
     {
         if (_usageMonitor is null) return;
-        _widget.UpdateState(_usageMonitor.Current, _taskState);
+        var usage = _usageMonitor.Current;
+        _widget.UpdateState(usage, _taskState);
+        if (_detailsPane?.IsVisible == true)
+            _detailsPane.UpdateState(usage, _taskState);
+    }
+
+    void ToggleDetailsPane()
+    {
+        if (_detailsPane is { IsVisible: true })
+        {
+            _detailsPane.Close();
+            return;
+        }
+
+        if (!_widget.IsVisible || _usageMonitor is null) return;
+        _detailsPane = new DetailsPaneWindow(_settings);
+        _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
+        _detailsPane.ShowAbove(_widget);
     }
 
     void ShowTrayContextMenu()

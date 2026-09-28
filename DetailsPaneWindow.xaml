@@ -1,0 +1,49 @@
+<Window x:Class="ClaudeUsageWidget.DetailsPaneWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Windows AI Status Details"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
+        WindowStartupLocation="Manual" SizeToContent="Height" Width="390" MaxHeight="640"
+        Deactivated="OnDeactivated" PreviewKeyDown="OnPreviewKeyDown"
+        PreviewMouseDown="OnActivity" PreviewMouseMove="OnActivity">
+    <Border x:Name="RootBorder" CornerRadius="12" BorderThickness="1"
+            Padding="14" Background="#F21B1B24">
+        <Border.Effect>
+            <DropShadowEffect x:Name="PaneShadow" BlurRadius="18" ShadowDepth="3"
+                              Direction="270" Opacity="0.45"/>
+        </Border.Effect>
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="610">
+            <StackPanel x:Name="ContentPanel">
+                <TextBlock x:Name="CodexHeading" FontSize="11" FontWeight="Bold"
+                           Margin="0,0,0,5"/>
+                <StackPanel x:Name="CodexUsageRows"/>
+                <TextBlock x:Name="CodexHealth" FontSize="10" TextWrapping="Wrap"
+                           Margin="0,0,0,6"/>
+
+                <TextBlock x:Name="ClaudeHeading" FontSize="11" FontWeight="Bold"
+                           Margin="0,7,0,5"/>
+                <StackPanel x:Name="ClaudeUsageRows"/>
+                <TextBlock x:Name="ClaudeHealth" FontSize="10" TextWrapping="Wrap"
+                           Margin="0,0,0,6"/>
+
+                <Separator x:Name="TaskDivider" Margin="0,5,0,8"/>
+                <TextBlock x:Name="NeedsYouHeading" FontSize="11" FontWeight="Bold"
+                           Margin="0,0,0,4" Visibility="Collapsed"/>
+                <StackPanel x:Name="NeedsYouRows"/>
+                <TextBlock x:Name="WorkingHeading" FontSize="11" FontWeight="Bold"
+                           Margin="0,5,0,4" Visibility="Collapsed"/>
+                <StackPanel x:Name="WorkingRows"/>
+                <TextBlock x:Name="UnknownHeading" FontSize="11" FontWeight="Bold"
+                           Margin="0,5,0,4" Visibility="Collapsed"/>
+                <StackPanel x:Name="UnknownRows"/>
+                <TextBlock x:Name="RecentHeading" FontSize="11" FontWeight="Bold"
+                           Margin="0,5,0,4" Visibility="Collapsed"/>
+                <StackPanel x:Name="RecentRows"/>
+                <TextBlock x:Name="EmptyTasks" FontSize="11" TextWrapping="Wrap"
+                           Margin="0,7,0,0" Visibility="Collapsed"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</Window>

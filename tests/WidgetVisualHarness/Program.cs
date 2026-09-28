@@ -61,6 +61,19 @@ static class Program
         window.ShowInTaskbar = true;
         window.Closed += (_, _) => app.Shutdown();
         window.Loaded += (_, _) => window.UpdateState(Samples(), SampleTasks());
+        DetailsPaneWindow? pane = null;
+        window.TogglePaneRequested += () =>
+        {
+            if (pane is { IsVisible: true })
+            {
+                pane.Close();
+                return;
+            }
+
+            pane = new DetailsPaneWindow(settings);
+            pane.UpdateState(Samples(), SampleTasks());
+            pane.ShowAbove(window);
+        };
         window.Show();
         app.Run();
     }
@@ -96,12 +109,20 @@ static class Program
                 window.Show();
                 window.UpdateState(Samples(), SampleTasks());
                 window.UpdateLayout();
+                var pane = new DetailsPaneWindow(settings);
+                pane.UpdateState(Samples(), SampleTasks());
+                pane.ShowAbove(window);
+                pane.UpdateLayout();
 
                 var languageName = language == UiLanguage.En ? "en" : "zh-hant";
                 var themeName = light ? "light" : "dark";
                 SaveSnapshot(
                     window,
                     Path.Combine(outputDirectory, $"{themeName}-{languageName}.png"));
+                SaveSnapshot(
+                    pane,
+                    Path.Combine(outputDirectory, $"{themeName}-pane-{languageName}.png"));
+                pane.Close();
                 window.Close();
             }
         }

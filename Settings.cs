@@ -21,6 +21,7 @@ public class Settings
     public string? CodexExecutablePath { get; set; }
     public bool DemoTasks { get; set; }
     public string AttentionLabel { get; set; } = "STEVE";
+    public int PaneAutoCollapseSeconds { get; set; }
     [JsonIgnore]
     public bool DoNotPersist { get; set; }
 
