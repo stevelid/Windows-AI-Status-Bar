@@ -391,7 +391,7 @@ Parser input is one JSONL line at a time; unknown record types are counted in `F
 
 Mapping to `AgentTask` at evaluation time `now`:
 
-1. `Turn == Running` and a pending item exists with `now - since ≥ CodexApprovalDebounce` and `ApprovalPolicy != "never"` → `NeedsAttention / Inferred`, reason "Waiting for approval" or "Waiting for your input". (Inferred because the approval event itself is not on disk.)
+1. `Turn == Running` and a pending item exists with `now - since ≥ CodexApprovalDebounce` → `NeedsAttention / Inferred`. When `ApprovalPolicy == "never"` only `Input` items (`request_user_input`) count, since no approval can be pending (D3; corrected 2026-09-28 after the rule was found to suppress input requests as well), reason "Waiting for approval" or "Waiting for your input". (Inferred because the approval event itself is not on disk.)
 2. `Turn == Running` → `Working / Confirmed`; if `now - LastActivity ≥ CodexWorkingStaleAfter` → `Working / Stale`; if `≥ CodexWorkingUnknownAfter` → `Unknown / Stale`.
 3. `Turn == Completed` and `EndedWithQuestion` and `now - LastActivity < QuestionAttentionExpiry` → `NeedsAttention / Inferred`, reason "Asked you a question", evidence key = `turn_id` (D15). Otherwise `Turn == Completed` → `Complete / Confirmed`. `Turn == Failed` → `Failed / Confirmed`. `Turn == Aborted` → `Complete / Confirmed`, `StatusDetail = "Stopped"` (D13).
 4. No turn seen yet (tail read began mid-file with no `task_started`) → derive from the most recent turn event in the tail; if none, `Unknown / Stale`.
@@ -445,6 +445,7 @@ Duplicate user prompts (Windows writes them twice) do not matter for state becau
 | `user` with text content that is not a `tool_result`, not `isMeta`, and not a slash-command wrapper | `Turn = Running`, clear question flag and pending; first one is a title candidate (sanitised, never stored in full). |
 | `user` whose text starts with `[Request interrupted by user` | `Turn = Aborted` (`StatusDetail = "Stopped"`). ⚠️ A-K3 |
 | `user` with `tool_result` blocks | Resolve pending tool ids. |
+| `assistant` `tool_use` named `AskUserQuestion` / `ExitPlanMode`, unresolved | `NeedsAttention / Inferred`, reason "Waiting for your answer" / "Plan needs approval", evidence key = tool-use id. No debounce or expiry: these tools always wait for Steve. Only the tool name is read, never its input. ⚠️ A-K5 |
 | `assistant` | `Turn = Running`; add pending for each `tool_use`. If `message.stop_reason == "end_turn"` → `Turn = Completed`, `EndedWithQuestion = QuestionDetector.EndsWithQuestion(last text block)` (D15). |
 | `custom-title` | Title shown in the desktop Code tab; preferred over everything else. Field name to be confirmed from a fixture (recon 2026-09-28 saw the record type only). |
 | `ai-title` (`aiTitle`) | Title (preferred over the first prompt). |
@@ -630,6 +631,7 @@ This phase keeps the original Cowork design. Do not start it until `docs/PROGRES
 
 **P5.2 Attention notifications (D11)**
 - `NotificationGate` in Core (Section 5.4) with tests (restart does not repeat; new evidence key notifies; seeding on start). `AttentionNotifier.cs` shows `"<Provider> needs you — <title>"` via the tray balloon when `NotificationsEnabled`; clicking the balloon opens the pane.
+- *Requested by Steve 2026-09-28:* also offer a **completion** balloon (`"<Provider> finished — <title>"`, and `"… failed"` for Failed) behind its own setting, "Notify when tasks finish" (default on). Fire once per turn when a task goes from Working to Complete or Failed after the initial snapshot; a turn that ends with a question notifies as attention, not completion. Seed on start like attention.
 
 **P5.3 Visual polish**
 - Restrained transition: when `AttentionCount` increases, fade the pill background from transparent to amber over 400 ms once (skip if `SystemParameters.ClientAreaAnimation` is false). No looping animations. Tray icon shows a small amber dot when attention > 0.
@@ -687,6 +689,7 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-K1 | Claude Code transcripts are in `~/.claude/projects/<folder>/<session>.jsonl` | Claude Code discovery | Settings override; recon path | **Confirmed for desktop Code tab with default Claude home; terminal and `CLAUDE_CONFIG_DIR` override untested** |
 | A-K2 | Transcript records: `type`, `message.stop_reason`, `isSidechain`, `ai-title` | Claude Code turn state and titles | Recency fallback (`Working/Inferred`) | Unverified; only top-level type signatures observed |
 | A-K3 | Interruptions are recorded as a user message starting `[Request interrupted by user` | Stopped state | Shows Complete instead of Stopped | Unverified |
+| A-K5 | A structured question or plan approval in Claude Code is an `assistant` `tool_use` named `AskUserQuestion` / `ExitPlanMode` with no `tool_result` until answered | Claude Code structured-question attention | Hooks (`elicitation_dialog`) if enabled; otherwise shows Working | Unverified in Claude Code (confirmed for Cowork, A-C5) |
 | A-K4 | Sessions started from the desktop Code tab run user hooks from `~/.claude/settings.json` | Confirmed Claude attention | Transcript-only (permission waits show as Working) | Unverified |
 | A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override | Confirmed (MSIX root only) |
 | A-C2 | Metadata `local_<id>.json` contains `title`, `lastActivityAt`, `isArchived`, `error` | Titles, recency | Titles "Claude task"; recency from file time | Confirmed (no `error` seen) |

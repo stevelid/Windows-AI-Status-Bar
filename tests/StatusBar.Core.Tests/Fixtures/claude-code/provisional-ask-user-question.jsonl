@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:00Z","message":{"role":"user","content":[{"type":"text","text":"Draft the sample memo"}]}}
+{"type":"assistant","timestamp":"2026-01-01T12:00:04Z","message":{"role":"assistant","content":[{"type":"text","text":"Before I start, one choice."},{"type":"tool_use","id":"synthetic-question","name":"AskUserQuestion","input":{"questions":[{"question":"Which format would you like?","header":"Format","options":[{"label":"PDF"},{"label":"Word"}],"multiSelect":false}]}}],"stop_reason":"tool_use"}}

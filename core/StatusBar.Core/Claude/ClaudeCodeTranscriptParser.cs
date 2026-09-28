@@ -144,6 +144,16 @@ internal static class ClaudeCodeTranscriptParser
             state.FirstPromptTitleCandidate = TextSanitizer.SanitizeTitleCandidate(firstText);
     }
 
+    // ⚠️ A-K5 A structured question or plan approval is an assistant tool_use named AskUserQuestion or
+    // ExitPlanMode that stays unanswered (no matching tool_result) until Steve responds. Confirmed for the
+    // same agent runtime in Cowork (A-C5); not yet observed in a Claude Code transcript.
+    static ClaudePendingToolKind ToolKind(string? name) => name switch
+    {
+        "AskUserQuestion" => ClaudePendingToolKind.Question,
+        "ExitPlanMode" => ClaudePendingToolKind.PlanApproval,
+        _ => ClaudePendingToolKind.Other,
+    };
+
     static void ApplyAssistantRecord(ClaudeCodeSessionState state, JsonElement root)
     {
         // ⚠️ A-K2 Assistant content blocks and tool_use IDs are not confirmed by the redacted recon report.
@@ -158,10 +168,16 @@ internal static class ClaudeCodeTranscriptParser
                 var blockType = ReadString(block, "type");
                 if (string.Equals(blockType, "tool_use", StringComparison.Ordinal))
                 {
-                    // Tool inputs can contain prompts, paths and credentials; only retain the opaque id.
+                    // Tool inputs can contain prompts, paths and credentials; only retain the opaque id
+                    // and the kind derived from the tool's fixed name.
                     var toolUseId = ReadString(block, "id");
                     if (!string.IsNullOrWhiteSpace(toolUseId))
-                        state.PendingTools[toolUseId] = new ClaudePendingTool(toolUseId, state.LastActivity);
+                    {
+                        state.PendingTools[toolUseId] = new ClaudePendingTool(
+                            toolUseId,
+                            state.LastActivity,
+                            ToolKind(ReadString(block, "name")));
+                    }
                 }
                 else if (string.Equals(blockType, "text", StringComparison.Ordinal))
                 {

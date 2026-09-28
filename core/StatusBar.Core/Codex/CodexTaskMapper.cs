@@ -34,24 +34,25 @@ internal static class CodexTaskMapper
         var inactivity = now >= task.LastActivity ? now - task.LastActivity : TimeSpan.Zero;
         if (state.Turn == CodexTurnStatus.Running)
         {
-            if (!string.Equals(state.ApprovalPolicy, "never", StringComparison.OrdinalIgnoreCase))
+            // With approval_policy "never" Codex cannot be waiting for an approval, but a structured
+            // question (request_user_input) still waits for Steve, so only approvals are filtered out.
+            var approvalsPossible = !string.Equals(state.ApprovalPolicy, "never", StringComparison.OrdinalIgnoreCase);
+            var pending = state.PendingCalls.Values
+                .Where(call => call.Kind == CodexPendingKind.Input || approvalsPossible)
+                .Where(call => now >= call.Since && now - call.Since >= timings.CodexApprovalDebounce)
+                .OrderBy(call => call.Since)
+                .FirstOrDefault();
+            if (pending is not null)
             {
-                var pending = state.PendingCalls.Values
-                    .Where(call => now >= call.Since && now - call.Since >= timings.CodexApprovalDebounce)
-                    .OrderBy(call => call.Since)
-                    .FirstOrDefault();
-                if (pending is not null)
+                return task with
                 {
-                    return task with
-                    {
-                        Status = AgentTaskStatus.NeedsAttention,
-                        Confidence = StateConfidence.Inferred,
-                        AttentionReason = pending.Kind == CodexPendingKind.Input
-                            ? "Waiting for your input"
-                            : "Waiting for approval",
-                        EvidenceKey = "pending-call:" + pending.CallId,
-                    };
-                }
+                    Status = AgentTaskStatus.NeedsAttention,
+                    Confidence = StateConfidence.Inferred,
+                    AttentionReason = pending.Kind == CodexPendingKind.Input
+                        ? "Waiting for your input"
+                        : "Waiting for approval",
+                    EvidenceKey = "pending-call:" + pending.CallId,
+                };
             }
 
             if (inactivity >= timings.CodexWorkingUnknownAfter)
