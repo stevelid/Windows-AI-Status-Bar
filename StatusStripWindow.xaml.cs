@@ -174,7 +174,7 @@ public partial class StatusStripWindow : Window
             return;
         }
 
-        var principal = UsageSummary.Principal(snapshot.Windows);
+        var principal = UsageSummary.Compact(snapshot.Windows);
         if (principal is null || snapshot.Health == UsageHealth.Unavailable)
         {
             SetUnavailable(target, prefix, L10n.T("err_usage_unavailable"));

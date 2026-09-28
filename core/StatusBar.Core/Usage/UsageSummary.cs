@@ -24,6 +24,23 @@ public static class UsageSummary
     }
 
     /// <summary>
+    /// Returns the window shown in the compact strip: the shortest window with a known length
+    /// (the five-hour session for both Codex and Claude), falling back to <see cref="Principal"/>
+    /// when no window reports a length. Steve prefers the session figure on the strip; every
+    /// window, including weekly limits, is still listed in the details pane.
+    /// </summary>
+    public static UsageWindow? Compact(IReadOnlyList<UsageWindow> windows)
+    {
+        ArgumentNullException.ThrowIfNull(windows);
+
+        return windows
+            .Where(window => window.Length is not null)
+            .OrderBy(window => window.Length)
+            .FirstOrDefault()
+            ?? Principal(windows);
+    }
+
+    /// <summary>
     /// Classifies remaining allowance as Normal (at or above the approaching threshold),
     /// Approaching (at or above the low threshold), or Low (below the low threshold).
     /// </summary>

@@ -685,8 +685,12 @@ public partial class App : System.Windows.Application
         var snapshots = _usageMonitor?.Current;
         if (snapshots is null) return;
 
-        var allWindows = snapshots.Values.SelectMany(snapshot => snapshot.Windows).ToArray();
-        var principal = UsageSummary.Principal(allWindows);
+        // The tray icon follows the strip: the lower of the two session (compact) figures.
+        var compactWindows = snapshots.Values
+            .Select(snapshot => UsageSummary.Compact(snapshot.Windows))
+            .OfType<UsageWindow>()
+            .ToArray();
+        var principal = UsageSummary.Principal(compactWindows);
         var pct = principal is null ? (int?)null : (int)Math.Round(principal.UsedPercent);
         if (pct != _lastTrayPct)
         {
@@ -701,7 +705,7 @@ public partial class App : System.Windows.Application
             {
                 var name = source == UsageSource.Claude ? L10n.T("provider_claude") : L10n.T("provider_chatgpt");
                 var snapshot = snapshots.GetValueOrDefault(source);
-                var window = snapshot is null ? null : UsageSummary.Principal(snapshot.Windows);
+                var window = snapshot is null ? null : UsageSummary.Compact(snapshot.Windows);
                 var remaining = window is null
                     ? L10n.T("tray_usage_unavailable")
                     : L10n.F("tray_usage_remaining", Math.Round(window.RemainingPercent)) +

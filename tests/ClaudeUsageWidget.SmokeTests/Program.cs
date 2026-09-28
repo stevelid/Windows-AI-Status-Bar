@@ -8,6 +8,19 @@ static void Require(bool condition, string message)
 
 L10n.Init(UiLanguage.En);
 
+// The strip shows the session window, identified by the length the adapters attach.
+Require(
+    ClaudeUsageWidget.Providers.ClaudeUsageProvider.WindowLength("session") == TimeSpan.FromHours(5) &&
+    ClaudeUsageWidget.Providers.ClaudeUsageProvider.WindowLength("five_hour") == TimeSpan.FromHours(5) &&
+    ClaudeUsageWidget.Providers.ClaudeUsageProvider.WindowLength("weekly_all") == TimeSpan.FromDays(7) &&
+    ClaudeUsageWidget.Providers.ClaudeUsageProvider.WindowLength("unknown_kind") is null,
+    "Claude usage keys should map to session and weekly window lengths.");
+Require(
+    ClaudeUsageWidget.Providers.CodexUsageProvider.WindowLength("chatgpt_0_300") == TimeSpan.FromMinutes(300) &&
+    ClaudeUsageWidget.Providers.CodexUsageProvider.WindowLength("chatgpt_1_10080") == TimeSpan.FromDays(7) &&
+    ClaudeUsageWidget.Providers.CodexUsageProvider.WindowLength("chatgpt_0_0") is null,
+    "Codex usage keys should carry the window length in minutes.");
+
 const string expiredRefreshTokenResponse = """
 {
   "error": "invalid_grant",

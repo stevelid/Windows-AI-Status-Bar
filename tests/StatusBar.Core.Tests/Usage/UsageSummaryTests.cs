@@ -30,6 +30,36 @@ public class UsageSummaryTests
     }
 
     [Fact]
+    public void Compact_prefers_the_shortest_window_even_when_a_longer_one_is_tighter()
+    {
+        var windows = new[]
+        {
+            new UsageWindow("weekly", "Weekly", 90, null, TimeSpan.FromDays(7)),
+            new UsageWindow("session", "Session", 20, null, TimeSpan.FromHours(5)),
+        };
+
+        Assert.Equal("session", UsageSummary.Compact(windows)?.Key);
+    }
+
+    [Fact]
+    public void Compact_falls_back_to_the_tightest_window_when_no_lengths_are_known()
+    {
+        var windows = new[]
+        {
+            new UsageWindow("a", "A", 20, null),
+            new UsageWindow("b", "B", 90, null),
+        };
+
+        Assert.Equal("b", UsageSummary.Compact(windows)?.Key);
+    }
+
+    [Fact]
+    public void Compact_returns_null_when_there_are_no_windows()
+    {
+        Assert.Null(UsageSummary.Compact(Array.Empty<UsageWindow>()));
+    }
+
+    [Fact]
     public void Principal_returns_null_when_there_are_no_windows()
     {
         Assert.Null(UsageSummary.Principal(Array.Empty<UsageWindow>()));
