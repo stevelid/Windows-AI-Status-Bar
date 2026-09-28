@@ -15,7 +15,8 @@ public static class TrayIconRenderer
     public static Icon Render(
         double? utilization,
         double approachingBelowPercent = 30,
-        double lowBelowPercent = 10)
+        double lowBelowPercent = 10,
+        bool attention = false)
     {
         const int size = 32;
         using var bmp = new Bitmap(size, size);
@@ -51,6 +52,14 @@ public static class TrayIconRenderer
         using var brush = new SolidBrush(Color.White);
         var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         g.DrawString(text, font, brush, new RectangleF(0, 1, size, size), sf);
+
+        if (attention)
+        {
+            using var attentionBrush = new SolidBrush(Color.FromArgb(0xF5, 0xA9, 0x3B));
+            using var attentionOutline = new Pen(Color.FromArgb(220, 255, 255, 255), 1f);
+            g.FillEllipse(attentionBrush, 22, 2, 8, 8);
+            g.DrawEllipse(attentionOutline, 22, 2, 8, 8);
+        }
 
         var hIcon = bmp.GetHicon();
         try

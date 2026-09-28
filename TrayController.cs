@@ -1,4 +1,5 @@
 using WinForms = System.Windows.Forms;
+using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 
 namespace ClaudeUsageWidget;
@@ -36,7 +37,8 @@ public sealed class TrayController : IDisposable
     readonly WinForms.ToolStripMenuItem _quit;
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _usage =
         new Dictionary<UsageSource, UsageSnapshot>();
-    (double? Utilization, int ApproachingBelow, int LowBelow)? _iconKey;
+    (double? Utilization, int ApproachingBelow, int LowBelow, bool Attention)? _iconKey;
+    bool _hasAttention;
     bool _syncingAutoStart;
     bool _stripVisible = true;
     bool _paneVisible;
@@ -108,13 +110,36 @@ public sealed class TrayController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(usage);
         _usage = usage;
+        RenderIcon();
+
+        var lines = new[] { UsageSource.Claude, UsageSource.Codex }
+            .Select(source => FormatUsageLine(source, usage.GetValueOrDefault(source)));
+        var tip = string.Join("\n", lines);
+        var trimmed = tip.Length > 127 ? tip[..127] : tip;
+        if (_icon.Text != trimmed) _icon.Text = trimmed;
+    }
+
+    /// <summary>Updates the tray attention marker independently of quota refreshes.</summary>
+    public void UpdateTaskState(StatusBarState tasks)
+    {
+        ArgumentNullException.ThrowIfNull(tasks);
+        _hasAttention = tasks.AttentionCount > 0;
+        RenderIcon();
+    }
+
+    void RenderIcon()
+    {
         // Keep the tray summary aligned with the compact strip's session window.
-        var allWindows = usage.Values
+        var allWindows = _usage.Values
             .Select(snapshot => UsageSummary.Compact(snapshot.Windows))
             .OfType<UsageWindow>()
             .ToArray();
         var principal = UsageSummary.Principal(allWindows);
-        var iconKey = (principal?.UsedPercent, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
+        var iconKey = (
+            principal?.UsedPercent,
+            _settings.ApproachingBelowPercent,
+            _settings.LowBelowPercent,
+            _hasAttention);
         if (_iconKey != iconKey)
         {
             _iconKey = iconKey;
@@ -122,15 +147,10 @@ public sealed class TrayController : IDisposable
             _icon.Icon = TrayIconRenderer.Render(
                 principal?.UsedPercent,
                 _settings.ApproachingBelowPercent,
-                _settings.LowBelowPercent);
+                _settings.LowBelowPercent,
+                _hasAttention);
             oldIcon?.Dispose();
         }
-
-        var lines = new[] { UsageSource.Claude, UsageSource.Codex }
-            .Select(source => FormatUsageLine(source, usage.GetValueOrDefault(source)));
-        var tip = string.Join("\n", lines);
-        var trimmed = tip.Length > 127 ? tip[..127] : tip;
-        if (_icon.Text != trimmed) _icon.Text = trimmed;
     }
 
     /// <summary>Updates Show/Hide and Expand/Collapse menu text to match current window state.</summary>

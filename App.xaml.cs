@@ -686,6 +686,7 @@ public partial class App : System.Windows.Application
         if (_usageMonitor is null) return;
         var usage = _usageMonitor.Current;
         _widget.UpdateState(usage, _taskState);
+        _trayController.UpdateTaskState(_taskState);
         if (_detailsPane?.IsVisible == true)
             _detailsPane.UpdateState(usage, _taskState);
     }

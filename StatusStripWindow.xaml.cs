@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using Color = System.Windows.Media.Color;
@@ -11,9 +12,11 @@ namespace ClaudeUsageWidget;
 public partial class StatusStripWindow : Window
 {
     readonly Settings _settings;
+    readonly SolidColorBrush _attentionBackgroundBrush = new(Colors.Transparent);
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _usage = new Dictionary<UsageSource, UsageSnapshot>();
     StatusBarState _tasks = StatusBarState.Empty;
     string? _transientMessage;
+    int _lastAttentionCount;
 
     /// <summary>Raised when the user clicks the strip to toggle the details pane.</summary>
     public event Action? TogglePaneRequested;
@@ -27,6 +30,7 @@ public partial class StatusStripWindow : Window
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         InitializeComponent();
+        AttentionPill.Background = _attentionBackgroundBrush;
         ApplyScale();
         ApplyAppearance();
         L10n.Changed += ApplyAppearance;
@@ -118,9 +122,18 @@ public partial class StatusStripWindow : Window
                 : _settings.AttentionLabel.Trim();
             if (label.Length > 12) label = label[..12];
             AttentionText.Text = $"⚠ {label} {_tasks.AttentionCount}";
-            AttentionPill.Background = ThemeManager.Brush(ThemeManager.IsLight
+            var attentionColor = ThemeManager.IsLight
                 ? Color.FromRgb(0xF3, 0xD3, 0x94)
-                : Color.FromRgb(0x61, 0x49, 0x25));
+                : Color.FromRgb(0x61, 0x49, 0x25);
+            if (_tasks.AttentionCount > _lastAttentionCount)
+                AnimateAttention(attentionColor);
+            else
+            {
+                _attentionBackgroundBrush.BeginAnimation(
+                    SolidColorBrush.ColorProperty,
+                    null);
+                _attentionBackgroundBrush.Color = attentionColor;
+            }
             AttentionText.Foreground = ThemeManager.Brush(ThemeManager.IsLight
                 ? Color.FromRgb(0x62, 0x42, 0x0D)
                 : Color.FromRgb(0xFF, 0xDC, 0x9A));
@@ -129,11 +142,38 @@ public partial class StatusStripWindow : Window
         }
         else
         {
+            _attentionBackgroundBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
+            _attentionBackgroundBrush.Color = Colors.Transparent;
             AttentionPill.Visibility = Visibility.Collapsed;
         }
 
+        _lastAttentionCount = _tasks.AttentionCount;
         if (_transientMessage is null)
             ToolTip = $"{CodexText.ToolTip}\n{ClaudeText.ToolTip}\n{WorkingText.ToolTip}";
+    }
+
+    void AnimateAttention(Color target)
+    {
+        _attentionBackgroundBrush.BeginAnimation(SolidColorBrush.ColorProperty, null);
+        _attentionBackgroundBrush.Color = Color.FromArgb(0, target.R, target.G, target.B);
+        if (!SystemParameters.ClientAreaAnimation)
+        {
+            _attentionBackgroundBrush.Color = target;
+            return;
+        }
+
+        var animation = new ColorAnimation
+        {
+            From = _attentionBackgroundBrush.Color,
+            To = target,
+            Duration = TimeSpan.FromMilliseconds(400),
+            FillBehavior = FillBehavior.HoldEnd,
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
+        };
+        _attentionBackgroundBrush.BeginAnimation(
+            SolidColorBrush.ColorProperty,
+            animation,
+            HandoffBehavior.SnapshotAndReplace);
     }
 
     void RenderProvider(UsageSource source, TextBlock target)
