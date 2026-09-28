@@ -15,7 +15,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Phase 0 — Reconnaissance
 
-- [ ] P0.1 🧑 Unchanged widget shows Codex and Claude quotas
+- [x] P0.1 🧑 Unchanged widget shows Codex and Claude quotas (confirmed by Steve, 2026-09-28)
 - [x] P0.2 🧑 Static recon report committed (`docs/recon/ai-status-recon-20260928-095731/`)
 - [ ] P0.3 🧑 Live timeline with scenario notes — partial: Codex turns captured; Cowork and question scenarios still needed
 - [ ] P0.4 FINDINGS.md, assumption statuses, recon-derived fixtures — FINDINGS.md and plan rules updated; fixtures and A-C3/A-X4 wait on the P0.3 re-run
@@ -78,7 +78,6 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(The agent lists here, in plain steps, anything that needs Steve's Windows machine.)_
 
-- P0.1: confirm whether the upstream widget showed both Codex and Claude percentages.
 - P0.3: a short (about 10 minute) watch re-run covering Cowork scenarios K1–K4 and Codex C4. Steps are at the end of `docs/recon/FINDINGS.md`.
 
 ## Decisions and deviations

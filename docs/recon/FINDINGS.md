@@ -21,7 +21,7 @@ The recon changes three things in the plan.
 | Codex | MSIX `OpenAI.Codex` 26.924.2738.0, family `OpenAI.Codex_2p2nqsd0c76g0`, AUMID `OpenAI.Codex_2p2nqsd0c76g0!App`, processes `codex`, `codex-*` helpers |
 | ChatGPT | processes `ChatGPT` running (no MSIX package matched) |
 | Developer mode | not enabled (registry key absent) |
-| Upstream widget | `ClaudeUsageWidget` process was running during recon; quota display still to be confirmed by Steve (P0.1) |
+| Upstream widget | Unchanged build showed both Codex and Claude percentages (confirmed by Steve, P0.1) |
 
 ## Codex
 
@@ -68,8 +68,7 @@ Additional Cowork observations:
 
 ## Still needed from Steve
 
-1. **P0.1:** confirm whether the upstream widget showed both Codex and Claude percentages.
-2. **P0.3 (short, about 10 minutes):** pull this branch, then run `Collect-Recon.ps1 -WatchSeconds 900` again (the script now keeps `tool_name` and picks Cowork tasks by real activity) and do only:
+1. **P0.3 (short, about 10 minutes):** pull this branch, then run `Collect-Recon.ps1 -WatchSeconds 900` again (the script now keeps `tool_name` and picks Cowork tasks by real activity) and do only:
    - **K1/K2:** start a short Cowork task and let it finish;
    - **K4:** ask Cowork to "ask me a multiple-choice question before continuing", wait 60 s, answer;
    - **K3:** trigger one permission prompt, wait 60 s, allow;
