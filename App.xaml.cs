@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Threading;
 using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
 using StatusBar.Core.Tasks;
@@ -16,12 +15,13 @@ public partial class App : System.Windows.Application
 
     UsageMonitor? _usageMonitor;
     AgentStateService? _agentStateService;
+    DockController? _dockController;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
     Settings _settings = null!;
-    MainWindow _widget = null!;
+    StatusStripWindow _widget = null!;
     WinForms.NotifyIcon _tray = null!;
-    DispatcherTimer _countdownTimer = null!;
+    StatusBarState _taskState = StatusBarState.Empty;
     bool _loginWindowOpen;
     bool _demoTasksRequested;
     bool _exitStarted;
@@ -133,7 +133,7 @@ public partial class App : System.Windows.Application
         _settings.WidgetVisible = true;
         _settings.Save();
         if (!_widget.IsVisible) _widget.Show();
-        _widget.EnsureVisibleOnCurrentDisplays();
+        _dockController?.Redock();
         _widget.Activate();
     }
 
@@ -170,16 +170,9 @@ public partial class App : System.Windows.Application
                 Log.Write($"Auto-start shortcut is active; legacy registry cleanup warning: {result.Detail}");
         }
 
-        _widget = new MainWindow(_settings);
-        _widget.RefreshRequested += () => _usageMonitor?.RefreshNow();
-        _widget.ReloginRequested += () => _ = SignInActiveProviderAsync(force: true);
-        _widget.ProviderChanged += ActivateProvider;
-        _widget.HideRequested += HideWidget;
-        _widget.ExitRequested += ExitApp;
-        _widget.SettingsRequested += ShowSettings;
-        _widget.DiagnosticsRequested += CopyDiagnostics;
-        _widget.UpdateCheckRequested += () => _ = CheckForUpdatesAsync(interactive: true);
-        _widget.CancelUpdateRequested += CancelPendingUpdate;
+        _widget = new StatusStripWindow(_settings);
+        _dockController = new DockController(_widget);
+        _widget.ContextMenuRequested += ShowTrayContextMenu;
 
         UpdateService.CleanupOldBinary();
         UpdateService.CleanupStaleTemporaryDirectories();
@@ -194,10 +187,6 @@ public partial class App : System.Windows.Application
         }
         if (_settings.WidgetVisible) _widget.Show();
 
-        _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _countdownTimer.Tick += (_, _) => _widget.RefreshCountdowns();
-        _countdownTimer.Start();
-
         _usageMonitor = new UsageMonitor(
             [
                 new ClaudeUsageProvider(_claudeService),
@@ -206,7 +195,7 @@ public partial class App : System.Windows.Application
             TimeProvider.System,
             () => TimeSpan.FromSeconds(BaseIntervalSec));
         _usageMonitor.Changed += OnUsageChanged;
-        RenderUsage(_usageMonitor.Current[ActiveSource]);
+        UpdateStrip();
         UpdateTray();
         _usageMonitor.Start();
 
@@ -219,6 +208,9 @@ public partial class App : System.Windows.Application
                 ],
                 TimeProvider.System,
                 StateServiceOptions.Default);
+            _taskState = _agentStateService.Current;
+            _agentStateService.StateChanged += OnTaskStateChanged;
+            UpdateStrip();
         }
 
         if (_widget.ActiveProvider == UsageProviderKind.Claude && !_claudeService.HasTokens)
@@ -486,7 +478,9 @@ public partial class App : System.Windows.Application
 
     void ApplySettingsChanges()
     {
+        _widget.ApplyScale();
         _widget.ApplyAppearance();
+        _dockController?.Redock();
 
         if (!string.Equals(_chatGptServicePath, _settings.CodexExecutablePath, StringComparison.OrdinalIgnoreCase))
         {
@@ -531,7 +525,7 @@ public partial class App : System.Windows.Application
         _settings.WidgetVisible = true;
         _settings.Save();
         if (!_widget.IsVisible) _widget.Show();
-        _widget.ResetPositionToPrimaryScreen();
+        _dockController?.DockToPrimary();
         _widget.Activate();
     }
 
@@ -575,6 +569,7 @@ public partial class App : System.Windows.Application
             _singleInstanceMutex.Dispose();
             _singleInstanceMutex = null;
         }
+        _dockController?.Dispose();
         base.OnExit(e);
     }
 
@@ -619,10 +614,7 @@ public partial class App : System.Windows.Application
         _settings.Save();
         UpdateProviderChecks();
         var source = ActiveSource;
-        if (_usageMonitor?.Current.TryGetValue(source, out var snapshot) == true)
-            RenderUsage(snapshot);
-        else
-            _widget.ShowLoading(L10n.T("updating"));
+        UpdateStrip();
         _usageMonitor?.RefreshNow(source);
     }
 
@@ -632,33 +624,30 @@ public partial class App : System.Windows.Application
         {
             if (_exitStarted || _usageMonitor is null) return;
             UpdateTray();
-            if (snapshot.Source == ActiveSource) RenderUsage(snapshot);
+            UpdateStrip();
         });
     }
 
-    void RenderUsage(UsageSnapshot snapshot)
+    void OnTaskStateChanged(StatusBarState state)
     {
-        switch (snapshot.Health)
+        Dispatcher.BeginInvoke(() =>
         {
-            case UsageHealth.Loading:
-                _widget.ShowLoading(L10n.T("updating"));
-                break;
-            case UsageHealth.Ok:
-                _widget.ShowUsage(snapshot);
-                break;
-            case UsageHealth.Stale when snapshot.Windows.Count > 0 && snapshot.LastSuccess is DateTimeOffset lastSuccess:
-                _widget.ShowUsage(snapshot);
-                _widget.ShowStaleData(lastSuccess);
-                break;
-            case UsageHealth.SignedOut:
-                _widget.ShowError(snapshot.Source == UsageSource.Claude
-                    ? L10n.T("err_not_signed_in_hint")
-                    : L10n.T("err_chatgpt_not_signed_in"));
-                break;
-            default:
-                _widget.ShowError(L10n.T("err_usage_unavailable"));
-                break;
-        }
+            if (_exitStarted) return;
+            _taskState = _agentStateService?.Current ?? state;
+            UpdateStrip();
+        });
+    }
+
+    void UpdateStrip()
+    {
+        if (_usageMonitor is null) return;
+        _widget.UpdateState(_usageMonitor.Current, _taskState);
+    }
+
+    void ShowTrayContextMenu()
+    {
+        if (_tray.ContextMenuStrip is { } menu)
+            menu.Show(WinForms.Cursor.Position);
     }
 
     void UpdateTray()

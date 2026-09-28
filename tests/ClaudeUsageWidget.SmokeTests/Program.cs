@@ -145,22 +145,15 @@ Require(!diagnosticReport.Contains("secret-token"), "Diagnostics should not incl
 Require(!diagnosticReport.Contains(@"C:\Users\Alice"), "Diagnostics should not include full user paths.");
 Require(!AutoStart.SafeFailureCode(privateError).Contains("secret-token"), "Auto-start failure codes should be redacted.");
 
-var primaryScreen = new System.Windows.Rect(0, 0, 1920, 1080);
-var strandedOnDisconnectedDisplay = new System.Windows.Rect(2200, 100, 320, 240);
+var primaryWorkArea = new StatusBar.Core.Docking.Rect(0, 0, 1920, 1040);
+var recoveredStrip = StatusBar.Core.Docking.DockGeometry.Place(
+    primaryWorkArea,
+    new StatusBar.Core.Docking.Size(320, 30),
+    StatusBar.Core.Docking.DockAnchor.BottomRight,
+    12);
 Require(
-    WindowPlacement.NeedsRecovery(strandedOnDisconnectedDisplay, primaryScreen),
-    "A window stranded on a disconnected display should be recovered.");
-
-var stillReachable = new System.Windows.Rect(1870, 100, 320, 240);
-Require(
-    !WindowPlacement.NeedsRecovery(stillReachable, primaryScreen),
-    "A window with a reachable strip should not be moved unexpectedly.");
-
-var dualScreenLayout = new System.Windows.Rect(-1280, 0, 3200, 1080);
-var visibleOnLeftDisplay = new System.Windows.Rect(-1100, 100, 320, 240);
-Require(
-    !WindowPlacement.NeedsRecovery(visibleOnLeftDisplay, dualScreenLayout),
-    "A window on an active left-side display should remain in place.");
+    recoveredStrip.Right <= primaryWorkArea.Right && recoveredStrip.Bottom <= primaryWorkArea.Bottom,
+    "The compact strip should stay inside the primary work area.");
 
 const string claudePayload = """
 {

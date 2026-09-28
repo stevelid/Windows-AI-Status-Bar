@@ -20,6 +20,7 @@ public class Settings
     public string ActiveProvider { get; set; } = "claude";
     public string? CodexExecutablePath { get; set; }
     public bool DemoTasks { get; set; }
+    public string AttentionLabel { get; set; } = "STEVE";
     [JsonIgnore]
     public bool DoNotPersist { get; set; }
 

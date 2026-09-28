@@ -11,6 +11,7 @@
     <RootNamespace>ClaudeUsageWidget</RootNamespace>
     <Product>Windows AI Status Bar</Product>
     <Version>3.0.0-alpha.1</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <!-- Allows compile-only builds on Linux/macOS (CI and cloud agents). The app still runs only on Windows. -->

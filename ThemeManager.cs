@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using StatusBar.Core.Usage;
 using Color = System.Windows.Media.Color;
 
 namespace ClaudeUsageWidget;
@@ -31,6 +32,14 @@ public static class ThemeManager
         >= 90 => IsLight ? C(0xD4, 0x38, 0x35) : C(0xF4, 0x51, 0x4E), // red
         >= 70 => IsLight ? C(0xD9, 0x82, 0x0B) : C(0xF5, 0xA9, 0x3B), // orange
         _ => IsLight ? C(0x1F, 0x6F, 0xD4) : C(0x4C, 0x9F, 0xF0),     // blue
+    };
+
+    /// <summary>Returns the color used for a remaining allowance level.</summary>
+    public static Color ColorForAllowance(AllowanceLevel level) => level switch
+    {
+        AllowanceLevel.Low => IsLight ? C(0xD4, 0x38, 0x35) : C(0xF4, 0x51, 0x4E),
+        AllowanceLevel.Approaching => IsLight ? C(0xD9, 0x82, 0x0B) : C(0xF5, 0xA9, 0x3B),
+        _ => IsLight ? C(0x1F, 0x6F, 0xD4) : C(0x4C, 0x9F, 0xF0),
     };
 
     // Frozen brushes are immutable, shareable and skip per-element change tracking.

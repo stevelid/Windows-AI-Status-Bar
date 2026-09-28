@@ -27,7 +27,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P1.3 UsageMonitor
 - [x] P1.4 Usage adapters and App wiring
 - [x] P1.5 Task state service and demo provider
-- [ ] P1.6 Docking geometry and compact strip
+- [x] P1.6 Docking geometry and compact strip
 - [ ] P1.7 Details pane
 - [ ] P1.8 Tray, context menu and settings
 - [ ] Phase 1 acceptance 🧑
@@ -88,3 +88,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P0.4 (partial) — Recon confirmed Cowork `system/permission_request`/`permission_response` records, so Claude attention is Confirmed from `audit.jsonl` and the notification listener is dropped (D4, D5, §5.2). Codex runs with `approval_policy: never` and records shell calls as `custom_tool_call` `exec`, so Codex attention is limited to input requests (D3, §5.1). Codex is its own MSIX app; activation by AUMID (P5.1). Cowork metadata is ~200 KB and its write time is unreliable; recency comes from `lastActivityAt` and the audit log (P3.1).
 - 2026-09-28 — P1.4 — Propagated the monitor cancellation token through Claude usage and token HTTP requests so disposal can stop in-flight fetches before shutting down; the app and adapters otherwise follow the planned provider split.
 - 2026-09-28 — P1.5 — Added `--demo` and `Settings.DemoTasks` startup wiring; task state remains in Core until the pane is introduced in P1.7. Dismissal is currently in memory by task ID; evidence-key persistence remains in P4.2.
+- 2026-09-28 — P1.6 — Added a Core-only geometry model, a PerMonitorV2 manifest and WPF dock controller, then replaced the floating card with the compact quota/task strip. The app manifest uses the modern `dpiAwareness` element; omitting the legacy `dpiAware` element avoids the .NET 10 WinForms DPI analyzer warning while keeping the WPF host PerMonitorV2-aware.

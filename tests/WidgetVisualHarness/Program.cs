@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ClaudeUsageWidget;
+using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 
 namespace WidgetVisualHarness;
@@ -53,22 +54,13 @@ static class Program
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown,
         };
-        var window = new MainWindow(settings);
+        var window = new StatusStripWindow(settings);
         window.Title = $"AI Usage Preview — {(light ? "Light" : "Dark")}";
         // Make the preview targetable by Windows UI automation. Production keeps the
         // widget out of the taskbar; this harness changes only its own window instance.
         window.ShowInTaskbar = true;
-        window.ProviderChanged += provider => window.ShowUsage(Sample(provider));
-        window.SettingsRequested += () =>
-        {
-            var settingsWindow = new SettingsWindow(settings, window.ApplyAppearance)
-            {
-                Owner = window,
-            };
-            settingsWindow.Show();
-        };
-        window.ExitRequested += app.Shutdown;
-        window.Loaded += (_, _) => window.ShowUsage(Sample(initialProvider));
+        window.Closed += (_, _) => app.Shutdown();
+        window.Loaded += (_, _) => window.UpdateState(Samples(), SampleTasks());
         window.Show();
         app.Run();
     }
@@ -86,43 +78,31 @@ static class Program
             L10n.Init(language);
             foreach (var light in new[] { false, true })
             {
-                foreach (var provider in new[]
-                         {
-                             UsageProviderKind.Claude,
-                             UsageProviderKind.ChatGpt,
-                         })
+                ThemeManager.Init(light);
+                var settings = new Settings
                 {
-                    ThemeManager.Init(light);
-                    var settings = new Settings
-                    {
-                        ActiveProvider = provider.StorageKey(),
-                        WidgetVisible = true,
-                        FirstRunDone = true,
-                        RefreshIntervalSec = 90,
-                        BgTransparency = 10,
-                        DoNotPersist = true,
-                    };
-                    var window = new MainWindow(settings)
-                    {
-                        ShowInTaskbar = false,
-                        Topmost = false,
-                    };
-                    window.Show();
-                    window.ShowUsage(Sample(provider));
-                    window.UpdateLayout();
+                    ActiveProvider = UsageProviderKind.ChatGpt.StorageKey(),
+                    WidgetVisible = true,
+                    FirstRunDone = true,
+                    RefreshIntervalSec = 90,
+                    BgTransparency = 10,
+                    DoNotPersist = true,
+                };
+                var window = new StatusStripWindow(settings)
+                {
+                    ShowInTaskbar = false,
+                    Topmost = false,
+                };
+                window.Show();
+                window.UpdateState(Samples(), SampleTasks());
+                window.UpdateLayout();
 
-                    var languageName = language == UiLanguage.En ? "en" : "zh-hant";
-                    var themeName = light ? "light" : "dark";
-                    var providerName = provider == UsageProviderKind.Claude
-                        ? "claude"
-                        : "chatgpt";
-                    SaveSnapshot(
-                        window,
-                        Path.Combine(
-                            outputDirectory,
-                            $"{themeName}-{providerName}-{languageName}.png"));
-                    window.Close();
-                }
+                var languageName = language == UiLanguage.En ? "en" : "zh-hant";
+                var themeName = light ? "light" : "dark";
+                SaveSnapshot(
+                    window,
+                    Path.Combine(outputDirectory, $"{themeName}-{languageName}.png"));
+                window.Close();
             }
         }
 
@@ -152,9 +132,10 @@ static class Program
         encoder.Save(stream);
     }
 
-    static UsageSnapshot Sample(UsageProviderKind provider) => provider switch
+    static IReadOnlyDictionary<UsageSource, UsageSnapshot> Samples() =>
+        new Dictionary<UsageSource, UsageSnapshot>
     {
-        UsageProviderKind.Claude => new UsageSnapshot(
+        [UsageSource.Claude] = new UsageSnapshot(
             UsageSource.Claude,
             [
                 new("session", "Session", 17, DateTimeOffset.Now.AddHours(3)),
@@ -163,11 +144,40 @@ static class Program
             UsageHealth.Ok,
             DateTimeOffset.Now,
             "Ready"),
-        _ => new UsageSnapshot(
+        [UsageSource.Codex] = new UsageSnapshot(
             UsageSource.Codex,
             [new("chatgpt_1_10080", L10n.T("chatgpt_limit_weekly"), 35, DateTimeOffset.Now.AddDays(7))],
             UsageHealth.Ok,
             DateTimeOffset.Now,
             "Ready"),
     };
+
+    static StatusBarState SampleTasks()
+    {
+        var now = DateTimeOffset.Now;
+        var tasks = new AgentTask[]
+        {
+            new()
+            {
+                Id = "codex:preview",
+                Provider = AgentProvider.Codex,
+                Title = "Code review",
+                Status = AgentTaskStatus.Working,
+                Confidence = StateConfidence.Confirmed,
+                LastActivity = now,
+            },
+            new()
+            {
+                Id = "claude:preview",
+                Provider = AgentProvider.Claude,
+                Title = "Cowork task",
+                Status = AgentTaskStatus.NeedsAttention,
+                Confidence = StateConfidence.Confirmed,
+                LastActivity = now,
+                AttentionReason = "Approval requested",
+                StatusDetail = "Waiting for input",
+            },
+        };
+        return new StatusBarState(tasks, 1, 1, new Dictionary<AgentProvider, ProviderHealth>());
+    }
 }
