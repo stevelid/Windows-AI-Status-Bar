@@ -58,6 +58,21 @@ public class CodexRolloutParserTests
     }
 
     [Fact]
+    public void Sessions_without_session_meta_get_distinct_ids_from_their_file_names()
+    {
+        var first = CodexSessionReader.FileKeyFromPath("rollout-2026-09-28T10-00-00-0f8fad5b-d9cb-469f-a165-70867728950e.jsonl");
+        var second = CodexSessionReader.FileKeyFromPath("rollout-2026-09-28T10-05-00-7c9e6679-7425-40de-944b-e07fc1f90ae7.jsonl");
+        var stateA = new CodexSessionState { FileKey = first };
+        var stateB = new CodexSessionState { FileKey = second };
+
+        var idA = CodexTaskMapper.Map(stateA, EvaluationTime, TaskTimings.Default).Id;
+        var idB = CodexTaskMapper.Map(stateB, EvaluationTime, TaskTimings.Default).Id;
+
+        Assert.Equal("codex:0f8fad5b-d9cb-469f-a165-70867728950e", idA);
+        Assert.NotEqual(idA, idB);
+    }
+
+    [Fact]
     public void Known_activity_records_do_not_count_as_format_drift()
     {
         var (state, drift) = ReadFixture("provisional-known-activity.jsonl");

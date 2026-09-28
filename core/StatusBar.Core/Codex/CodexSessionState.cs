@@ -21,6 +21,12 @@ internal sealed record CodexPendingCall(string CallId, CodexPendingKind Kind, Da
 internal sealed class CodexSessionState
 {
     internal string? ThreadId { get; set; }
+
+    /// <summary>
+    /// Id taken from the rollout file name (rollout-&lt;time&gt;-&lt;uuid&gt;.jsonl). Used when
+    /// session_meta was not read, so two such sessions never share one task id.
+    /// </summary>
+    internal string? FileKey { get; set; }
     internal string? Source { get; set; }
     internal string? ParentThreadId { get; set; }
     internal string? CwdLeaf { get; set; }

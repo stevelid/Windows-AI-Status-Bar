@@ -10,7 +10,10 @@ internal static class CodexTaskMapper
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timings);
 
-        var id = "codex:" + (string.IsNullOrWhiteSpace(state.ThreadId) ? "unknown" : state.ThreadId);
+        var key = !string.IsNullOrWhiteSpace(state.ThreadId) ? state.ThreadId
+            : !string.IsNullOrWhiteSpace(state.FileKey) ? state.FileKey
+            : "unknown";
+        var id = "codex:" + key;
         var title = state.TitleCandidate ?? (IsSubAgent(state.Source)
             ? "Codex sub-task"
             : state.CwdLeaf is { Length: > 0 } leaf ? "Codex · " + leaf : "Codex task");

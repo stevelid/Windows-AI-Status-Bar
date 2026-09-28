@@ -122,7 +122,7 @@ internal sealed class CodexSessionReader : IDisposable
 
     SessionEntry CreateEntry(string path, DateTimeOffset now)
     {
-        var state = new CodexSessionState();
+        var state = new CodexSessionState { FileKey = FileKeyFromPath(path) };
         var fallbackTime = GetFileTime(path, now);
         var tail = TailReader.ReadWithOffset(path, InitialTailBytes);
         foreach (var line in ReadHeadLines(path, tail.FirstLineOffset))
@@ -133,6 +133,15 @@ internal sealed class CodexSessionReader : IDisposable
         var reader = new IncrementalJsonlReader(path);
         reader.StartAt(tail.Offset);
         return new SessionEntry(state, reader);
+    }
+
+    // Rollout files are named rollout-<timestamp>-<uuid>.jsonl; the uuid matches the thread id.
+    internal static string FileKeyFromPath(string path)
+    {
+        var stem = Path.GetFileNameWithoutExtension(path);
+        return stem.Length >= 36 && Guid.TryParse(stem.AsSpan(stem.Length - 36), out _)
+            ? stem[^36..]
+            : stem;
     }
 
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)
