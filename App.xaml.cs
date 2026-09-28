@@ -4,6 +4,7 @@ using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
 using StatusBar.Core.Claude;
 using StatusBar.Core.Codex;
+using StatusBar.Core.Diagnostics;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
@@ -71,7 +72,7 @@ public partial class App : System.Windows.Application
         if (AppPaths.ResolutionNote.Length > 0)
             Log.Write($"資料路徑備援: {AppPaths.ResolutionNote} -> {AppPaths.DataDir}");
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            Log.Write($"UnhandledException (terminating={args.IsTerminating}): {args.ExceptionObject}");
+            Log.Write($"UnhandledException (terminating={args.IsTerminating}): {args.ExceptionObject?.GetType().Name ?? "Unknown"}");
         DispatcherUnhandledException += (_, args) =>
         {
             Log.Error("DispatcherUnhandledException", args.Exception);
@@ -380,6 +381,7 @@ public partial class App : System.Windows.Application
                 SignInProvider,
                 ShowSettings,
                 CopyDiagnostics,
+                SaveDiagnosticBundle,
                 () => _ = CheckForUpdatesAsync(interactive: true),
                 CancelPendingUpdate,
                 ExitApp));
@@ -427,6 +429,62 @@ public partial class App : System.Windows.Application
             MessageBox.Show(
                 L10n.F("diagnostics_copy_failed", ex.GetType().Name),
                 "AI Usage Widget",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    void SaveDiagnosticBundle()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                AddExtension = true,
+                DefaultExt = ".zip",
+                FileName = $"WindowsAIStatusBar-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+                Filter = L10n.T("diagnostics_zip_filter"),
+                InitialDirectory = AppPaths.DataDir,
+                OverwritePrompt = true,
+                Title = L10n.T("diagnostics_save_title"),
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            var codexDiagnostics = _codexTaskProvider?.Diagnostics;
+            var codex = DiagnosticsService.InspectCodex(_settings.CodexExecutablePath);
+            var providers = _usageMonitor?.Current.Values
+                .Select(snapshot => new DiagnosticUsageProvider(
+                    snapshot.Source == UsageSource.Claude ? "Claude" : "ChatGPT",
+                    snapshot.Health.ToString(),
+                    snapshot.LastSuccess,
+                    snapshot.StatusCode))
+                ?? Enumerable.Empty<DiagnosticUsageProvider>();
+            var report = DiagnosticReportBuilder.Build(
+                (typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0)).ToString(3),
+                AppBuild.Label,
+                providers,
+                _agentStateService?.Current ?? _taskState,
+                codexDiagnostics,
+                codex.Source,
+                codex.ExecutableName,
+                codex.Version);
+            DiagnosticBundleWriter.Write(
+                dialog.FileName,
+                report,
+                Log.ReadDiagnosticTail(),
+                DiagnosticReportBuilder.BuildFormatDrift(codexDiagnostics));
+            _trayController.ShowBalloonTip(
+                3500,
+                "Windows AI Status Bar",
+                L10n.T("diagnostics_saved"),
+                WinForms.ToolTipIcon.Info);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Save diagnostic bundle failed", ex);
+            MessageBox.Show(
+                L10n.F("diagnostics_save_failed", ex.GetType().Name),
+                L10n.T("diagnostics_save_title"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }

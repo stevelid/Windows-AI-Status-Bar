@@ -68,7 +68,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P5.2 Attention notifications
 - [x] P5.3 Visual polish
 - [x] P5.4 Multi-monitor and DPI
-- [ ] P5.5 Diagnostic bundle
+- [x] P5.5 Diagnostic bundle
 - [ ] Phase 5 acceptance 🧑
 
 ## Phase 6 — Hardening
@@ -80,18 +80,24 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Waiting on Steve
 
-1. Download the latest Windows build artifact from draft PR #4 and record the build label shown by Copy diagnostics.
+1. Download the latest Windows build artifact from draft PR #5 and record the build label shown by Copy diagnostics.
 2. Run a task in both Claude Code’s desktop Code tab and a terminal. Check that each appears with a useful title, updates while it runs, and moves to Recently completed when its turn ends.
 3. Have Claude finish a turn with a question and check for the inferred “Asked you a question” alert.
 4. In Settings, enable Claude Code hooks. Trigger a permission prompt, check for “Permission requested,” answer it, and check that the alert clears. Disable hooks and confirm existing Claude settings hooks remain intact.
 5. Hover an inferred alert and dismiss it. Restart the app and check that the same evidence stays hidden; create a new question and check that it appears. Confirmed hook alerts should not offer Dismiss. If practical, leave a session without new records until it becomes Unknown and check dismissal there too.
 6. Report pass/fail for each step and the build label. For failures, include which environment (desktop or terminal) failed and whether hooks were enabled.
+7. Click a Codex task row and a Claude Code task row, including one terminal-launched Claude task, and confirm the owning desktop app is focused. Record the expected Claude terminal limitation if it applies.
+8. Trigger a new attention event for each provider. Confirm one tray notification per new evidence key, that clicking the balloon opens the details pane, and that restarting does not repeat the same notification. Create new evidence and confirm it notifies once.
+9. Choose a secondary monitor in Settings, confirm the strip moves there, then disconnect and reconnect that monitor to check primary fallback and restoration. Repeat at the available Windows DPI scales.
+10. Use the tray's “Save diagnostic bundle…” command. Confirm the ZIP contains `report.txt`, `log-tail.txt`, and `format-drift.txt`; check that the report contains the build/version, provider health, task counts and parser signatures without task titles, prompts, IDs, session references, tokens or full paths.
+11. Report pass/fail for the Phase 5 checks and the build label. For failures, include the provider, launch environment, monitor/DPI setting, or bundle entry involved.
 
 ## Decisions and deviations
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
 - 2026-09-28 — P5.4 — Monitor settings now show the device name and resolution for every display, and docking preserves a disconnected monitor selection for automatic fallback and restoration; 152 Core tests pass.
+- 2026-09-28 — P5.5 — Added a Core redacted report builder and ZIP writer with fixed `report.txt`, `log-tail.txt`, and `format-drift.txt` entries; task titles, IDs and session references are excluded by construction, and app-owned logs are sanitized before inclusion. Build clean; 154 Core tests pass.
 - 2026-09-28 — P5.3 — Added a one-shot 400 ms attention-pill fade that respects Windows animation settings, plus an amber tray-icon attention dot; 152 Core tests pass.
 - 2026-09-28 — P5.2 — Added a restart-safe notification gate keyed by hashed task/evidence identifiers, seeded existing attention on startup, and connected gated events to tray balloons that open the details pane. The shared state file preserves dismissal entries; 152 Core tests pass.
 - 2026-09-28 — P5.1 — Task rows now focus the owning Codex or Claude desktop app through the resolved MSIX AUMID, with a process-window fallback; Claude terminal sessions focus the desktop app as documented. Build clean with apphost generation disabled for the synced workspace; 169 Core tests pass.

@@ -12,6 +12,7 @@ public sealed record TrayActions(
     Action<UsageProviderKind> SignIn,
     Action ShowSettings,
     Action CopyDiagnostics,
+    Action SaveDiagnostics,
     Action CheckForUpdates,
     Action CancelUpdate,
     Action Quit);
@@ -32,6 +33,7 @@ public sealed class TrayController : IDisposable
     readonly WinForms.ToolStripMenuItem _settingsItem;
     readonly WinForms.ToolStripMenuItem _autoStart;
     readonly WinForms.ToolStripMenuItem _diagnostics;
+    readonly WinForms.ToolStripMenuItem _saveDiagnostics;
     readonly WinForms.ToolStripMenuItem _updates;
     readonly WinForms.ToolStripMenuItem _cancelUpdate;
     readonly WinForms.ToolStripMenuItem _quit;
@@ -76,6 +78,7 @@ public sealed class TrayController : IDisposable
         _autoStart = new WinForms.ToolStripMenuItem("", null, (_, _) => { }) { CheckOnClick = true };
         _autoStart.CheckedChanged += OnAutoStartCheckedChanged;
         _diagnostics = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.CopyDiagnostics());
+        _saveDiagnostics = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.SaveDiagnostics());
         _updates = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.CheckForUpdates());
         _cancelUpdate = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.CancelUpdate())
         {
@@ -94,6 +97,7 @@ public sealed class TrayController : IDisposable
             _settingsItem,
             _autoStart,
             _diagnostics,
+            _saveDiagnostics,
             _updates,
             _cancelUpdate,
             new WinForms.ToolStripSeparator(),
@@ -240,6 +244,7 @@ public sealed class TrayController : IDisposable
         _settingsItem.Text = L10n.T("menu_settings");
         _autoStart.Text = L10n.T("menu_autostart");
         _diagnostics.Text = L10n.T("menu_copy_diagnostics");
+        _saveDiagnostics.Text = L10n.T("menu_save_diagnostic_bundle");
         _updates.Text = L10n.T("menu_check_update");
         _cancelUpdate.Text = L10n.T("update_cancel");
         _quit.Text = L10n.T("menu_exit");
