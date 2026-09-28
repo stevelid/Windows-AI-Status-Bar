@@ -24,7 +24,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 - [x] P1.1 Product identity and data folder
 - [x] P1.2 Usage model in Core
-- [ ] P1.3 UsageMonitor
+- [x] P1.3 UsageMonitor
 - [ ] P1.4 Usage adapters and App wiring
 - [ ] P1.5 Task state service and demo provider
 - [ ] P1.6 Docking geometry and compact strip
