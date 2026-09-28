@@ -21,15 +21,18 @@ public sealed class DockController : IDisposable
     static readonly uint TaskbarCreatedMessage = RegisterWindowMessage("TaskbarCreated");
 
     readonly StatusStripWindow _window;
+    readonly Settings _settings;
     HwndSource? _source;
     bool _docking;
     bool _disposed;
 
     /// <summary>Creates a dock controller and subscribes to the window lifecycle.</summary>
-    public DockController(StatusStripWindow window)
+    public DockController(StatusStripWindow window, Settings settings)
     {
         ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(settings);
         _window = window;
+        _settings = settings;
         _window.SourceInitialized += OnSourceInitialized;
         _window.Loaded += OnLoaded;
         _window.SizeChanged += OnSizeChanged;
@@ -37,11 +40,8 @@ public sealed class DockController : IDisposable
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
     }
 
-    /// <summary>Re-docks to the monitor that currently contains the strip.</summary>
-    public void Redock() => QueueDockToCurrentScreen();
-
-    /// <summary>Places the strip on the primary monitor.</summary>
-    public void DockToPrimary() => QueueDock(WinForms.Screen.PrimaryScreen);
+    /// <summary>Re-docks to the configured monitor, falling back to the primary display.</summary>
+    public void Redock() => QueueDock(PreferredScreen());
 
     /// <summary>Unsubscribes from Windows events and removes the native message hook.</summary>
     public void Dispose()
@@ -62,21 +62,21 @@ public sealed class DockController : IDisposable
         var handle = new WindowInteropHelper(_window).Handle;
         _source = HwndSource.FromHwnd(handle);
         _source?.AddHook(WindowMessageHook);
-        QueueDockToCurrentScreen();
+        QueueDock(PreferredScreen());
     }
 
-    void OnLoaded(object sender, RoutedEventArgs e) => QueueDockToCurrentScreen();
+    void OnLoaded(object sender, RoutedEventArgs e) => QueueDock(PreferredScreen());
 
     void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (!_docking) QueueDockToCurrentScreen();
+        if (!_docking) QueueDock(PreferredScreen());
     }
 
     void OnClosed(object? sender, EventArgs e) => Dispose();
 
     void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
-        if (e.Mode == PowerModes.Resume) QueueDockToCurrentScreen();
+        if (e.Mode == PowerModes.Resume) QueueDock(PreferredScreen());
     }
 
     IntPtr WindowMessageHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -85,12 +85,25 @@ public sealed class DockController : IDisposable
         if (message is WmDisplayChange or WmDpiChanged or WmSettingChange || registeredMessage)
         {
             // Windows updates work-area and per-monitor DPI values after these messages return.
-            _window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(QueueDockToCurrentScreen));
+            _window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() => QueueDock(PreferredScreen())));
         }
         return IntPtr.Zero;
     }
 
-    void QueueDockToCurrentScreen() => QueueDock(null);
+    WinForms.Screen? PreferredScreen()
+    {
+        var screens = WinForms.Screen.AllScreens;
+        if (!string.IsNullOrWhiteSpace(_settings.MonitorDeviceName))
+        {
+            var configured = screens.FirstOrDefault(screen => string.Equals(
+                screen.DeviceName,
+                _settings.MonitorDeviceName,
+                StringComparison.OrdinalIgnoreCase));
+            if (configured is not null) return configured;
+        }
+
+        return WinForms.Screen.PrimaryScreen ?? screens.FirstOrDefault();
+    }
 
     void QueueDock(WinForms.Screen? targetScreen)
     {

@@ -13,7 +13,6 @@ public partial class StatusStripWindow : Window
     readonly Settings _settings;
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _usage = new Dictionary<UsageSource, UsageSnapshot>();
     StatusBarState _tasks = StatusBarState.Empty;
-    UsageProviderKind _activeProvider;
     string? _transientMessage;
 
     /// <summary>Raised when the user clicks the strip to toggle the details pane.</summary>
@@ -22,15 +21,11 @@ public partial class StatusStripWindow : Window
     /// <summary>Raised when the user right-clicks the strip.</summary>
     public event Action? ContextMenuRequested;
 
-    /// <summary>The provider selected for sign-in and provider-specific tray commands.</summary>
-    public UsageProviderKind ActiveProvider => _activeProvider;
-
     /// <summary>Creates the strip from current settings and applies its initial appearance.</summary>
     public StatusStripWindow(Settings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
-        _activeProvider = UsageProviderKindExtensions.ParseProvider(_settings.ActiveProvider);
         InitializeComponent();
         ApplyScale();
         ApplyAppearance();
@@ -50,13 +45,6 @@ public partial class StatusStripWindow : Window
         _tasks = tasks;
         _transientMessage = null;
         RenderState();
-    }
-
-    /// <summary>Selects the provider targeted by the sign-in command.</summary>
-    public void SetActiveProvider(UsageProviderKind provider)
-    {
-        _activeProvider = provider;
-        _settings.ActiveProvider = provider.StorageKey();
     }
 
     /// <summary>Updates display scale while keeping the strip at its fixed base height.</summary>
@@ -185,7 +173,10 @@ public partial class StatusStripWindow : Window
         target.Text = $"{prefix} {remaining}%";
         target.Foreground = ThemeManager.Brush(snapshot.Health == UsageHealth.Stale
             ? ThemeManager.SubtleText
-            : ThemeManager.ColorForAllowance(UsageSummary.Level(principal.RemainingPercent)));
+            : ThemeManager.ColorForAllowance(UsageSummary.Level(
+                principal.RemainingPercent,
+                _settings.ApproachingBelowPercent,
+                _settings.LowBelowPercent)));
         var value = L10n.F("tray_usage_remaining", remaining);
         target.ToolTip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
             ? $"{prefix}: {value} · {L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm"))}"

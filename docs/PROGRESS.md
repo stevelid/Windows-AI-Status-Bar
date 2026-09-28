@@ -29,7 +29,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P1.5 Task state service and demo provider
 - [x] P1.6 Docking geometry and compact strip
 - [x] P1.7 Details pane
-- [ ] P1.8 Tray, context menu and settings
+- [x] P1.8 Tray, context menu and settings
 - [ ] Phase 1 acceptance 🧑
 
 ## Phase 2 — Codex tasks
@@ -80,6 +80,7 @@ _(The agent lists here, in plain steps, anything that needs Steve's Windows mach
 
 - P0.3: run `tools/recon/Find-ClaudeWrites.ps1` while using Cowork, to find where current Cowork tasks are stored (steps in `docs/recon/FINDINGS.md`). **Phases 3 and 4 are blocked on this;** Phases 1 and 2 are not.
 - Decide the open design question in `docs/recon/FINDINGS.md` (treat a turn that ends with a question as "needs you").
+- Phase 1 acceptance: download the latest `status-bar-win-x64` artifact from the branch's Windows workflow and launch `AIStatusBar.exe --demo`. Confirm the strip and tray tooltip show both providers' session allowances; click the strip to open the pane, check demo tasks move between sections and counts update, then click the strip again to confirm the pane stays closed. Use the tray menu to hide/show the strip, expand/collapse the pane, refresh, open Settings, inspect Sign in, Copy diagnostics, Check for updates and Quit. In Settings, change and restart-check language, theme, refresh interval, opacity, Codex/Cowork paths, notifications, recently-completed retention, pane timeout, attention label, monitor, quota thresholds and Demo tasks. Toggle Start with Windows on and off, then leave the app idle for a minute in Task Manager and check CPU use is approximately 0%.
 
 ## Decisions and deviations
 
@@ -92,3 +93,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P1.7 — Added the details pane with all quota windows and in-memory task rows grouped by state; rows update in place, countdowns refresh only while visible, and `PaneAutoCollapseSeconds` defaults to 0.
 - 2026-09-28 — P1.7 (review fix) — Clicking the strip to close the pane would reopen it: the strip click deactivates (closes) the pane on mouse-down, then the toggle fires on mouse-up. `App.ToggleDetailsPane` now ignores a toggle within 400 ms of the pane closing. Needs Steve's check on Windows: with the pane open, click the strip once; the pane should close and stay closed.
 - 2026-09-28 — D7 revised (Steve) — The strip and tray show each provider's session (5-hour) window instead of the tightest window. `UsageWindow` gained an optional `Length`; the Claude and Codex adapters set it, and `UsageSummary.Compact` picks the shortest window. The weekly figures remain in the details pane.
+- 2026-09-28 — P1.8 — Extracted tray ownership into `TrayController`, added the planned settings controls and monitor selection, and removed runtime use of legacy provider/window-placement settings while retaining those JSON properties as obsolete. `NotificationsEnabled` is saved for P5.2 alert delivery; the Codex and Cowork root overrides are saved for their planned collectors.

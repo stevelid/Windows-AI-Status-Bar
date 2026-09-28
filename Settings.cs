@@ -7,7 +7,9 @@ namespace ClaudeUsageWidget;
 
 public class Settings
 {
+    [Obsolete("Kept for settings.json compatibility; version 3 uses monitor docking.")]
     public double? WindowLeft { get; set; }
+    [Obsolete("Kept for settings.json compatibility; version 3 uses monitor docking.")]
     public double? WindowTop { get; set; }
     public bool WidgetVisible { get; set; } = true;
     public bool FirstRunDone { get; set; }
@@ -15,13 +17,22 @@ public class Settings
     public string Theme { get; set; } = "dark";      // "dark" | "light"
     public int BgTransparency { get; set; } = 10;    // 0 = solid, 100 = fully transparent
     public int RefreshIntervalSec { get; set; } = 90;
+    [Obsolete("Kept for settings.json compatibility; the details pane is toggled directly.")]
     public bool Collapsed { get; set; }
     public double UiScale { get; set; } = 1.0;   // 0.7–2.5, drag widget edges to change
+    [Obsolete("Kept for settings.json compatibility; use the tray Sign in submenu.")]
     public string ActiveProvider { get; set; } = "claude";
     public string? CodexExecutablePath { get; set; }
-    public bool DemoTasks { get; set; }
+    public string? CodexHomeOverride { get; set; }
+    public string? CoworkRootOverride { get; set; }
+    public bool NotificationsEnabled { get; set; } = true;
+    public int RecentlyCompletedMinutes { get; set; } = 10;
+    public int PaneAutoCollapseSeconds { get; set; } = 0;
     public string AttentionLabel { get; set; } = "STEVE";
-    public int PaneAutoCollapseSeconds { get; set; }
+    public string? MonitorDeviceName { get; set; }
+    public int ApproachingBelowPercent { get; set; } = 30;
+    public int LowBelowPercent { get; set; } = 10;
+    public bool DemoTasks { get; set; } = false;
     [JsonIgnore]
     public bool DoNotPersist { get; set; }
 
@@ -33,7 +44,11 @@ public class Settings
         try
         {
             if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new Settings();
+            {
+                var settings = JsonSerializer.Deserialize<Settings>(File.ReadAllText(FilePath)) ?? new Settings();
+                settings.Normalize();
+                return settings;
+            }
         }
         catch { }
         return new Settings();
@@ -42,6 +57,7 @@ public class Settings
     public void Save()
     {
         if (DoNotPersist) return;
+        Normalize();
         try
         {
             Directory.CreateDirectory(Dir);
@@ -49,6 +65,28 @@ public class Settings
         }
         catch { }
     }
+
+    /// <summary>Clamps settings values that affect thresholds, intervals, or display geometry.</summary>
+    public void Normalize()
+    {
+        BgTransparency = Math.Clamp(BgTransparency, 0, 100);
+        RefreshIntervalSec = Math.Clamp(RefreshIntervalSec, 30, 3600);
+        UiScale = double.IsFinite(UiScale) ? Math.Clamp(UiScale, 0.7, 2.5) : 1.0;
+        RecentlyCompletedMinutes = Math.Clamp(RecentlyCompletedMinutes, 5, 15);
+        PaneAutoCollapseSeconds = Math.Max(0, PaneAutoCollapseSeconds);
+        LowBelowPercent = Math.Clamp(LowBelowPercent, 0, 99);
+        ApproachingBelowPercent = Math.Clamp(ApproachingBelowPercent, 1, 100);
+        if (ApproachingBelowPercent <= LowBelowPercent)
+            ApproachingBelowPercent = LowBelowPercent + 1;
+        AttentionLabel = string.IsNullOrWhiteSpace(AttentionLabel) ? "STEVE" : AttentionLabel.Trim();
+        MonitorDeviceName = NormalizeOptionalPath(MonitorDeviceName);
+        CodexExecutablePath = NormalizeOptionalPath(CodexExecutablePath);
+        CodexHomeOverride = NormalizeOptionalPath(CodexHomeOverride);
+        CoworkRootOverride = NormalizeOptionalPath(CoworkRootOverride);
+    }
+
+    static string? NormalizeOptionalPath(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
 public sealed record AutoStartResult(bool Succeeded, string? Detail = null);

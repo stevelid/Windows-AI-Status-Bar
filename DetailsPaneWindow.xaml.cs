@@ -190,7 +190,10 @@ public partial class DetailsPaneWindow : Window
                 : L10n.F("tray_usage_remaining", remaining);
             row.Value.Foreground = ThemeManager.Brush(snapshot.Health is UsageHealth.Stale or UsageHealth.Unavailable
                 ? ThemeManager.SubtleText
-                : ThemeManager.ColorForAllowance(UsageSummary.Level(window.RemainingPercent)));
+                : ThemeManager.ColorForAllowance(UsageSummary.Level(
+                    window.RemainingPercent,
+                    _settings.ApproachingBelowPercent,
+                    _settings.LowBelowPercent)));
             row.Root.ToolTip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
                 ? L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm"))
                 : null;

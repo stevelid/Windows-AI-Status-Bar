@@ -34,15 +34,9 @@ static class Program
         }
 
         var light = args.Contains("--light", StringComparer.OrdinalIgnoreCase);
-        var initialProvider = args.Contains(
-            "--claude",
-            StringComparer.OrdinalIgnoreCase)
-            ? UsageProviderKind.Claude
-            : UsageProviderKind.ChatGpt;
         ThemeManager.Init(light);
         var settings = new Settings
         {
-            ActiveProvider = initialProvider.StorageKey(),
             WidgetVisible = true,
             FirstRunDone = true,
             RefreshIntervalSec = 90,
@@ -94,7 +88,6 @@ static class Program
                 ThemeManager.Init(light);
                 var settings = new Settings
                 {
-                    ActiveProvider = UsageProviderKind.ChatGpt.StorageKey(),
                     WidgetVisible = true,
                     FirstRunDone = true,
                     RefreshIntervalSec = 90,

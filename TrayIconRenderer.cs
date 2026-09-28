@@ -2,6 +2,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using System.Runtime.InteropServices;
+using StatusBar.Core.Usage;
 
 namespace ClaudeUsageWidget;
 
@@ -11,7 +12,10 @@ public static class TrayIconRenderer
     [DllImport("user32.dll", SetLastError = true)]
     static extern bool DestroyIcon(IntPtr hIcon);
 
-    public static Icon Render(double? utilization)
+    public static Icon Render(
+        double? utilization,
+        double approachingBelowPercent = 30,
+        double lowBelowPercent = 10)
     {
         const int size = 32;
         using var bmp = new Bitmap(size, size);
@@ -19,11 +23,15 @@ public static class TrayIconRenderer
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
-        var color = utilization switch
+        var color = utilization is null
+            ? Color.FromArgb(0x8A, 0x8A, 0x96)
+            : UsageSummary.Level(
+                100 - utilization.Value,
+                approachingBelowPercent,
+                lowBelowPercent) switch
         {
-            null => Color.FromArgb(0x8A, 0x8A, 0x96),
-            >= 90 => Color.FromArgb(0xF4, 0x51, 0x4E),
-            >= 70 => Color.FromArgb(0xF5, 0xA9, 0x3B),
+            AllowanceLevel.Low => Color.FromArgb(0xF4, 0x51, 0x4E),
+            AllowanceLevel.Approaching => Color.FromArgb(0xF5, 0xA9, 0x3B),
             _ => Color.FromArgb(0x4C, 0x9F, 0xF0),
         };
 

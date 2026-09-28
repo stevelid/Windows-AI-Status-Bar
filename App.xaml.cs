@@ -22,12 +22,12 @@ public partial class App : System.Windows.Application
     string? _chatGptServicePath;
     Settings _settings = null!;
     StatusStripWindow _widget = null!;
-    WinForms.NotifyIcon _tray = null!;
+    TrayController _trayController = null!;
     StatusBarState _taskState = StatusBarState.Empty;
+    int? _agentStateRetentionMinutes;
     bool _loginWindowOpen;
     bool _demoTasksRequested;
     bool _exitStarted;
-    int? _lastTrayPct;
     Mutex? _singleInstanceMutex;
     EventWaitHandle? _activationSignal;
     RegisteredWaitHandle? _activationWait;
@@ -136,6 +136,7 @@ public partial class App : System.Windows.Application
         _settings.Save();
         if (!_widget.IsVisible) _widget.Show();
         _dockController?.Redock();
+        _trayController.UpdateVisibility(stripVisible: true, _detailsPane?.IsVisible == true);
         _widget.Activate();
     }
 
@@ -173,7 +174,7 @@ public partial class App : System.Windows.Application
         }
 
         _widget = new StatusStripWindow(_settings);
-        _dockController = new DockController(_widget);
+        _dockController = new DockController(_widget, _settings);
         _widget.ContextMenuRequested += ShowTrayContextMenu;
         _widget.TogglePaneRequested += ToggleDetailsPane;
 
@@ -182,13 +183,14 @@ public partial class App : System.Windows.Application
         SetupTray();
         if (autoStartNotice is not null)
         {
-            _tray.ShowBalloonTip(
+            _trayController.ShowBalloonTip(
                 8000,
-                "AI Usage Widget",
+                "Windows AI Status Bar",
                 L10n.F("autostart_problem", autoStartNotice),
                 WinForms.ToolTipIcon.Warning);
         }
         if (_settings.WidgetVisible) _widget.Show();
+        _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
 
         _usageMonitor = new UsageMonitor(
             [
@@ -202,25 +204,7 @@ public partial class App : System.Windows.Application
         UpdateTray();
         _usageMonitor.Start();
 
-        if (_demoTasksRequested || _settings.DemoTasks)
-        {
-            _agentStateService = new AgentStateService(
-                [
-                    new DemoTaskProvider(AgentProvider.Codex, TimeProvider.System),
-                    new DemoTaskProvider(AgentProvider.Claude, TimeProvider.System),
-                ],
-                TimeProvider.System,
-                StateServiceOptions.Default);
-            _taskState = _agentStateService.Current;
-            _agentStateService.StateChanged += OnTaskStateChanged;
-            UpdateStrip();
-        }
-
-        if (_widget.ActiveProvider == UsageProviderKind.Claude && !_claudeService.HasTokens)
-        {
-            _widget.ShowError(L10n.T("err_not_signed_in_hint"));
-            _ = SignInClaudeAsync(force: false);
-        }
+        ConfigureAgentTaskService();
 
         _ = AutoCheckUpdatesAsync();
     }
@@ -241,10 +225,7 @@ public partial class App : System.Windows.Application
             if (_pendingUpdate is not null)
             {
                 Log.Write($"發現新版本 v{_pendingUpdate.Latest}");
-                _tray.BalloonTipClicked -= OnUpdateBalloonClicked;
-                _tray.BalloonTipClicked += OnUpdateBalloonClicked;
-                _tray.ShowBalloonTip(8000, "AI Usage Widget",
-                    L10n.F("update_balloon", _pendingUpdate.Latest), WinForms.ToolTipIcon.Info);
+                _trayController.ShowUpdateAvailable(_pendingUpdate.Latest.ToString());
             }
         }
         catch (Exception ex)
@@ -252,8 +233,6 @@ public partial class App : System.Windows.Application
             Log.Error("自動檢查更新失敗", ex);
         }
     }
-
-    void OnUpdateBalloonClicked(object? sender, EventArgs e) => _ = CheckForUpdatesAsync(interactive: true);
 
     async Task CheckForUpdatesAsync(bool interactive)
     {
@@ -278,6 +257,8 @@ public partial class App : System.Windows.Application
             _settings.WidgetVisible = true;
             _settings.Save();
             if (!_widget.IsVisible) _widget.Show();
+            _dockController?.Redock();
+            _trayController.UpdateVisibility(stripVisible: true, _detailsPane?.IsVisible == true);
             _widget.Activate();
 
             _updateCancellation = new CancellationTokenSource();
@@ -353,84 +334,20 @@ public partial class App : System.Windows.Application
             _updateCancellation?.Cancel();
     }
 
-    // ---------- tray ----------
-
-    WinForms.ToolStripMenuItem _trayShowHide = null!;
-    WinForms.ToolStripMenuItem _trayResetPosition = null!;
-    WinForms.ToolStripMenuItem _trayRefresh = null!;
-    WinForms.ToolStripMenuItem _trayProvider = null!;
-    WinForms.ToolStripMenuItem _trayClaude = null!;
-    WinForms.ToolStripMenuItem _trayChatGpt = null!;
-    WinForms.ToolStripMenuItem _traySettings = null!;
-    WinForms.ToolStripMenuItem _trayDiagnostics = null!;
-    WinForms.ToolStripMenuItem _trayUpdate = null!;
-    WinForms.ToolStripMenuItem _trayCancelUpdate = null!;
-    WinForms.ToolStripMenuItem _trayRelogin = null!;
-    WinForms.ToolStripMenuItem _trayExit = null!;
-
     void SetupTray()
     {
-        _tray = new WinForms.NotifyIcon
-        {
-            Text = "AI Usage Widget",
-            Visible = true,
-            Icon = TrayIconRenderer.Render(null),
-        };
-        _tray.MouseClick += (_, args) =>
-        {
-            if (args.Button == WinForms.MouseButtons.Left) ToggleWidget();
-        };
-
-        var menu = new WinForms.ContextMenuStrip();
-        menu.Items.Add(_trayShowHide = new WinForms.ToolStripMenuItem("", null, (_, _) => ToggleWidget()));
-        menu.Items.Add(_trayResetPosition = new WinForms.ToolStripMenuItem("", null, (_, _) => ResetWidgetPosition()));
-        menu.Items.Add(_trayRefresh = new WinForms.ToolStripMenuItem("", null, (_, _) => _usageMonitor?.RefreshNow()));
-        _trayProvider = new WinForms.ToolStripMenuItem();
-        _trayProvider.DropDownItems.Add(_trayClaude = new WinForms.ToolStripMenuItem("Claude", null,
-            (_, _) => ActivateProvider(UsageProviderKind.Claude)));
-        _trayProvider.DropDownItems.Add(_trayChatGpt = new WinForms.ToolStripMenuItem("ChatGPT", null,
-            (_, _) => ActivateProvider(UsageProviderKind.ChatGpt)));
-        menu.Items.Add(_trayProvider);
-        menu.Items.Add(_traySettings = new WinForms.ToolStripMenuItem("", null, (_, _) => ShowSettings()));
-        menu.Items.Add(_trayDiagnostics = new WinForms.ToolStripMenuItem("", null, (_, _) => CopyDiagnostics()));
-        menu.Items.Add(_trayUpdate = new WinForms.ToolStripMenuItem("", null, (_, _) => _ = CheckForUpdatesAsync(interactive: true)));
-        menu.Items.Add(_trayCancelUpdate = new WinForms.ToolStripMenuItem("", null, (_, _) => CancelPendingUpdate())
-        {
-            Enabled = false,
-            Visible = false,
-        });
-        menu.Items.Add(_trayRelogin = new WinForms.ToolStripMenuItem("", null, (_, _) => _ = SignInActiveProviderAsync(force: true)));
-        menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add(_trayExit = new WinForms.ToolStripMenuItem("", null, (_, _) => ExitApp()));
-        _tray.ContextMenuStrip = menu;
-
-        ApplyTrayLanguage();
-        UpdateProviderChecks();
-        L10n.Changed += ApplyTrayLanguage;
-    }
-
-    void ApplyTrayLanguage()
-    {
-        _trayShowHide.Text = L10n.T("menu_showhide");
-        _trayResetPosition.Text = L10n.T("menu_reset_position");
-        _trayRefresh.Text = L10n.T("menu_refresh");
-        _trayProvider.Text = L10n.T("menu_provider");
-        _trayClaude.Text = L10n.T("provider_claude");
-        _trayChatGpt.Text = L10n.T("provider_chatgpt");
-        _traySettings.Text = L10n.T("menu_settings");
-        _trayDiagnostics.Text = L10n.T("menu_copy_diagnostics");
-        _trayUpdate.Text = L10n.T("menu_check_update");
-        _trayCancelUpdate.Text = L10n.T("update_cancel");
-        _trayRelogin.Text = L10n.T("menu_relogin");
-        _trayExit.Text = L10n.T("menu_exit");
-        UpdateTray();
-    }
-
-    void UpdateProviderChecks()
-    {
-        if (_trayClaude is null) return;
-        _trayClaude.Checked = _widget.ActiveProvider == UsageProviderKind.Claude;
-        _trayChatGpt.Checked = _widget.ActiveProvider == UsageProviderKind.ChatGpt;
+        _trayController = new TrayController(
+            _settings,
+            new TrayActions(
+                ToggleWidget,
+                TogglePaneFromTray,
+                () => _usageMonitor?.RefreshNow(),
+                SignInProvider,
+                ShowSettings,
+                CopyDiagnostics,
+                () => _ = CheckForUpdatesAsync(interactive: true),
+                CancelPendingUpdate,
+                ExitApp));
     }
 
     SettingsWindow? _settingsWindow;
@@ -462,9 +379,9 @@ public partial class App : System.Windows.Application
                 providers,
                 DiagnosticsService.InspectCodex(_settings.CodexExecutablePath));
             System.Windows.Clipboard.SetText(report);
-            _tray.ShowBalloonTip(
+            _trayController.ShowBalloonTip(
                 3500,
-                "AI Usage Widget",
+                "Windows AI Status Bar",
                 L10n.T("diagnostics_copied"),
                 WinForms.ToolTipIcon.Info);
         }
@@ -481,10 +398,13 @@ public partial class App : System.Windows.Application
 
     void ApplySettingsChanges()
     {
+        _settings.Normalize();
         _widget.ApplyScale();
         _widget.ApplyAppearance();
         if (_detailsPane?.IsVisible == true) _detailsPane.ApplyAppearance();
         _dockController?.Redock();
+        ConfigureAgentTaskService();
+        UpdateTray();
 
         if (!string.Equals(_chatGptServicePath, _settings.CodexExecutablePath, StringComparison.OrdinalIgnoreCase))
         {
@@ -498,16 +418,20 @@ public partial class App : System.Windows.Application
         _usageMonitor?.RefreshNow();
     }
 
+    void ShowWidget()
+    {
+        _settings.WidgetVisible = true;
+        _settings.Save();
+        if (!_widget.IsVisible) _widget.Show();
+        _dockController?.Redock();
+        _trayController.UpdateVisibility(stripVisible: true, _detailsPane?.IsVisible == true);
+        _widget.Activate();
+    }
+
     void ToggleWidget()
     {
         if (_widget.IsVisible) HideWidget();
-        else
-        {
-            _settings.WidgetVisible = true;
-            _settings.Save();
-            _widget.Show();
-            _widget.Activate();
-        }
+        else ShowWidget();
     }
 
     void HideWidget()
@@ -516,23 +440,10 @@ public partial class App : System.Windows.Application
         _settings.WidgetVisible = false;
         _settings.Save();
         _widget.Hide();
+        _trayController.UpdateVisibility(stripVisible: false, paneVisible: false);
     }
 
-    void SetUpdateCancellationEnabled(bool enabled)
-    {
-        if (_trayCancelUpdate is null) return;
-        _trayCancelUpdate.Visible = enabled;
-        _trayCancelUpdate.Enabled = enabled;
-    }
-
-    void ResetWidgetPosition()
-    {
-        _settings.WidgetVisible = true;
-        _settings.Save();
-        if (!_widget.IsVisible) _widget.Show();
-        _dockController?.DockToPrimary();
-        _widget.Activate();
-    }
+    void SetUpdateCancellationEnabled(bool enabled) => _trayController.SetUpdateCancellationEnabled(enabled);
 
     void ExitApp()
     {
@@ -557,8 +468,7 @@ public partial class App : System.Windows.Application
             await _agentStateService.DisposeAsync();
         _detailsPane?.Close();
         DisposeChatGptService();
-        _tray.Visible = false;
-        _tray.Dispose();
+        _trayController.Dispose();
         Shutdown();
     }
 
@@ -583,15 +493,6 @@ public partial class App : System.Windows.Application
 
     int BaseIntervalSec => Math.Max(30, _settings.RefreshIntervalSec);
 
-    UsageSource ActiveSource => ToUsageSource(_widget.ActiveProvider);
-
-    static UsageSource ToUsageSource(UsageProviderKind provider) => provider switch
-    {
-        UsageProviderKind.Claude => UsageSource.Claude,
-        UsageProviderKind.ChatGpt => UsageSource.Codex,
-        _ => throw new ArgumentOutOfRangeException(nameof(provider)),
-    };
-
     ChatGptUsageService GetChatGptService()
     {
         lock (_chatGptServiceGate)
@@ -613,15 +514,46 @@ public partial class App : System.Windows.Application
         }
     }
 
-    void ActivateProvider(UsageProviderKind provider)
+    void ConfigureAgentTaskService()
     {
-        _widget.SetActiveProvider(provider);
-        _settings.ActiveProvider = provider.StorageKey();
-        _settings.Save();
-        UpdateProviderChecks();
-        var source = ActiveSource;
+        var enabled = _demoTasksRequested || _settings.DemoTasks;
+        if (!enabled)
+        {
+            if (_agentStateService is null) return;
+            var previous = _agentStateService;
+            previous.StateChanged -= OnTaskStateChanged;
+            _agentStateService = null;
+            _agentStateRetentionMinutes = null;
+            _taskState = StatusBarState.Empty;
+            _ = previous.DisposeAsync();
+            UpdateStrip();
+            return;
+        }
+
+        if (_agentStateService is not null &&
+            _agentStateRetentionMinutes == _settings.RecentlyCompletedMinutes)
+        {
+            return;
+        }
+
+        if (_agentStateService is not null)
+        {
+            _agentStateService.StateChanged -= OnTaskStateChanged;
+            _ = _agentStateService.DisposeAsync();
+        }
+        _agentStateService = new AgentStateService(
+            [
+                new DemoTaskProvider(AgentProvider.Codex, TimeProvider.System),
+                new DemoTaskProvider(AgentProvider.Claude, TimeProvider.System),
+            ],
+            TimeProvider.System,
+            new StateServiceOptions(
+                TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
+                TaskTimings.Default.UnknownVisibleFor));
+        _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
+        _taskState = _agentStateService.Current;
+        _agentStateService.StateChanged += OnTaskStateChanged;
         UpdateStrip();
-        _usageMonitor?.RefreshNow(source);
     }
 
     void OnUsageChanged(UsageSnapshot snapshot)
@@ -663,65 +595,44 @@ public partial class App : System.Windows.Application
         if (_detailsPane is { IsVisible: true })
         {
             _detailsPane.Close();
+            _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
             return;
         }
 
         if (Environment.TickCount64 - _detailsPaneClosedAtMs < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
-        _detailsPane.Closed += (_, _) => _detailsPaneClosedAtMs = Environment.TickCount64;
+        _detailsPane.Closed += (_, _) =>
+        {
+            _detailsPaneClosedAtMs = Environment.TickCount64;
+            _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
+        };
         _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
         _detailsPane.ShowAbove(_widget);
+        _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: true);
     }
 
-    void ShowTrayContextMenu()
+    void TogglePaneFromTray()
     {
-        if (_tray.ContextMenuStrip is { } menu)
-            menu.Show(WinForms.Cursor.Position);
+        if (!_widget.IsVisible) ShowWidget();
+        ToggleDetailsPane();
     }
+
+    void ShowTrayContextMenu() => _trayController.ShowContextMenuAtCursor();
 
     void UpdateTray()
     {
         var snapshots = _usageMonitor?.Current;
-        if (snapshots is null) return;
-
-        // The tray icon follows the strip: the lower of the two session (compact) figures.
-        var compactWindows = snapshots.Values
-            .Select(snapshot => UsageSummary.Compact(snapshot.Windows))
-            .OfType<UsageWindow>()
-            .ToArray();
-        var principal = UsageSummary.Principal(compactWindows);
-        var pct = principal is null ? (int?)null : (int)Math.Round(principal.UsedPercent);
-        if (pct != _lastTrayPct)
-        {
-            _lastTrayPct = pct;
-            var old = _tray.Icon;
-            _tray.Icon = TrayIconRenderer.Render(principal?.UsedPercent);
-            old?.Dispose();
-        }
-
-        var lines = new[] { UsageSource.Claude, UsageSource.Codex }
-            .Select(source =>
-            {
-                var name = source == UsageSource.Claude ? L10n.T("provider_claude") : L10n.T("provider_chatgpt");
-                var snapshot = snapshots.GetValueOrDefault(source);
-                var window = snapshot is null ? null : UsageSummary.Compact(snapshot.Windows);
-                var remaining = window is null
-                    ? L10n.T("tray_usage_unavailable")
-                    : L10n.F("tray_usage_remaining", Math.Round(window.RemainingPercent)) +
-                      (snapshot!.Health is UsageHealth.Stale or UsageHealth.SignedOut
-                          ? L10n.T("tray_usage_stale")
-                          : "");
-                return $"{name}: {remaining}";
-            });
-        var tip = string.Join("\n", lines);
-        var trimmed = tip.Length > 127 ? tip[..127] : tip;
-        if (_tray.Text != trimmed) _tray.Text = trimmed;
+        if (snapshots is not null) _trayController.UpdateUsage(snapshots);
     }
 
-    Task SignInActiveProviderAsync(bool force) => _widget.ActiveProvider == UsageProviderKind.Claude
-        ? SignInClaudeAsync(force)
-        : SignInChatGptAsync(force);
+    void SignInProvider(UsageProviderKind provider)
+    {
+        if (provider == UsageProviderKind.Claude)
+            _ = SignInClaudeAsync(force: true);
+        else
+            _ = SignInChatGptAsync(force: true);
+    }
 
     Task SignInClaudeAsync(bool force)
     {
@@ -780,8 +691,7 @@ public partial class App : System.Windows.Application
         catch (Exception ex)
         {
             Log.Write($"ChatGPT sign-in failed ({DiagnosticsService.ClassifyError(ex)})");
-            if (_widget.ActiveProvider == UsageProviderKind.ChatGpt)
-                _widget.ShowError(L10n.T("err_usage_unavailable"));
+            _widget.ShowError(L10n.T("err_usage_unavailable"));
         }
         finally
         {
