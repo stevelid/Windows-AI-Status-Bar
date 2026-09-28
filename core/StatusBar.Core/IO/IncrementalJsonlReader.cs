@@ -23,8 +23,15 @@ internal sealed class IncrementalJsonlReader
 
         _path = path;
         _bufferSize = bufferSize;
-        _fileIdProvider = fileIdProvider ?? File.GetCreationTimeUtc;
+        _fileIdProvider = fileIdProvider ?? DefaultFileId;
     }
+
+    // Windows keeps a file's creation time when it is appended to, so a changed creation time
+    // means the file was replaced. Unix has no creation time: .NET reports a time that moves
+    // on every write, which would look like a replacement after each append. There, only
+    // truncation (length below the offset) is detected. The app itself runs on Windows.
+    static DateTime DefaultFileId(string path) =>
+        OperatingSystem.IsWindows() ? File.GetCreationTimeUtc(path) : DateTime.MinValue;
 
     internal long Offset { get; private set; }
 
