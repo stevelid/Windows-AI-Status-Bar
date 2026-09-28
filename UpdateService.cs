@@ -28,10 +28,10 @@ public static class UpdateService
     // Points at this fork. The upstream repo would otherwise replace this build with the upstream app.
     const string Owner = "stevelid";
     const string Repo = "Windows-AI-Status-Bar";
-    const string AssetName = "ClaudeUsageWidget-win-x64.zip";
+    const string AssetName = "AIStatusBar-win-x64.zip";
     const string ChecksumAssetName = "SHA256SUMS.txt";
     const int BufferSize = 128 * 1024;
-    const string TemporaryDirectoryPrefix = "ClaudeUsageWidget-update-";
+    const string TemporaryDirectoryPrefix = "WindowsAIStatusBar-update-";
     static readonly TimeSpan StaleTemporaryDirectoryAge = TimeSpan.FromDays(7);
 
     static readonly HttpClient Http = CreateClient();
@@ -39,7 +39,7 @@ public static class UpdateService
     static HttpClient CreateClient()
     {
         var c = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
-        c.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "ClaudeUsageWidget-updater");
+        c.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "WindowsAIStatusBar-updater");
         return c;
     }
 
@@ -117,9 +117,9 @@ public static class UpdateService
             var extractDir = Path.Combine(tmpDir, "extracted");
             progress?.Report(new UpdateProgress(UpdateStage.Extracting));
             ZipFile.ExtractToDirectory(zipPath, extractDir);
-            var executables = Directory.GetFiles(extractDir, "ClaudeUsageWidget.exe", SearchOption.AllDirectories);
+            var executables = Directory.GetFiles(extractDir, "AIStatusBar.exe", SearchOption.AllDirectories);
             if (executables.Length != 1)
-                throw new InvalidOperationException("update package did not contain exactly one ClaudeUsageWidget.exe");
+                throw new InvalidOperationException("update package did not contain exactly one AIStatusBar.exe");
 
             // A running exe cannot be overwritten, but it CAN be renamed on the same volume.
             progress?.Report(new UpdateProgress(UpdateStage.Applying));

@@ -29,6 +29,7 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        AppPaths.Initialize();
 
         if (!TryAcquireSingleInstance())
         {
@@ -75,7 +76,7 @@ public partial class App : System.Windows.Application
     static string InstanceName(string purpose)
     {
         var sid = WindowsIdentity.GetCurrent().User?.Value ?? Environment.UserName;
-        return $"Local\\ClaudeUsageWidget-{purpose}-{sid}";
+        return $"Local\\WindowsAIStatusBar-{purpose}-{sid}";
     }
 
     bool TryAcquireSingleInstance()

@@ -7,9 +7,10 @@
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>ClaudeUsageWidget</AssemblyName>
+    <AssemblyName>AIStatusBar</AssemblyName>
     <RootNamespace>ClaudeUsageWidget</RootNamespace>
-    <Version>2.1.1</Version>
+    <Product>Windows AI Status Bar</Product>
+    <Version>3.0.0-alpha.1</Version>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
     <!-- Allows compile-only builds on Linux/macOS (CI and cloud agents). The app still runs only on Windows. -->

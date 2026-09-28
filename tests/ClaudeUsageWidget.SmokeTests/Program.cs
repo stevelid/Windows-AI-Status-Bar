@@ -32,7 +32,7 @@ Require(
     "The Traditional Chinese expired Claude sign-in message should include re-login steps.");
 L10n.Init(UiLanguage.En);
 
-const string updateZip = "ClaudeUsageWidget-win-x64.zip";
+const string updateZip = "AIStatusBar-win-x64.zip";
 const string expectedUpdateHash = "e68928a80d0cf0ba34c93c249794587ac833617bcdbbe2034bd61db23262e0e9";
 Require(
     UpdateService.ParseExpectedHash($"{expectedUpdateHash}  {updateZip}\n", updateZip) == expectedUpdateHash,
@@ -100,10 +100,10 @@ try
 
     var abandonedUpdate = Path.Combine(
         updaterTestRoot,
-        "ClaudeUsageWidget-update-" + Guid.NewGuid().ToString("N"));
+        "WindowsAIStatusBar-update-" + Guid.NewGuid().ToString("N"));
     var recentUpdate = Path.Combine(
         updaterTestRoot,
-        "ClaudeUsageWidget-update-" + Guid.NewGuid().ToString("N"));
+        "WindowsAIStatusBar-update-" + Guid.NewGuid().ToString("N"));
     var unrelatedDirectory = Path.Combine(updaterTestRoot, "unrelated-temp-data");
     Directory.CreateDirectory(abandonedUpdate);
     Directory.CreateDirectory(recentUpdate);

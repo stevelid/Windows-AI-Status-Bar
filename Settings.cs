@@ -55,10 +55,10 @@ public static class AutoStart
     // Legacy mechanism (v1 used HKCU Run; on this machine Windows silently ignored the
     // entry at logon, so we switched to a Startup-folder shortcut).
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    const string ValueName = "ClaudeUsageWidget";
+    const string ValueName = "ClaudeUsageWidget"; // legacy Run value; removed on enable/disable
 
     static string ShortcutPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.Startup), "ClaudeUsageWidget.lnk");
+        Environment.GetFolderPath(Environment.SpecialFolder.Startup), "WindowsAIStatusBar.lnk");
 
     public static bool IsEnabled()
     {
@@ -88,7 +88,7 @@ public static class AutoStart
             lnk.TargetPath = exe;
             lnk.Arguments = "--autostart";
             lnk.WorkingDirectory = Path.GetDirectoryName(exe);
-            lnk.Description = "AI Usage Widget";
+            lnk.Description = "Windows AI Status Bar";
             lnk.Save();
             Log.Write($"Created auto-start shortcut: {ShortcutPath} -> {exe}");
         }

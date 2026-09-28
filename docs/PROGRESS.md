@@ -22,7 +22,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Phase 1 — Reshape the widget
 
-- [ ] P1.1 Product identity and data folder
+- [x] P1.1 Product identity and data folder
 - [ ] P1.2 Usage model in Core
 - [ ] P1.3 UsageMonitor
 - [ ] P1.4 Usage adapters and App wiring

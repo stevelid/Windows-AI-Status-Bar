@@ -59,8 +59,8 @@ jobs:
       - name: Package and hash release asset
         shell: pwsh
         run: |
-          $asset = 'ClaudeUsageWidget-win-x64.zip'
-          Compress-Archive -LiteralPath dist/ClaudeUsageWidget.exe -DestinationPath $asset
+          $asset = 'AIStatusBar-win-x64.zip'
+          Compress-Archive -LiteralPath dist/AIStatusBar.exe -DestinationPath $asset
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLowerInvariant()
           "$hash  $asset" | Set-Content -Encoding ascii SHA256SUMS.txt
 
@@ -82,7 +82,7 @@ jobs:
             git tag -a $env:TAG -m "Release $env:TAG"
             git push origin $env:TAG
           }
-          gh release create $env:TAG ClaudeUsageWidget-win-x64.zip SHA256SUMS.txt `
+          gh release create $env:TAG AIStatusBar-win-x64.zip SHA256SUMS.txt `
             --repo $env:GITHUB_REPOSITORY `
             --title "AI Usage Widget $env:TAG" `
             --generate-notes `

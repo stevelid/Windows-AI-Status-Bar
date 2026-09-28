@@ -2,7 +2,7 @@ using System.IO;
 
 namespace ClaudeUsageWidget;
 
-/// <summary>Minimal file logger for diagnosing startup issues (%APPDATA%\ClaudeUsageWidget\log.txt).</summary>
+/// <summary>Minimal file logger for diagnosing startup issues (%APPDATA%\WindowsAIStatusBar\log.txt).</summary>
 public static class Log
 {
     static readonly object Gate = new();

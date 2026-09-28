@@ -4,10 +4,15 @@
 
 | Data | Location | Protection | Leaves the PC through |
 | --- | --- | --- | --- |
-| Claude access/refresh tokens | `%APPDATA%\ClaudeUsageWidget\tokens.dat` | Windows DPAPI, current user | Anthropic OAuth and usage endpoints |
+| Claude access/refresh tokens | `%APPDATA%\WindowsAIStatusBar\tokens.dat` | Windows DPAPI, current user | Anthropic OAuth and usage endpoints |
 | ChatGPT/Codex tokens | Codex-managed storage | Owned by official Codex | Official Codex process only |
-| Widget settings | `%APPDATA%\ClaudeUsageWidget\settings.json` | Normal user file permissions | Never |
-| Widget log | `%APPDATA%\ClaudeUsageWidget\log.txt` | Normal user file permissions | Never automatically |
+| Widget settings | `%APPDATA%\WindowsAIStatusBar\settings.json` | Normal user file permissions | Never |
+| Widget log | `%APPDATA%\WindowsAIStatusBar\log.txt` | Normal user file permissions | Never automatically |
+
+On first launch, the app copies only the existing DPAPI-encrypted `tokens.dat`
+from `%APPDATA%\ClaudeUsageWidget` when the new token file is absent. It does
+not import the old settings file. A marker prevents a later logout from
+re-importing the legacy token.
 
 The repository and release package contain no account identifiers, credentials, local settings, or real usage payloads.
 
@@ -42,9 +47,9 @@ The widget deliberately delegates authentication to OpenAI Codex:
 
 ## Update boundary
 
-GitHub Actions builds the release commit, runs the local mock app-server smoke tests, and publishes `ClaudeUsageWidget-win-x64.zip` together with `SHA256SUMS.txt`.
+GitHub Actions builds the release commit, runs the local mock app-server smoke tests, and publishes `AIStatusBar-win-x64.zip` together with `SHA256SUMS.txt`.
 
-The updater downloads the asset named `ClaudeUsageWidget-win-x64.zip` and its `SHA256SUMS.txt` companion from this repository's latest GitHub Release. It verifies the expected SHA-256 checksum before extracting or replacing the executable, and rejects packages that do not contain exactly one `ClaudeUsageWidget.exe`.
+The updater downloads the asset named `AIStatusBar-win-x64.zip` and its `SHA256SUMS.txt` companion from this repository's latest GitHub Release. It verifies the expected SHA-256 checksum before extracting or replacing the executable, and rejects packages that do not contain exactly one `AIStatusBar.exe`.
 
 Updater temporary directories are deleted after success, cancellation, or failure. Startup cleanup only removes directories older than seven days whose names match the widget's exact GUID-based pattern, are direct children of the Windows temporary directory, and are not reparse points.
 

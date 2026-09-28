@@ -70,9 +70,10 @@ paths, logs, and real usage values.
   logs, and full private paths.
 - Release downloads must be verified against `SHA256SUMS.txt` before
   installation.
-- Legacy technical identifiers such as `ClaudeUsageWidget.exe`, the release
-  archive, app-data directory, Startup shortcut, mutex, and C# namespace remain
-  unchanged so existing installations keep their settings and update path.
+- Phase 1 uses the new `AIStatusBar.exe`, `%APPDATA%\WindowsAIStatusBar` data
+  directory, Startup shortcut and mutex. The C# namespace remains
+  `ClaudeUsageWidget`; only the encrypted Claude token file migrates from the
+  legacy data directory.
 
 ## Validation
 
@@ -80,7 +81,7 @@ paths, logs, and real usage values.
 - The `main` branch build and smoke tests passed after merge.
 - The `v2.1.0` release workflow completed successfully.
 - Release assets were verified to include:
-  - `ClaudeUsageWidget-win-x64.zip`
+  - `AIStatusBar-win-x64.zip`
   - `SHA256SUMS.txt`
 - README examples and screenshots were reviewed for provider accuracy and
   private information.
