@@ -71,18 +71,15 @@ Additional Cowork observations:
 - **Cowork produced nothing in the watched folder during a live task.** Together with the static report (newest `audit.jsonl` files from August although Cowork is in daily use), this indicates that **current Cowork tasks are no longer written to `local-agent-mode-sessions` in the MSIX `LocalCache`**. Possible explanations: a new storage location, a different layout, or tasks running remotely (new metadata keys `sessionType`, `dispatchParentOrigin` and `outboundCCRRemoteId` point that way). A-C3 is therefore **Refuted for the current location**, and Phase 3/4 are blocked until the live location is found.
 - **Neither Cowork nor Codex used a structured question.** Both asked their question in ordinary text at the end of the turn. Such a turn simply completes (`result` / `task_complete`), so the structured-question rules (A-C5, A-X4) will rarely fire in practice. See the open design question below.
 
+## Claude Code desktop write watch (S9, 2026-09-28)
+
+Steve ran a short task in Claude desktop's Code tab during the five-minute `Find-ClaudeWrites.ps1` watch and selected **Always allow** for a command permission. The sanitized observations are recorded in [`claude-code-writes-20260928.md`](claude-code-writes-20260928.md); the raw Desktop report was not committed because its path redaction left the encoded project-folder name visible.
+
+The watch confirms A-K1 for the desktop Code tab on this machine's default Claude home: a project JSONL stream and session metadata changed during the task. The metadata included permission-related key names, but the script captured no values. Nested transcript fields (A-K2) and interruption records (A-K3) remain unverified. No user hook was configured or observed, so A-K4 remains unverified.
+
 ## Still needed from Steve
 
-Steve clarified (2026-09-28) that most of his Claude work is in **Claude Code** (desktop Code tab and terminal), not Cowork. The plan now tracks Claude Code (D16). To confirm where the desktop Code tab writes its sessions (spike S9):
-
-1. Pull this branch, then run:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\tools\recon\Find-ClaudeWrites.ps1
-   ```
-
-2. During the five-minute countdown, give Claude Code in the desktop **Code** tab a short task and let it finish. If convenient, also run a short task with `claude` in a terminal.
-3. Review the report on the Desktop and commit or paste it. Only folder structure, file sizes and record types are shown.
+Steve clarified (2026-09-28) that most of his Claude work is in **Claude Code** (desktop Code tab and terminal), not Cowork. The plan now tracks Claude Code (D16). Spike S9 confirmed the desktop Code tab's default project-log location; see the redacted report above. A separate terminal run and hook test have not been done.
 
 ## Design decision (formerly open)
 

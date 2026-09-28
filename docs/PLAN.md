@@ -681,8 +681,8 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-X6 | Sub-agent sessions are identifiable from `session_meta.source` and name their parent | D12 | Count separately | Unverified |
 | A-X8 | `task_complete` carries `last_agent_message` and, on failure, an `error` object | D15, Codex Failed state | Question flag and Failed state not shown | Confirmed |
 | A-X7 | Rollouts compress only after 7 days | Discovery | Tail reader would skip `.zst`; acceptable | Not observed |
-| A-K1 | Claude Code transcripts (terminal and desktop Code tab) are in `~/.claude/projects/<folder>/<session>.jsonl` | Claude Code discovery | Settings override; recon path | Unverified for the desktop Code tab |
-| A-K2 | Transcript records: `type`, `message.stop_reason`, `isSidechain`, `ai-title` | Claude Code turn state and titles | Recency fallback (`Working/Inferred`) | Unverified on Steve's PC |
+| A-K1 | Claude Code transcripts are in `~/.claude/projects/<folder>/<session>.jsonl` | Claude Code discovery | Settings override; recon path | **Confirmed for desktop Code tab with default Claude home; terminal and `CLAUDE_CONFIG_DIR` override untested** |
+| A-K2 | Transcript records: `type`, `message.stop_reason`, `isSidechain`, `ai-title` | Claude Code turn state and titles | Recency fallback (`Working/Inferred`) | Unverified; only top-level type signatures observed |
 | A-K3 | Interruptions are recorded as a user message starting `[Request interrupted by user` | Stopped state | Shows Complete instead of Stopped | Unverified |
 | A-K4 | Sessions started from the desktop Code tab run user hooks from `~/.claude/settings.json` | Confirmed Claude attention | Transcript-only (permission waits show as Working) | Unverified |
 | A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override | Confirmed (MSIX root only) |
