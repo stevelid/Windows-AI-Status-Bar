@@ -30,7 +30,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P1.6 Docking geometry and compact strip
 - [x] P1.7 Details pane
 - [x] P1.8 Tray, context menu and settings
-- [ ] Phase 1 acceptance 🧑
+- [x] Phase 1 acceptance 🧑 (Steve, 2026-09-28, build `+c3e03d0`: strip, pane open/close, demo tasks, tray, settings, docking, idle CPU, Claude start-up)
 
 ## Phase 2 — Codex tasks
 
@@ -106,3 +106,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P2.2 review — Fixtures for the question and approval cases were identical to other fixtures and only worked because the test rewrote lines at read time. The fixtures now carry the real fields (`last_agent_message`, JSON-string `arguments`) with placeholder values, the rewriting is removed, and a test covers string and object `arguments`. The fixture rule in CLAUDE.md/AGENTS.md is clarified: real data is forbidden, placeholder values in real field names are required.
 - 2026-09-28 — Phase 1 re-test (Steve) — Pane still did not open, but Steve's log had no `Usage …:` lines, so the build he ran predates the fix (several downloaded copies). Builds now log and report their commit (`AppBuild.Label`, e.g. `3.0.0-alpha.1+4f23747`) in `log.txt` and Copy diagnostics. The update check treats 404 (no releases yet) as "no update" instead of logging a stack trace on every start.
 - 2026-09-28 — P2.3 — Added incremental session-index title resolution and a shared title sanitizer. Index names take precedence; user-message candidates are reduced to a short in-memory title, and injected context is skipped.
+- 2026-09-28 — Phase 1 accepted by Steve on build `c3e03d0` after the pane and start-up fixes.
