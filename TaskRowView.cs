@@ -14,10 +14,11 @@ internal sealed class TaskRowView : Border
     readonly TextBlock _title;
     readonly TextBlock _provider;
     readonly System.Windows.Controls.Button _dismissButton;
-    string? _taskId;
+    AgentTask? _task;
     bool _canDismiss;
 
     internal event Action<string>? DismissRequested;
+    internal event Action<AgentTask>? FocusRequested;
 
     /// <summary>Creates a reusable row for one in-memory agent task.</summary>
     public TaskRowView()
@@ -60,10 +61,12 @@ internal sealed class TaskRowView : Border
         };
         _dismissButton.Click += (_, _) =>
         {
-            if (_taskId is { } taskId) DismissRequested?.Invoke(taskId);
+            if (_task is { } task) DismissRequested?.Invoke(task.Id);
         };
+        PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
         MouseEnter += (_, _) => UpdateDismissVisibility();
         MouseLeave += (_, _) => UpdateDismissVisibility();
+        Cursor = System.Windows.Input.Cursors.Hand;
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -85,7 +88,7 @@ internal sealed class TaskRowView : Border
     public void Update(AgentTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
-        _taskId = task.Id;
+        _task = task;
         _canDismiss = task.Status == AgentTaskStatus.Unknown ||
             task.Status == AgentTaskStatus.NeedsAttention && task.Confidence != StateConfidence.Confirmed;
         _dismissButton.Content = L10n.T("pane_dismiss");
@@ -133,6 +136,25 @@ internal sealed class TaskRowView : Border
         tooltip.Add(L10n.F("pane_confidence", ConfidenceLabel(task.Confidence)));
         tooltip.Add(FormatActivity(task.LastActivity));
         ToolTip = string.Join(Environment.NewLine, tooltip);
+    }
+
+    void OnPreviewMouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (IsWithin(e.OriginalSource as DependencyObject, _dismissButton)) return;
+        if (_task is not { } task) return;
+        FocusRequested?.Invoke(task);
+        e.Handled = true;
+    }
+
+    static bool IsWithin(DependencyObject? source, DependencyObject ancestor)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, ancestor)) return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     void UpdateDismissVisibility() =>

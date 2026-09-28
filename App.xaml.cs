@@ -658,6 +658,12 @@ public partial class App : System.Windows.Application
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 
+    void OnFocusTaskRequested(AgentTask task)
+    {
+        if (AppActivator.TryFocus(task))
+            _detailsPane?.Close();
+    }
+
     void UpdateStrip()
     {
         if (_usageMonitor is null) return;
@@ -688,6 +694,7 @@ public partial class App : System.Windows.Application
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
+        _detailsPane.FocusTaskRequested += OnFocusTaskRequested;
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;

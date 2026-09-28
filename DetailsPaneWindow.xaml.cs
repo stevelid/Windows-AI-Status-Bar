@@ -32,6 +32,9 @@ public partial class DetailsPaneWindow : Window
     /// <summary>Raised when the user dismisses an inferred attention or unknown task row.</summary>
     public event Action<string>? DismissTaskRequested;
 
+    /// <summary>Raised when the user clicks a task row to focus its owning desktop app.</summary>
+    public event Action<AgentTask>? FocusTaskRequested;
+
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
     public DetailsPaneWindow(Settings settings)
     {
@@ -284,6 +287,7 @@ public partial class DetailsPaneWindow : Window
             {
                 row = new TaskRowView();
                 row.DismissRequested += taskId => DismissTaskRequested?.Invoke(taskId);
+                row.FocusRequested += task => FocusTaskRequested?.Invoke(task);
                 _taskRows.Add(task.Id, row);
             }
             row.Update(task);
