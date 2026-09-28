@@ -19,6 +19,7 @@ public class Settings
     public double UiScale { get; set; } = 1.0;   // 0.7–2.5, drag widget edges to change
     public string ActiveProvider { get; set; } = "claude";
     public string? CodexExecutablePath { get; set; }
+    public bool DemoTasks { get; set; }
     [JsonIgnore]
     public bool DoNotPersist { get; set; }
 

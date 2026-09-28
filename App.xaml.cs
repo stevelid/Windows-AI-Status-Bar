@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Threading;
 using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
+using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
 using WinForms = System.Windows.Forms;
@@ -14,6 +15,7 @@ public partial class App : System.Windows.Application
     readonly object _chatGptServiceGate = new();
 
     UsageMonitor? _usageMonitor;
+    AgentStateService? _agentStateService;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
     Settings _settings = null!;
@@ -21,6 +23,7 @@ public partial class App : System.Windows.Application
     WinForms.NotifyIcon _tray = null!;
     DispatcherTimer _countdownTimer = null!;
     bool _loginWindowOpen;
+    bool _demoTasksRequested;
     bool _exitStarted;
     int? _lastTrayPct;
     Mutex? _singleInstanceMutex;
@@ -63,6 +66,7 @@ public partial class App : System.Windows.Application
 
         try
         {
+            _demoTasksRequested = e.Args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
             StartupCore();
             StartActivationListener();
             Log.Write("啟動完成");
@@ -205,6 +209,17 @@ public partial class App : System.Windows.Application
         RenderUsage(_usageMonitor.Current[ActiveSource]);
         UpdateTray();
         _usageMonitor.Start();
+
+        if (_demoTasksRequested || _settings.DemoTasks)
+        {
+            _agentStateService = new AgentStateService(
+                [
+                    new DemoTaskProvider(AgentProvider.Codex, TimeProvider.System),
+                    new DemoTaskProvider(AgentProvider.Claude, TimeProvider.System),
+                ],
+                TimeProvider.System,
+                StateServiceOptions.Default);
+        }
 
         if (_widget.ActiveProvider == UsageProviderKind.Claude && !_claudeService.HasTokens)
         {
@@ -539,6 +554,8 @@ public partial class App : System.Windows.Application
         Log.Write("使用者選擇結束");
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
+        if (_agentStateService is not null)
+            await _agentStateService.DisposeAsync();
         DisposeChatGptService();
         _tray.Visible = false;
         _tray.Dispose();

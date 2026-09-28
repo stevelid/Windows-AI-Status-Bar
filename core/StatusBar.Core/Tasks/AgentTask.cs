@@ -57,6 +57,9 @@ public sealed record AgentTask
     /// <summary>Short, content-free reason such as "Approval requested" or "Waiting for input".</summary>
     public string? AttentionReason { get; init; }
 
+    /// <summary>Short, content-free status context shown in the task tooltip.</summary>
+    public string? StatusDetail { get; init; }
+
     /// <summary>Opaque provider reference used to focus or open the session. Never shown to the user.</summary>
     public string? SessionReference { get; init; }
 }
