@@ -138,6 +138,7 @@ Steve asked for suggestions before implementation. The following changes are **a
 | **D12** | Sub-agent Codex sessions (`session_meta.source` = sub-agent) are folded into their parent task, not counted separately. | Otherwise one Codex job with helpers would show as several tasks. Verify in recon (A-X6). |
 | **D13** | "Aborted by user" (`turn_aborted`, reason `interrupted`) maps to `Complete` with detail "Stopped", not `Failed`. | The brief reserves `Failed` for reliable error states, and Codex does not persist errors. |
 | **D14** | Add a small `StatusDetail` string to `AgentTask` (e.g. "Stopped", "Waiting for approval"), shown only in the pane tooltip. | Gives the pane useful context without adding enum states. |
+| **D15** | **Decided by Steve 2026-09-28.** A completed turn whose final assistant message ends with a question is shown as `NeedsAttention / Inferred`, reason "Asked you a question". The check reads only the final message on the turn's terminal record (Codex `task_complete.last_agent_message`, Cowork `result.result`), computes one boolean in memory, and discards the text. | Both apps normally ask questions in plain text at the end of a turn rather than through structured prompts (recon follow-up), so structured-prompt rules alone would miss most real questions. |
 
 ---
 
@@ -351,6 +352,7 @@ Timing constants live in one `TaskTimings` record so they can be tuned from sett
 | `ClaudeWorkingStaleAfter` | 15 min | Working with no audit/metadata change → `Stale` |
 | `ClaudeInferredAttentionExpiry` | 30 min | Inferred alert with no new evidence → `Unknown/Stale` |
 | `ClaudeConfirmedAttentionExpiry` | 2 h | Confirmed alert with no new evidence → `Unknown/Stale` |
+| `QuestionAttentionExpiry` | 4 h | "Asked you a question" flag (D15) is dropped and the task shows as `Complete` |
 | `RecentlyCompletedFor` | 10 min | Complete/Failed tasks visible in the pane |
 | `UnknownVisibleFor` | 30 min | Unknown tasks visible in the pane |
 
@@ -363,7 +365,7 @@ Parser input is one JSONL line at a time; unknown record types are counted in `F
 | `session_meta` | Set `ThreadId` (`payload.id`), `Source`, `ParentThreadId` when sub-agent, `CwdLeaf` (last path segment only), `StartedAt`. |
 | `turn_context` | Set `ApprovalPolicy` (string). |
 | `event_msg/task_started` or `turn_started` | `Turn = Running`, clear pending, `LastActivity = ts`. |
-| `event_msg/task_complete` or `turn_complete` | `Turn = Completed`, clear pending. |
+| `event_msg/task_complete` or `turn_complete` | If `payload.error` is a non-null object → `Turn = Failed` (recon 2026-09-28: `{message, codex_error_info}`; never read or log the message). Otherwise `Turn = Completed` and set `EndedWithQuestion = QuestionDetector.EndsWithQuestion(payload.last_agent_message)` (D15; text discarded immediately). Clear pending. |
 | `event_msg/turn_aborted` | `Turn = Aborted`, record reason, clear pending. |
 | `response_item/function_call` where `name == "request_user_input"` | Add pending `{call_id, kind: Input, since: ts}`. |
 | `response_item/function_call` whose `arguments` JSON has `sandbox_permissions == "require_escalated"` | Add pending `{call_id, kind: Approval, since: ts}`. |
@@ -378,7 +380,7 @@ Mapping to `AgentTask` at evaluation time `now`:
 
 1. `Turn == Running` and a pending item exists with `now - since ≥ CodexApprovalDebounce` and `ApprovalPolicy != "never"` → `NeedsAttention / Inferred`, reason "Waiting for approval" or "Waiting for your input". (Inferred because the approval event itself is not on disk.)
 2. `Turn == Running` → `Working / Confirmed`; if `now - LastActivity ≥ CodexWorkingStaleAfter` → `Working / Stale`; if `≥ CodexWorkingUnknownAfter` → `Unknown / Stale`.
-3. `Turn == Completed` → `Complete / Confirmed`. `Turn == Aborted` → `Complete / Confirmed`, `StatusDetail = "Stopped"` (D13).
+3. `Turn == Completed` and `EndedWithQuestion` and `now - LastActivity < QuestionAttentionExpiry` → `NeedsAttention / Inferred`, reason "Asked you a question", evidence key = `turn_id` (D15). Otherwise `Turn == Completed` → `Complete / Confirmed`. `Turn == Failed` → `Failed / Confirmed`. `Turn == Aborted` → `Complete / Confirmed`, `StatusDetail = "Stopped"` (D13).
 4. No turn seen yet (tail read began mid-file with no `task_started`) → derive from the most recent turn event in the tail; if none, `Unknown / Stale`.
 
 Sub-agent sessions (D12): their state is merged into the parent task (parent is `Working` if any child is working; `NeedsAttention` if any child needs attention). If the parent cannot be found, show the child with the title "Codex sub-task".
@@ -394,7 +396,7 @@ Title precedence (`CodexTitleResolver`): `session_index.jsonl` latest `thread_na
 | `system/init` | `Turn = Running`, clear pending. |
 | `assistant` | `Turn = Running` (if not already); for each `tool_use` block add pending `{id, name, since}`. |
 | `user` | For each `tool_result` block remove pending by `tool_use_id`. A user text message after `result` also means `Turn = Running`. |
-| `result` with `subtype == "success"` and `is_error != true` | `Turn = Completed`, clear pending. |
+| `result` with `subtype == "success"` and `is_error != true` | `Turn = Completed`, clear pending, set `EndedWithQuestion = QuestionDetector.EndsWithQuestion(result)` (D15; text discarded immediately). |
 | `result` with `is_error == true` or `subtype` starting `error` | `Turn = Failed`, clear pending. |
 | `system/permission_request` | Add pending permission `{uuid, tool_name, since}`. ⚠️ A-C6 (confirmed 2026-09-28) |
 | `system/permission_response` | Resolve the oldest pending permission with the same `tool_name` (the request and response `uuid`s are not guaranteed to match). |
@@ -410,14 +412,14 @@ Duplicate user prompts (Windows writes them twice) do not matter for state becau
    - pending permission request → `NeedsAttention / Confirmed`, reason by `tool_name`: `AskUserQuestion` → "Waiting for your answer", `ExitPlanMode` → "Plan needs approval", anything else → "Permission requested". Evidence key = request `uuid`.
    - pending `AskUserQuestion`/`ExitPlanMode` `tool_use` without a permission request (older app versions) → `NeedsAttention / Inferred`.
    - `Turn == Running` → `Working / Confirmed` (stale/unknown rules as in the table).
-   - `Turn == Completed` → `Complete / Confirmed`; `Failed` → `Failed / Confirmed`.
+   - `Turn == Completed` and `EndedWithQuestion` and within `QuestionAttentionExpiry` → `NeedsAttention / Inferred`, reason "Asked you a question" (D15); otherwise `Complete / Confirmed`. `Failed` → `Failed / Confirmed`.
 3. **External evidence** (`IClaudeAttentionEvidenceSource`, only if implemented) — matched to a task by `TaskIdHint`, else by exact title match, else to the single most recently active Working Claude task; otherwise ignored. → `NeedsAttention / Inferred`, reason "Claude sent a notification".
 4. **Recency fallback** (no readable audit) — `lastActivityAt` or metadata write time within `ClaudeRecentActivityWindow` → `Working / Inferred`, `StatusDetail = "Active recently"`; older → not shown unless it was shown before, in which case `Unknown / Stale` for `UnknownVisibleFor`.
 
 **Attention clearing** (brief §16), implemented in `ClaudeStateResolver` and `AgentStateService`:
 
 1. A matching `system/permission_response`, or any audit record showing resumed work after the trigger (`tool_result`, new `assistant` record, `system/status`), clears it → `Working`.
-2. A `result` record clears it → `Complete`/`Failed`.
+2. A `result` record clears it → `Complete`/`Failed`. A question flag (D15) is cleared by the next turn starting (Codex `task_started`, Cowork `system/init` or a new user record), by Dismiss, or after `QuestionAttentionExpiry`, when the task shows as `Complete`.
 3. Steve can dismiss a Claude alert from the pane. `DismissalStore` records `(taskId, evidenceKey)`; the same evidence never re-raises, a new trigger does. Dismissals are kept in memory and in the small state file for 24 h.
 4. Unresolved alerts expire: Inferred after `ClaudeInferredAttentionExpiry`, Confirmed after `ClaudeConfirmedAttentionExpiry`, to `Unknown / Stale` with `StatusDetail = "No recent activity"`. Never to `Complete`.
 
@@ -496,7 +498,8 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 
 **P2.2 Codex rollout parser ⚠️**
 - `Codex/CodexSessionState.cs` (mutable, internal), `Codex/CodexRolloutParser.cs` (`static void Apply(CodexSessionState state, string line, DateTimeOffset fallbackTime, FormatDriftCounter drift)`), `Codex/CodexTaskMapper.cs` (`static AgentTask Map(CodexSessionState state, DateTimeOffset now, TaskTimings timings)`), rules in Section 5.1.
-- Fixtures (`Fixtures/codex/`): `turn-running.jsonl`, `turn-complete.jsonl`, `turn-aborted.jsonl`, `pending-escalated-approval.jsonl`, `pending-user-input.jsonl`, `approval-resolved.jsonl`, `approval-policy-never.jsonl`, `malformed-and-truncated.jsonl`, `subagent-child.jsonl`, `provisional-paginated-turn.jsonl`.
+- Fixtures (`Fixtures/codex/`): `turn-running.jsonl`, `turn-complete.jsonl`, `turn-aborted.jsonl`, `pending-escalated-approval.jsonl`, `pending-user-input.jsonl`, `approval-resolved.jsonl`, `approval-policy-never.jsonl`, `malformed-and-truncated.jsonl`, `subagent-child.jsonl`, `provisional-paginated-turn.jsonl`, `turn-complete-with-question.jsonl`, `turn-complete-with-error.jsonl`.
+- `Common/QuestionDetector.cs` (D15): `static bool EndsWithQuestion(string? text)` — trims trailing whitespace and closing Markdown/quote characters (`*`, `_`, `` ` ``, `)`, `"`, `'`, `”`, `’`) from the last non-empty line and returns true if it ends with `?` (also the full-width `？`). Tests: plain question; question followed by closing bold/quote/parenthesis; question in an earlier paragraph only → false; empty/null → false; question mark inside a code block's last line is still true (accepted limitation).
 - Tests: one test per fixture asserting `(Status, Confidence, AttentionReason)`; debounce (pending 2 s → Working, 4 s → NeedsAttention); staleness thresholds; unknown record types increment drift counter and do not throw; applying the same lines twice (duplicate events) yields the same state.
 - `Contract/CodexFormatContractTests.cs`: loads every fixture captured from real (redacted) recon samples and asserts that each still parses to the expected state. When Codex changes format, this suite is where it shows.
 
@@ -522,6 +525,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 **P3.2 Audit parser ⚠️ A-C3…A-C6**
 - `Claude/CoworkAuditState.cs`, `Claude/CoworkAuditParser.cs` per Section 5.2.
 - Fixtures: `turn-running.jsonl`, `turn-complete.jsonl`, `turn-error.jsonl`, `ask-user-question-pending.jsonl`, `ask-user-question-answered.jsonl`, `duplicate-user-prompts.jsonl`, `malformed.jsonl`.
+- Fixtures also include `turn-complete-with-question.jsonl` (D15).
 - Tests: one per fixture; plus `Contract/CoworkFormatContractTests.cs` for recon-derived fixtures.
 
 **P3.3 `ClaudeCoworkTaskProvider`**
@@ -606,6 +610,7 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-X4 | `request_user_input` is recorded as a `function_call` | Codex attention | Attention missed; document | Unverified |
 | A-X5 | `session_index.jsonl` holds user-visible thread names | Codex titles | First-message fallback | Confirmed |
 | A-X6 | Sub-agent sessions are identifiable from `session_meta.source` and name their parent | D12 | Count separately | Unverified |
+| A-X8 | `task_complete` carries `last_agent_message` and, on failure, an `error` object | D15, Codex Failed state | Question flag and Failed state not shown | Confirmed |
 | A-X7 | Rollouts compress only after 7 days | Discovery | Tail reader would skip `.zst`; acceptable | Not observed |
 | A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override | Confirmed (MSIX root only) |
 | A-C2 | Metadata `local_<id>.json` contains `title`, `lastActivityAt`, `isArchived`, `error` | Titles, recency | Titles "Claude task"; recency from file time | Confirmed (no `error` seen) |
@@ -614,6 +619,7 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-C5 | `AskUserQuestion` appears as a pending `tool_use` until answered | Claude attention | Attention needs notifications (S5) | Confirmed |
 | A-C6 | Permission prompts leave a detectable trace in `audit.jsonl` | Claude attention | Missed unless S5 is adopted | Confirmed |
 | A-C7 | Claude toasts carry an AUMID found in the registry and a body containing the task title | S5 matching | Match to most recent task | Not needed |
+| A-C9 | `result` records carry the final message text in `result` | D15 | Question flag not shown for Claude | Confirmed |
 | A-C8 | Claude Desktop's window belongs to a process named `Claude` | Focus on click | Launch via AUMID | Confirmed (`claude`) |
 
 ---
@@ -623,7 +629,8 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P4.6, updated with recon results:
 
 - Codex approval waits are inferred from pending tool calls, because Codex does not record approval requests on disk. Approvals for file edits outside the workspace (`apply_patch`) may not be detected.
-- Codex errors are not persisted, so a crashed turn appears as Working, then Stale, then Unknown, not Failed.
+- Codex records a failed turn as `task_complete` with an `error` object, which maps to `Failed`. A Codex process that crashes mid-turn writes nothing, so that turn appears as Working, then Stale, then Unknown.
+- "Asked you a question" (D15) is a heuristic on the final character of the last message. It misses questions that are followed by further text and flags rhetorical questions. The flag is marked Inferred, can be dismissed, and expires after 4 hours.
 - Cloud Codex tasks started on chatgpt.com are not visible; only local desktop/CLI sessions are.
 - Claude Cowork state is inferred from undocumented local files. A Claude update may change them; the contract tests and the diagnostics drift counters are designed to make this obvious.
 - Claude attention relies on undocumented `system/permission_request` records in `audit.jsonl`. If a Claude update removes them, alerts fall back to pending `AskUserQuestion` tool calls (inferred) and the notification-listener seam.

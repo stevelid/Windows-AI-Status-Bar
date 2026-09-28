@@ -81,6 +81,6 @@ Additional Cowork observations:
 
    During the five-minute countdown, start a short Cowork task and let it finish (a permission prompt as well, if one comes up naturally). The script lists every file under Claude's folders that changed during that window, with names redacted and only record types shown. Review the Desktop report and commit or paste it.
 
-## Open design question
+## Design decision (formerly open)
 
-Because both apps ask questions in plain text at the end of a turn, a strictly "structured prompt" definition of *needs you* will miss most real cases. One option is to treat a completed turn whose final assistant message ends with a question mark as `NeedsAttention / Inferred` ("Asked you a question"). This would read the last message locally to test its final character and would never store or log it. It needs Steve's agreement because it widens what the app reads, and because the heuristic will sometimes be wrong (rhetorical questions, or questions in the middle of a summary).
+Steve decided on 2026-09-28 that a completed turn whose final message ends with a question should show as "needs you". This is plan design change D15. Both terminal records carry the final message: Codex `event_msg/task_complete.last_agent_message` and Cowork `result.result`. The same Codex record can carry `error: {message, codex_error_info}` for a failed turn.
