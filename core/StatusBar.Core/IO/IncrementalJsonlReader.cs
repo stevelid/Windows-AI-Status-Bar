@@ -28,6 +28,44 @@ internal sealed class IncrementalJsonlReader
 
     internal long Offset { get; private set; }
 
+    internal long LastReadStartOffset { get; private set; }
+
+    internal void StartAt(long offset)
+    {
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(
+                _path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                _bufferSize,
+                FileOptions.SequentialScan);
+        }
+        catch (FileNotFoundException)
+        {
+            OnFileMissing();
+            return;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            OnFileMissing();
+            return;
+        }
+
+        using (stream)
+        {
+            _fileId = _fileIdProvider(_path);
+            _hasFileId = true;
+            Offset = offset <= stream.Length ? offset : 0;
+            LastReadStartOffset = Offset;
+            _pendingPartialLine = [];
+        }
+    }
+
     internal JsonlReadResult ReadNewLines()
     {
         FileStream stream;
@@ -64,6 +102,7 @@ internal sealed class IncrementalJsonlReader
             _fileId = fileId;
             _hasFileId = true;
             stream.Position = Offset;
+            LastReadStartOffset = Offset;
 
             var bytesToRead = length - Offset;
             if (bytesToRead <= 0)
@@ -98,6 +137,7 @@ internal sealed class IncrementalJsonlReader
         _hasFileId = false;
         _fileId = default;
         Offset = 0;
+        LastReadStartOffset = 0;
         _pendingPartialLine = [];
         return new JsonlReadResult([], reset, Offset);
     }
