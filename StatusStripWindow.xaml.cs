@@ -110,6 +110,7 @@ public partial class StatusStripWindow : Window
         WorkingText.Text = $"● {_tasks.WorkingCount}";
         WorkingText.Foreground = ThemeManager.Brush(ThemeManager.LabelText);
         WorkingText.ToolTip = L10n.F("strip_working_tooltip", _tasks.WorkingCount);
+        RenderDone();
 
         if (_tasks.AttentionCount > 0)
         {
@@ -133,7 +134,36 @@ public partial class StatusStripWindow : Window
         }
 
         if (_transientMessage is null)
-            ToolTip = $"{CodexText.ToolTip}\n{ClaudeText.ToolTip}\n{WorkingText.ToolTip}";
+        {
+            var tip = $"{CodexText.ToolTip}\n{ClaudeText.ToolTip}\n{WorkingText.ToolTip}";
+            if (DoneText.Visibility == Visibility.Visible) tip += $"\n{DoneText.ToolTip}";
+            ToolTip = tip;
+        }
+    }
+
+    // Recently finished turns: "✓ 2", plus "✕ 1" when a turn failed. The count falls as tasks
+    // leave the "recently completed" window (Settings), so it needs no separate dismissal.
+    void RenderDone()
+    {
+        var done = _tasks.DoneCount;
+        var failed = _tasks.FailedCount;
+        if (done == 0 && failed == 0)
+        {
+            DoneText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var parts = new List<string>();
+        if (done > 0) parts.Add($"✓ {done}");
+        if (failed > 0) parts.Add($"✕ {failed}");
+        DoneText.Text = string.Join("  ", parts);
+        DoneText.Foreground = ThemeManager.Brush(failed > 0
+            ? (ThemeManager.IsLight ? Color.FromRgb(0xA3, 0x2D, 0x2D) : Color.FromRgb(0xF2, 0x8B, 0x82))
+            : (ThemeManager.IsLight ? Color.FromRgb(0x1E, 0x7B, 0x3A) : Color.FromRgb(0x8F, 0xD9, 0x9E)));
+        DoneText.ToolTip = failed > 0
+            ? L10n.F("strip_done_failed_tooltip", done, failed, _settings.RecentlyCompletedMinutes)
+            : L10n.F("strip_done_tooltip", done, _settings.RecentlyCompletedMinutes);
+        DoneText.Visibility = Visibility.Visible;
     }
 
     void RenderProvider(UsageSource source, TextBlock target)

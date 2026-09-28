@@ -164,10 +164,12 @@ internal sealed class CodexSessionReader : IDisposable
     }
 
     // First 8 characters of the thread id (or file uuid): enough to correlate lines, not content.
+    // Last eight characters: thread ids are UUIDv7, so the leading characters are a timestamp
+    // shared by sessions started close together, while the tail is random. Matches TaskChangeLog.
     internal static string ShortId(CodexSessionState state)
     {
         var key = state.ThreadId ?? state.FileKey ?? "unknown";
-        return key.Length > 8 ? key[..8] : key;
+        return key.Length > 8 ? key[^8..] : key;
     }
 
     // Turn state, question flag and pending-call count only.

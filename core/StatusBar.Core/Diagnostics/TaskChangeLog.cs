@@ -29,10 +29,15 @@ public static class TaskChangeLog
         foreach (var task in previous.Tasks.Where(task => !after.ContainsKey(task.Id)))
             lines.Add($"Task {ShortId(task.Id)} removed (was {task.Status})");
 
-        if (previous.WorkingCount != next.WorkingCount || previous.AttentionCount != next.AttentionCount)
+        if (previous.WorkingCount != next.WorkingCount ||
+            previous.AttentionCount != next.AttentionCount ||
+            previous.DoneCount != next.DoneCount ||
+            previous.FailedCount != next.FailedCount)
         {
             lines.Add($"Counts: working {previous.WorkingCount} -> {next.WorkingCount}, " +
-                      $"attention {previous.AttentionCount} -> {next.AttentionCount}");
+                      $"attention {previous.AttentionCount} -> {next.AttentionCount}, " +
+                      $"done {previous.DoneCount} -> {next.DoneCount}, " +
+                      $"failed {previous.FailedCount} -> {next.FailedCount}");
         }
 
         foreach (var (provider, health) in next.TaskProviderHealth)
@@ -54,12 +59,14 @@ public static class TaskChangeLog
         return text;
     }
 
-    // "codex:0f8fad5b-d9cb-..." -> "codex:0f8fad5b"
+    // "codex:...-70867728950e" -> "codex:7728950e". The last eight characters are used because
+    // Codex thread ids are UUIDv7, whose leading characters are a timestamp shared by sessions
+    // started close together; the tail is random.
     internal static string ShortId(string id)
     {
         var colon = id.IndexOf(':');
         var prefix = colon >= 0 ? id[..(colon + 1)] : "";
         var key = colon >= 0 ? id[(colon + 1)..] : id;
-        return prefix + (key.Length > 8 ? key[..8] : key);
+        return prefix + (key.Length > 8 ? key[^8..] : key);
     }
 }

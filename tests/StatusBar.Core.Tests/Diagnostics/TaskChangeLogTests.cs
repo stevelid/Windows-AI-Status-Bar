@@ -39,10 +39,36 @@ public class TaskChangeLogTests
 
         var lines = TaskChangeLog.Describe(previous, next);
 
-        Assert.Contains("Task codex:0f8fad5b Working/Confirmed -> NeedsAttention/Confirmed (Asked you a question)", lines);
-        Assert.Contains("Task codex:11111111 added: Working/Confirmed", lines);
-        Assert.Contains("Task codex:7c9e6679 removed (was Complete)", lines);
-        Assert.Contains("Counts: working 1 -> 1, attention 0 -> 1", lines);
+        Assert.Contains("Task codex:7728950e Working/Confirmed -> NeedsAttention/Confirmed (Asked you a question)", lines);
+        Assert.Contains("Task codex:55555555 added: Working/Confirmed", lines);
+        Assert.Contains("Task codex:c1f90ae7 removed (was Complete)", lines);
+        Assert.Contains("Counts: working 1 -> 1, attention 0 -> 1, done 1 -> 0, failed 0 -> 0", lines);
+    }
+
+    [Fact]
+    public void Short_ids_use_the_random_tail_so_uuidv7_sessions_stay_distinct()
+    {
+        // UUIDv7 ids created a few seconds apart share their leading timestamp characters.
+        var previous = StatusBarState.Empty;
+        var next = State(
+            Task("codex:01a0dd2c-1111-7000-8000-00000000aaaa", AgentTaskStatus.Working),
+            Task("codex:01a0dd2c-2222-7000-8000-00000000bbbb", AgentTaskStatus.Working));
+
+        var lines = TaskChangeLog.Describe(previous, next);
+
+        Assert.Contains("Task codex:0000aaaa added: Working/Confirmed", lines);
+        Assert.Contains("Task codex:0000bbbb added: Working/Confirmed", lines);
+    }
+
+    [Fact]
+    public void Finishing_a_task_is_reported_in_the_done_count()
+    {
+        var id = "codex:0f8fad5b-d9cb-469f-a165-70867728950e";
+        var lines = TaskChangeLog.Describe(
+            State(Task(id, AgentTaskStatus.Working)),
+            State(Task(id, AgentTaskStatus.Complete)));
+
+        Assert.Contains("Counts: working 1 -> 0, attention 0 -> 0, done 0 -> 1, failed 0 -> 0", lines);
     }
 
     [Fact]
