@@ -38,6 +38,20 @@ public partial class App : System.Windows.Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if (ClaudeHookSink.IsInvocation(e.Args))
+        {
+            try
+            {
+                await ClaudeHookSink.HandleAsync(Console.OpenStandardInput());
+            }
+            catch
+            {
+                // Hook mode always exits successfully and never surfaces errors to Claude Code.
+            }
+            Shutdown(0);
+            return;
+        }
+
         base.OnStartup(e);
         AppPaths.Initialize();
 

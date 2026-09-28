@@ -44,7 +44,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 ## Phase 3 — Claude Code tasks (D16)
 
 - [x] P3.1 Claude Code transcript parser ⚠️
-- [ ] P3.2 Hook event sink (`--claude-hook`)
+- [x] P3.2 Hook event sink (`--claude-hook`)
 - [ ] P3.3 Opt-in hook installer
 - [ ] P3.4 ClaudeCodeTaskProvider
 - [ ] P3.5 Dismiss control
@@ -110,3 +110,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P2.5 — Registered the Codex task provider outside demo mode, using the settings override, `CODEX_HOME`, or the user-profile default. Copy diagnostics now include collector health and content-free counts for tracked sessions, watched files, event age, parse errors, sanitized drift signatures, and watcher overflow; overflow also writes a content-free log entry.
 - 2026-09-28 — Phase 2 accepted by Steve. His diagnostics showed 749 format-drift records, all ordinary Codex records (`response_item/reasoning` 649, agent/user messages, compaction, sub-agent metadata, tool search). The parser now treats Codex's persisted record types as activity, so the drift counter again flags only genuinely new formats.
 - 2026-09-28 — P3.1 — Added Claude Code path resolution, an in-memory transcript state/parser and task mapper, plus synthetic provisional fixtures. A-K2/A-K3 remain unverified; nested message fields, title field names and the interruption marker are isolated behind assumption comments. Only sanitized short title candidates and pending tool-use IDs are retained.
+- 2026-09-28 — P3.2 — Added the `--claude-hook` early-startup sink. It accepts only the four configured hook events, copies only the event/session ID/notification type plus an ingestion timestamp, caps stdin at 1 MB, and rotates the app-owned file to the last 200 lines above 256 KB. All hook errors remain silent with exit code 0.
