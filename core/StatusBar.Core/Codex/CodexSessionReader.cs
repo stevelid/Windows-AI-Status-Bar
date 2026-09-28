@@ -229,6 +229,7 @@ internal sealed class CodexSessionReader : IDisposable
                 Confidence = child.Confidence,
                 AttentionReason = child.AttentionReason,
                 StatusDetail = child.StatusDetail,
+                EvidenceKey = child.EvidenceKey,
             };
         }
 
@@ -239,6 +240,7 @@ internal sealed class CodexSessionReader : IDisposable
                 Status = AgentTaskStatus.Working,
                 Confidence = child.Confidence,
                 AttentionReason = null,
+                EvidenceKey = null,
             };
         }
 

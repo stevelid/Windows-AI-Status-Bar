@@ -105,14 +105,18 @@ public sealed class AgentStateServiceTests
     }
 
     [Fact]
-    public async Task Attention_events_skip_initial_state_and_dismissed_tasks_until_cleared()
+    public async Task Dismissed_evidence_stays_hidden_until_a_new_question_arrives()
     {
         var time = new FakeTimeProvider(Now);
         var provider = new TestProvider(AgentProvider.Claude);
         await using var service = new AgentStateService([provider], time, StateServiceOptions.Default);
         var attentionEvents = new List<string>();
         service.EnteredNeedsAttention += task => attentionEvents.Add(task.Id);
-        var attention = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.NeedsAttention, Now);
+        var attention = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.NeedsAttention, Now) with
+        {
+            Confidence = StateConfidence.Inferred,
+            EvidenceKey = "question:one",
+        };
 
         provider.Publish(TaskSnapshot(AgentProvider.Claude, [attention]));
         Assert.Empty(attentionEvents);
@@ -128,8 +132,33 @@ public sealed class AgentStateServiceTests
         provider.Publish(TaskSnapshot(AgentProvider.Claude, []));
         provider.Publish(TaskSnapshot(AgentProvider.Claude, [attention with { LastActivity = Now.AddSeconds(3) }]));
 
+        Assert.Empty(service.Current.Tasks);
+        Assert.Equal(new[] { "claude:one" }, attentionEvents);
+
+        provider.Publish(TaskSnapshot(AgentProvider.Claude,
+            [attention with { EvidenceKey = "question:two", LastActivity = Now.AddSeconds(4) }]));
+
         Assert.Single(service.Current.Tasks);
         Assert.Equal(new[] { "claude:one", "claude:one" }, attentionEvents);
+    }
+
+    [Fact]
+    public async Task Unknown_rows_can_be_dismissed_but_confirmed_attention_cannot()
+    {
+        var time = new FakeTimeProvider(Now);
+        var provider = new TestProvider(AgentProvider.Claude);
+        await using var service = new AgentStateService([provider], time, StateServiceOptions.Default);
+        var confirmedAttention = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.NeedsAttention, Now);
+
+        provider.Publish(TaskSnapshot(AgentProvider.Claude, [confirmedAttention]));
+        service.Dismiss("claude:one");
+        Assert.Single(service.Current.Tasks);
+
+        var unknown = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.Unknown, Now);
+        provider.Publish(TaskSnapshot(AgentProvider.Claude, [unknown]));
+        service.Dismiss("claude:one");
+
+        Assert.Empty(service.Current.Tasks);
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 
 namespace StatusBar.Core.Tasks;
 
@@ -10,7 +11,7 @@ public sealed class AgentStateService : IAsyncDisposable
     readonly Dictionary<AgentProvider, Action<ProviderTaskSnapshot>> _providerHandlers = new();
     readonly Dictionary<AgentProvider, ProviderTaskSnapshot> _snapshots = new();
     readonly HashSet<AgentProvider> _receivedFirstUpdate = new();
-    readonly HashSet<string> _dismissedTaskIds = new(StringComparer.Ordinal);
+    readonly DismissalStore _dismissals;
     readonly TimeProvider _time;
     readonly StateServiceOptions _options;
     readonly ITimer _expiryTimer;
@@ -34,7 +35,8 @@ public sealed class AgentStateService : IAsyncDisposable
     public AgentStateService(
         IEnumerable<IAgentTaskProvider> providers,
         TimeProvider time,
-        StateServiceOptions options)
+        StateServiceOptions options,
+        DismissalStore? dismissalStore = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(time);
@@ -52,6 +54,7 @@ public sealed class AgentStateService : IAsyncDisposable
 
         _time = time;
         _options = options;
+        _dismissals = dismissalStore ?? new DismissalStore(time);
         _expiryTimer = time.CreateTimer(
             OnExpiryTimer,
             null,
@@ -134,15 +137,16 @@ public sealed class AgentStateService : IAsyncDisposable
         }
     }
 
-    /// <summary>Removes a task from the visible list until its provider clears that task.</summary>
+    /// <summary>Hides the current dismissible evidence for a task for the configured dismissal lifetime.</summary>
     public void Dismiss(string taskId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
         StatusBarState? changed;
         lock (_gate)
         {
-            if (_disposed || !_current.Tasks.Any(task => task.Id == taskId)) return;
-            _dismissedTaskIds.Add(taskId);
+            var task = _current.Tasks.FirstOrDefault(candidate => candidate.Id == taskId);
+            if (_disposed || task is null || !CanDismiss(task)) return;
+            _dismissals.Dismiss(task.Id, EvidenceKeyFor(task));
             changed = RebuildIfChanged(_time.GetUtcNow());
         }
 
@@ -195,7 +199,6 @@ public sealed class AgentStateService : IAsyncDisposable
                 _snapshots[expectedProvider] = UnavailableSnapshot(expectedProvider, "InvalidProviderSnapshot");
             }
             var isInitialUpdate = _receivedFirstUpdate.Add(expectedProvider);
-            RemoveClearedDismissals();
             changed = RebuildIfChanged(_time.GetUtcNow());
             entered = isInitialUpdate || changed is null
                 ? Array.Empty<AgentTask>()
@@ -253,7 +256,7 @@ public sealed class AgentStateService : IAsyncDisposable
     {
         var tasks = _snapshots.Values
             .SelectMany(snapshot => snapshot.Tasks)
-            .Where(task => !_dismissedTaskIds.Contains(task.Id) && IsVisible(task, now))
+            .Where(task => (!CanDismiss(task) || !_dismissals.Contains(task.Id, EvidenceKeyFor(task))) && IsVisible(task, now))
             .GroupBy(task => task.Id, StringComparer.Ordinal)
             .Select(group => group
                 .OrderByDescending(task => task.LastActivity)
@@ -307,15 +310,14 @@ public sealed class AgentStateService : IAsyncDisposable
         _expiryTimer.Change(due, Timeout.InfiniteTimeSpan);
     }
 
-    void RemoveClearedDismissals()
-    {
-        var activeIds = _snapshots.Values
-            .SelectMany(snapshot => snapshot.Tasks)
-            .Where(task => task.Status is AgentTaskStatus.NeedsAttention or AgentTaskStatus.Unknown)
-            .Select(task => task.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        _dismissedTaskIds.RemoveWhere(taskId => !activeIds.Contains(taskId));
-    }
+    static bool CanDismiss(AgentTask task) =>
+        task.Status == AgentTaskStatus.Unknown ||
+        task.Status == AgentTaskStatus.NeedsAttention && task.Confidence != StateConfidence.Confirmed;
+
+    static string EvidenceKeyFor(AgentTask task) =>
+        !string.IsNullOrWhiteSpace(task.EvidenceKey)
+            ? task.EvidenceKey
+            : task.Status + ":" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
 
     static int TaskOrder(AgentTask task) => task.Status switch
     {

@@ -29,6 +29,9 @@ public partial class DetailsPaneWindow : Window
     StatusBarState _tasks = StatusBarState.Empty;
     bool _closeRequested;
 
+    /// <summary>Raised when the user dismisses an inferred attention or unknown task row.</summary>
+    public event Action<string>? DismissTaskRequested;
+
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
     public DetailsPaneWindow(Settings settings)
     {
@@ -280,6 +283,7 @@ public partial class DetailsPaneWindow : Window
             if (!_taskRows.TryGetValue(task.Id, out var row))
             {
                 row = new TaskRowView();
+                row.DismissRequested += taskId => DismissTaskRequested?.Invoke(taskId);
                 _taskRows.Add(task.Id, row);
             }
             row.Update(task);

@@ -92,6 +92,7 @@ public class CodexRolloutParserTests
 
         Assert.Equal(AgentTaskStatus.Working, atTwoSeconds.Status);
         Assert.Equal(AgentTaskStatus.NeedsAttention, atFourSeconds.Status);
+        Assert.Equal("pending-call:call-input", atFourSeconds.EvidenceKey);
     }
 
     [Fact]

@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:00Z","message":{"role":"user","content":[{"type":"text","text":"Check the sample document"}]}}
+{"type":"assistant","timestamp":"2026-01-01T12:00:04Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"synthetic-tool","name":"Read"}],"stop_reason":"tool_use"}}

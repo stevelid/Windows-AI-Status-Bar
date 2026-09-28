@@ -43,6 +43,16 @@
             <TextBox x:Name="CodexHomeBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnCodexHomeLostFocus"/>
 
+            <TextBlock x:Name="ClaudeCodeHomeLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBox x:Name="ClaudeCodeHomeBox" Padding="6,5" Margin="0,6,0,0"
+                     LostFocus="OnClaudeCodeHomeLostFocus"/>
+
+            <CheckBox x:Name="ClaudeHooksCheckBox" Margin="0,16,0,0"
+                      Checked="OnClaudeHooksChanged" Unchecked="OnClaudeHooksChanged"/>
+            <TextBlock x:Name="ClaudeHooksHint" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"/>
+            <TextBox x:Name="ClaudeHooksPreview" IsReadOnly="True" TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto" MaxHeight="150" Padding="6,5" Margin="0,4,0,0"/>
+
             <TextBlock x:Name="CoworkRootLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
             <TextBox x:Name="CoworkRootBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnCoworkRootLostFocus"/>

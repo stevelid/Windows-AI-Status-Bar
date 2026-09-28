@@ -43,12 +43,12 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Phase 3 — Claude Code tasks (D16)
 
-- [ ] P3.1 Claude Code transcript parser ⚠️
-- [ ] P3.2 Hook event sink (`--claude-hook`)
-- [ ] P3.3 Opt-in hook installer
-- [ ] P3.4 ClaudeCodeTaskProvider
-- [ ] P3.5 Dismiss control
-- [ ] P3.6 KNOWN_LIMITATIONS.md
+- [x] P3.1 Claude Code transcript parser ⚠️
+- [x] P3.2 Hook event sink (`--claude-hook`)
+- [x] P3.3 Opt-in hook installer
+- [x] P3.4 ClaudeCodeTaskProvider
+- [x] P3.5 Dismiss control
+- [x] P3.6 KNOWN_LIMITATIONS.md
 - [ ] Phase 3 acceptance 🧑
 
 ## Phase 4 — Claude Cowork (optional; not wanted yet)
@@ -80,9 +80,12 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Waiting on Steve
 
-_(The agent lists here, in plain steps, anything that needs Steve's Windows machine.)_
-
-- Phase 2 acceptance: download the latest `status-bar-win-x64` artifact from this branch's Windows workflow and run `AIStatusBar.exe` with Demo tasks off. Start two Codex tasks and confirm both appear as Working. Trigger a task that asks for input, confirm it shows ⚠ within about 5 seconds, then answer and confirm it returns to Working. Complete a task and confirm it moves to Recently completed and disappears after the configured retention time. Quit and relaunch while another task is active and confirm its state recovers. Use Copy diagnostics and check it reports task health, sessions tracked, files watched, last event age, parse errors, drift signatures, and watcher overflows without titles, session IDs, or paths.
+1. Download the latest Windows build artifact from draft PR #4 and record the build label shown by Copy diagnostics.
+2. Run a task in both Claude Code’s desktop Code tab and a terminal. Check that each appears with a useful title, updates while it runs, and moves to Recently completed when its turn ends.
+3. Have Claude finish a turn with a question and check for the inferred “Asked you a question” alert.
+4. In Settings, enable Claude Code hooks. Trigger a permission prompt, check for “Permission requested,” answer it, and check that the alert clears. Disable hooks and confirm existing Claude settings hooks remain intact.
+5. Hover an inferred alert and dismiss it. Restart the app and check that the same evidence stays hidden; create a new question and check that it appears. Confirmed hook alerts should not offer Dismiss. If practical, leave a session without new records until it becomes Unknown and check dismissal there too.
+6. Report pass/fail for each step and the build label. For failures, include which environment (desktop or terminal) failed and whether hooks were enabled.
 
 ## Decisions and deviations
 
@@ -90,7 +93,7 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 
 - 2026-09-28 — P0.4 (partial) — Recon confirmed Cowork `system/permission_request`/`permission_response` records, so Claude attention is Confirmed from `audit.jsonl` and the notification listener is dropped (D4, D5, §5.2). Codex runs with `approval_policy: never` and records shell calls as `custom_tool_call` `exec`, so Codex attention is limited to input requests (D3, §5.1). Codex is its own MSIX app; activation by AUMID (P5.1). Cowork metadata is ~200 KB and its write time is unreliable; recency comes from `lastActivityAt` and the audit log (P3.1).
 - 2026-09-28 — P1.4 — Propagated the monitor cancellation token through Claude usage and token HTTP requests so disposal can stop in-flight fetches before shutting down; the app and adapters otherwise follow the planned provider split.
-- 2026-09-28 — P1.5 — Added `--demo` and `Settings.DemoTasks` startup wiring; task state remains in Core until the pane is introduced in P1.7. Dismissal is currently in memory by task ID; evidence-key persistence remains in P4.2.
+- 2026-09-28 — P1.5 — Added `--demo` and `Settings.DemoTasks` startup wiring; task state remains in Core until the pane is introduced in P1.7. Dismissal began in memory by task ID and was replaced with evidence-key persistence in P3.5.
 - 2026-09-28 — P1.6 — Added a Core-only geometry model, a PerMonitorV2 manifest and WPF dock controller, then replaced the floating card with the compact quota/task strip. The app manifest uses the modern `dpiAwareness` element; omitting the legacy `dpiAware` element avoids the .NET 10 WinForms DPI analyzer warning while keeping the WPF host PerMonitorV2-aware.
 - 2026-09-28 — P1.7 — Added the details pane with all quota windows and in-memory task rows grouped by state; rows update in place, countdowns refresh only while visible, and `PaneAutoCollapseSeconds` defaults to 0.
 - 2026-09-28 — P1.7 (review fix) — Clicking the strip to close the pane would reopen it: the strip click deactivates (closes) the pane on mouse-down, then the toggle fires on mouse-up. `App.ToggleDetailsPane` now ignores a toggle within 400 ms of the pane closing. Needs Steve's check on Windows: with the pane open, click the strip once; the pane should close and stay closed.
@@ -109,8 +112,15 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — Phase 1 accepted by Steve on build `c3e03d0` after the pane and start-up fixes.
 - 2026-09-28 — P2.4 — Added Codex path resolution, dated/recent rollout discovery, head-and-tail recovery with incremental offsets, a debounced JSONL watcher with overflow recovery, and periodic provider snapshots with independent health. Provider tests cover two-date discovery, appends, restart recovery, disabled-watcher reconciliation, missing-directory recovery, compressed-file exclusion and sub-agent attention folding. No private data is persisted or logged.
 - 2026-09-28 — P2.4 CI fix — `core-linux` failed (Windows passed): `IncrementalJsonlReader` used `File.GetCreationTimeUtc` as the file identity, but on Unix .NET reports a time that changes on every write, so each append looked like a replaced file and reading restarted at 0. The default identity now uses creation time on Windows only; elsewhere only truncation is detected. Tests that need replacement detection inject `fileIdProvider`.
-- 2026-09-28 — P2.5 — Registered the Codex task provider outside demo mode, using the settings override, `CODEX_HOME`, or the user-profile default. Copy diagnostics now include collector health and content-free counts for tracked sessions, watched files, event age, parse errors, sanitized drift signatures, and watcher overflow; overflow also writes a content-free log entry. Phase 2 now needs Steve's Windows acceptance run above.
+- 2026-09-28 — P2.5 — Registered the Codex task provider outside demo mode, using the settings override, `CODEX_HOME`, or the user-profile default. Copy diagnostics now include collector health and content-free counts for tracked sessions, watched files, event age, parse errors, sanitized drift signatures, and watcher overflow; overflow also writes a content-free log entry.
 - 2026-09-28 — Phase 2 accepted by Steve. His diagnostics showed 749 format-drift records, all ordinary Codex records (`response_item/reasoning` 649, agent/user messages, compaction, sub-agent metadata, tool search). The parser now treats Codex's persisted record types as activity, so the drift counter again flags only genuinely new formats.
+- 2026-09-28 — P3.1 — Added Claude Code path resolution, an in-memory transcript state/parser and task mapper, plus synthetic provisional fixtures. A-K2/A-K3 remain unverified; nested message fields, title field names and the interruption marker are isolated behind assumption comments. Only sanitized short title candidates and pending tool-use IDs are retained.
+- 2026-09-28 — P3.2 — Added the `--claude-hook` early-startup sink. It accepts only the four configured hook events, copies only the event/session ID/notification type plus an ingestion timestamp, caps stdin at 1 MB, and rotates the app-owned file to the last 200 lines above 256 KB. All hook errors remain silent with exit code 0.
+- 2026-09-28 — P3.3 — Added the opt-in hook setting and command preview, a JSON merger that preserves unrelated settings/hooks, a one-time settings backup and atomic replacement. Enabling hooks repairs partial installs; startup refreshes the command when the executable path changes. Malformed settings are refused without overwriting the file.
+- 2026-09-28 — P3.4 — Added recent transcript discovery, tail recovery, optional hook evidence, debounced file watching and periodic reconciliation. Registered Claude Code beside Codex outside demo mode; provider tests cover multiple sessions, hook attention clearing, transcript-only behavior, sidechain filtering and restart recovery. Build clean; 145 Core tests pass.
+- 2026-09-28 — P3.5 — Added hover dismissal for inferred attention and unknown rows. Dismissal keys are scoped to the current evidence, expire after 24 hours, and are stored as hashes in `state.json`; unrelated state sections are preserved. Build clean; 149 Core tests pass.
+- 2026-09-28 — P3.5 privacy decision — Persist only a SHA-256 digest of `(taskId, evidenceKey)` plus its expiry so task/session IDs and evidence IDs do not appear in `state.json`.
+- 2026-09-28 — P3.6 — Added `KNOWN_LIMITATIONS.md` from §9 and the Claude Code recon findings. Phase 3 acceptance remains for Steve’s Windows test; steps are listed above.
 - 2026-09-28 — D15 revision (Steve's Phase 2 test) — Two Codex questions were pending but only one showed ⚠. `QuestionDetector` only checked the last line, so questions followed by an option list or a closing sentence were missed; it now checks the final paragraph after skipping trailing option lines. Also, a Codex session whose `session_meta` was not read got the id `codex:unknown`, so two such sessions would merge into one task; the id now falls back to the rollout file's uuid.
 - 2026-09-28 — Debug logging (Steve) — `log.txt` now records content-free task debugging: task added/changed/removed with short id, status, confidence and the app's fixed reason text (`TaskChangeLog`, Core, tested never to include titles); working/attention counts; task-provider health changes; and Codex session events (tracked with/without `session_meta`, turn/question/pending changes, file resets, read failures, sessions aged out) via `CodexTaskProvider.Trace`. The log now rolls over to `log.old.txt` at 1 MB instead of deleting itself at 512 KB. Phase 3 should add the same `Trace` event to the Claude Code provider.
 - 2026-09-28 — D17 (Steve) — The strip had no sign that a task had finished (completions were visible only in the pane). It now shows `✓ N` for recently completed tasks and `✕ N` for failed turns, counted from the task list so they clear after `RecentlyCompletedMinutes`. The log's `Counts:` line includes done and failed. Log short ids now use the last eight characters of the id: Codex thread ids are UUIDv7, whose leading characters are a timestamp, so several sessions started close together shared one short id in the log.

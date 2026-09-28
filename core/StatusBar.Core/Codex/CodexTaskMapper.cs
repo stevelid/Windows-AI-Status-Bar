@@ -1,3 +1,4 @@
+using System.Globalization;
 using StatusBar.Core.Tasks;
 
 namespace StatusBar.Core.Codex;
@@ -48,6 +49,7 @@ internal static class CodexTaskMapper
                         AttentionReason = pending.Kind == CodexPendingKind.Input
                             ? "Waiting for your input"
                             : "Waiting for approval",
+                        EvidenceKey = "pending-call:" + pending.CallId,
                     };
                 }
             }
@@ -70,6 +72,7 @@ internal static class CodexTaskMapper
                 Status = AgentTaskStatus.NeedsAttention,
                 Confidence = StateConfidence.Inferred,
                 AttentionReason = "Asked you a question",
+                EvidenceKey = "question:" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
             },
             CodexTurnStatus.Completed => task with
             {

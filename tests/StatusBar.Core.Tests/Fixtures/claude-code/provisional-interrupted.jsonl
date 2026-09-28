@@ -1,0 +1,2 @@
+{"type":"user","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:00Z","message":{"role":"user","content":[{"type":"text","text":"Summarise the sample document"}]}}
+{"type":"user","timestamp":"2026-01-01T12:00:04Z","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for synthetic fixture]"}]}}

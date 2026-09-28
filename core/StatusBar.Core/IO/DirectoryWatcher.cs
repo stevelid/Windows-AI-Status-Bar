@@ -17,20 +17,23 @@ internal sealed class DirectoryWatcher : IDisposable
         TimeProvider time,
         TimeSpan debounce,
         Action onChanged,
-        Action onOverflow)
+        Action onOverflow,
+        string filter = "*.jsonl",
+        bool includeSubdirectories = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(time);
         ArgumentNullException.ThrowIfNull(onChanged);
         ArgumentNullException.ThrowIfNull(onOverflow);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filter);
         if (debounce < TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(debounce));
 
         _debounce = debounce;
         _onChanged = onChanged;
         _onOverflow = onOverflow;
-        _watcher = new FileSystemWatcher(path, "*.jsonl")
+        _watcher = new FileSystemWatcher(path, filter)
         {
-            IncludeSubdirectories = true,
+            IncludeSubdirectories = includeSubdirectories,
             InternalBufferSize = 64 * 1024,
             NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime,
         };
