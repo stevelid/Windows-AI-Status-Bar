@@ -44,7 +44,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        Log.Write($"=== 啟動 v{typeof(App).Assembly.GetName().Version} pid={Environment.ProcessId} args=[{string.Join(' ', e.Args)}] path={Environment.ProcessPath}");
+        Log.Write($"=== 啟動 v{AppBuild.Label} pid={Environment.ProcessId} args=[{string.Join(' ', e.Args)}] path={Environment.ProcessPath}");
         if (AppPaths.ResolutionNote.Length > 0)
             Log.Write($"資料路徑備援: {AppPaths.ResolutionNote} -> {AppPaths.DataDir}");
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>

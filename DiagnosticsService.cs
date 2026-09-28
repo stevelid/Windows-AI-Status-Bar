@@ -32,6 +32,7 @@ public static class DiagnosticsService
         var report = new StringBuilder();
         report.AppendLine("AI Usage Widget diagnostics (redacted)");
         report.AppendLine($"AppVersion: {NormalizeVersion(appVersion)}");
+        report.AppendLine($"Build: {AppBuild.Label}");
         report.AppendLine($"OS: {RuntimeInformation.OSDescription}");
         report.AppendLine($"Architecture: {RuntimeInformation.OSArchitecture}");
         foreach (var item in providers.OrderBy(item => item.Provider))

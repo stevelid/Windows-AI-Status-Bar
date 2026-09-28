@@ -55,7 +55,11 @@ public static class UpdateService
     /// <summary>Returns info about a newer release, or null when already up to date.</summary>
     public static async Task<UpdateInfo?> CheckAsync()
     {
-        var json = await Http.GetStringAsync($"https://api.github.com/repos/{Owner}/{Repo}/releases/latest");
+        using var response = await Http.GetAsync($"https://api.github.com/repos/{Owner}/{Repo}/releases/latest");
+        // 404 means the repository has no published release yet; that is "no update", not an error.
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
