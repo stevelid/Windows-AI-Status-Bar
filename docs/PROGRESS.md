@@ -48,7 +48,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P3.3 Opt-in hook installer
 - [x] P3.4 ClaudeCodeTaskProvider
 - [x] P3.5 Dismiss control
-- [ ] P3.6 KNOWN_LIMITATIONS.md
+- [x] P3.6 KNOWN_LIMITATIONS.md
 - [ ] Phase 3 acceptance 🧑
 
 ## Phase 4 — Claude Cowork (optional; not wanted yet)
@@ -80,7 +80,12 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Waiting on Steve
 
-_(The agent lists here, in plain steps, anything that needs Steve's Windows machine.)_
+1. Download the latest Windows build artifact from draft PR #4 and record the build label shown by Copy diagnostics.
+2. Run a task in both Claude Code’s desktop Code tab and a terminal. Check that each appears with a useful title, updates while it runs, and moves to Recently completed when its turn ends.
+3. Have Claude finish a turn with a question and check for the inferred “Asked you a question” alert.
+4. In Settings, enable Claude Code hooks. Trigger a permission prompt, check for “Permission requested,” answer it, and check that the alert clears. Disable hooks and confirm existing Claude settings hooks remain intact.
+5. Hover an inferred alert and dismiss it. Restart the app and check that the same evidence stays hidden; create a new question and check that it appears. Confirmed hook alerts should not offer Dismiss. If practical, leave a session without new records until it becomes Unknown and check dismissal there too.
+6. Report pass/fail for each step and the build label. For failures, include which environment (desktop or terminal) failed and whether hooks were enabled.
 
 ## Decisions and deviations
 
@@ -88,7 +93,7 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 
 - 2026-09-28 — P0.4 (partial) — Recon confirmed Cowork `system/permission_request`/`permission_response` records, so Claude attention is Confirmed from `audit.jsonl` and the notification listener is dropped (D4, D5, §5.2). Codex runs with `approval_policy: never` and records shell calls as `custom_tool_call` `exec`, so Codex attention is limited to input requests (D3, §5.1). Codex is its own MSIX app; activation by AUMID (P5.1). Cowork metadata is ~200 KB and its write time is unreliable; recency comes from `lastActivityAt` and the audit log (P3.1).
 - 2026-09-28 — P1.4 — Propagated the monitor cancellation token through Claude usage and token HTTP requests so disposal can stop in-flight fetches before shutting down; the app and adapters otherwise follow the planned provider split.
-- 2026-09-28 — P1.5 — Added `--demo` and `Settings.DemoTasks` startup wiring; task state remains in Core until the pane is introduced in P1.7. Dismissal is currently in memory by task ID; evidence-key persistence remains in P4.2.
+- 2026-09-28 — P1.5 — Added `--demo` and `Settings.DemoTasks` startup wiring; task state remains in Core until the pane is introduced in P1.7. Dismissal began in memory by task ID and was replaced with evidence-key persistence in P3.5.
 - 2026-09-28 — P1.6 — Added a Core-only geometry model, a PerMonitorV2 manifest and WPF dock controller, then replaced the floating card with the compact quota/task strip. The app manifest uses the modern `dpiAwareness` element; omitting the legacy `dpiAware` element avoids the .NET 10 WinForms DPI analyzer warning while keeping the WPF host PerMonitorV2-aware.
 - 2026-09-28 — P1.7 — Added the details pane with all quota windows and in-memory task rows grouped by state; rows update in place, countdowns refresh only while visible, and `PaneAutoCollapseSeconds` defaults to 0.
 - 2026-09-28 — P1.7 (review fix) — Clicking the strip to close the pane would reopen it: the strip click deactivates (closes) the pane on mouse-down, then the toggle fires on mouse-up. `App.ToggleDetailsPane` now ignores a toggle within 400 ms of the pane closing. Needs Steve's check on Windows: with the pane open, click the strip once; the pane should close and stay closed.
@@ -115,3 +120,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P3.4 — Added recent transcript discovery, tail recovery, optional hook evidence, debounced file watching and periodic reconciliation. Registered Claude Code beside Codex outside demo mode; provider tests cover multiple sessions, hook attention clearing, transcript-only behavior, sidechain filtering and restart recovery. Build clean; 145 Core tests pass.
 - 2026-09-28 — P3.5 — Added hover dismissal for inferred attention and unknown rows. Dismissal keys are scoped to the current evidence, expire after 24 hours, and are stored as hashes in `state.json`; unrelated state sections are preserved. Build clean; 149 Core tests pass.
 - 2026-09-28 — P3.5 privacy decision — Persist only a SHA-256 digest of `(taskId, evidenceKey)` plus its expiry so task/session IDs and evidence IDs do not appear in `state.json`.
+- 2026-09-28 — P3.6 — Added `KNOWN_LIMITATIONS.md` from §9 and the Claude Code recon findings. Phase 3 acceptance remains for Steve’s Windows test; steps are listed above.
