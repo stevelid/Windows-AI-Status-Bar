@@ -42,6 +42,18 @@ public sealed class CodexTaskProviderTests
         Assert.Equal(2, provider.Current.Tasks.Count);
         Assert.All(provider.Current.Tasks, task => Assert.Equal(AgentTaskStatus.Working, task.Status));
         Assert.Equal(ProviderHealthState.Ok, provider.Current.Health.State);
+
+        var diagnostics = provider.Diagnostics;
+        Assert.Equal(2, diagnostics.SessionsTracked);
+        Assert.Equal(0, diagnostics.FilesWatched);
+        Assert.Equal(TimeSpan.Zero, diagnostics.LastEventAge);
+        Assert.Equal(0, diagnostics.ParseErrors);
+        Assert.Equal(0, diagnostics.FormatDriftCount);
+        Assert.Empty(diagnostics.FormatDriftBySignature);
+        Assert.Equal(0, diagnostics.WatcherOverflowCount);
+
+        time.Advance(TimeSpan.FromSeconds(8));
+        Assert.Equal(TimeSpan.FromSeconds(8), provider.Diagnostics.LastEventAge);
     }
 
     [Fact]

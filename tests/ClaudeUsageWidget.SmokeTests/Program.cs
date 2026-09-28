@@ -1,4 +1,6 @@
 using ClaudeUsageWidget;
+using StatusBar.Core.Codex;
+using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 
 static void Require(bool condition, string message)
@@ -153,9 +155,26 @@ var diagnosticReport = DiagnosticsService.BuildReport(
             DiagnosticsService.ClassifyError(privateError)),
         new ProviderDiagnostic(UsageSource.Codex, UsageHealth.Loading, null, "NotChecked"),
     },
-    new CodexDiagnostic("Configured", "codex.exe", "1.2.3"));
+    new CodexDiagnostic("Configured", "codex.exe", "1.2.3"),
+    new CodexTaskDiagnostics(
+        new ProviderHealth(ProviderHealthState.Ok, "Ok", DateTimeOffset.Parse("2030-01-01T00:00:00Z")),
+        SessionsTracked: 2,
+        FilesWatched: 2,
+        LastEventAge: TimeSpan.FromSeconds(7),
+        ParseErrors: 3,
+        FormatDriftCount: 2,
+        FormatDriftBySignature: new Dictionary<string, long>
+        {
+            ["event_msg/future_event"] = 2,
+            [@"C:\Users\Alice/secret"] = 1,
+        },
+        WatcherOverflowCount: 1));
 Require(!diagnosticReport.Contains("secret-token"), "Diagnostics should not include exception messages.");
 Require(!diagnosticReport.Contains(@"C:\Users\Alice"), "Diagnostics should not include full user paths.");
+Require(diagnosticReport.Contains("CodexTasks.SessionsTracked: 2"), "Diagnostics should report tracked sessions.");
+Require(diagnosticReport.Contains("CodexTasks.FilesWatched: 2"), "Diagnostics should report watched files.");
+Require(diagnosticReport.Contains("CodexTasks.LastEventAge: 7s"), "Diagnostics should report the age of recent Codex evidence.");
+Require(diagnosticReport.Contains("CodexTasks.FormatDrift.event_msg/future_event: 2"), "Diagnostics should report drift signatures by structural type names.");
 Require(!AutoStart.SafeFailureCode(privateError).Contains("secret-token"), "Auto-start failure codes should be redacted.");
 
 var primaryWorkArea = new StatusBar.Core.Docking.Rect(0, 0, 1920, 1040);

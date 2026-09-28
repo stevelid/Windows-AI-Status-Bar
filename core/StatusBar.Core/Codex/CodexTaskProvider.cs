@@ -4,7 +4,7 @@ using StatusBar.Core.Tasks;
 namespace StatusBar.Core.Codex;
 
 /// <summary>Watches recent Codex rollouts and publishes normalized task snapshots.</summary>
-internal sealed class CodexTaskProvider : IAgentTaskProvider
+public sealed class CodexTaskProvider : IAgentTaskProvider
 {
     static readonly TimeSpan ActiveRecheckInterval = TimeSpan.FromSeconds(5);
 
@@ -23,6 +23,20 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
     bool _disposed;
     bool _watcherUnavailable;
     int _watcherOverflowCount;
+    DateTimeOffset? _lastEvent;
+    CodexTaskDiagnostics _diagnostics;
+
+    /// <summary>Creates a Codex collector using the configured home, CODEX_HOME, or the user profile fallback.</summary>
+    /// <param name="homeOverride">Optional settings override for the Codex data directory.</param>
+    /// <param name="time">Clock used for reconciliation and task timing.</param>
+    /// <param name="timings">Optional task timing rules.</param>
+    public CodexTaskProvider(string? homeOverride = null, TimeProvider? time = null, TaskTimings? timings = null)
+        : this(
+            CodexPaths.Resolve(homeOverride, Environment.GetEnvironmentVariable("CODEX_HOME")),
+            time ?? TimeProvider.System,
+            timings)
+    {
+    }
 
     internal CodexTaskProvider(
         CodexPaths paths,
@@ -38,6 +52,15 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
         _watchFiles = watchFiles;
         _sessions = new CodexSessionReader(paths, time, _timings);
         _current = Snapshot([], new ProviderHealth(ProviderHealthState.Starting, "NotStarted", null));
+        _diagnostics = new CodexTaskDiagnostics(
+            _current.Health,
+            0,
+            0,
+            null,
+            0,
+            0,
+            new Dictionary<string, long>(StringComparer.Ordinal),
+            0);
     }
 
     /// <inheritdoc />
@@ -46,10 +69,29 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
     /// <inheritdoc />
     public event Action<ProviderTaskSnapshot>? Changed;
 
+    /// <summary>Raised after a filesystem watcher overflow schedules a full reconciliation.</summary>
+    public event Action? WatcherOverflowed;
+
     /// <inheritdoc />
     public ProviderTaskSnapshot Current
     {
         get { lock (_gate) return _current; }
+    }
+
+    /// <summary>Gets a redacted snapshot for the support diagnostics report.</summary>
+    public CodexTaskDiagnostics Diagnostics
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var now = _time.GetUtcNow();
+                TimeSpan? age = _lastEvent is { } lastEvent
+                    ? now >= lastEvent ? now - lastEvent : TimeSpan.Zero
+                    : null;
+                return _diagnostics with { LastEventAge = age };
+            }
+        }
     }
 
     internal int TrackedFiles => _sessions.TrackedFiles;
@@ -110,6 +152,8 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stop.Token);
         await _reconcileGate.WaitAsync(linked.Token).ConfigureAwait(false);
         ProviderTaskSnapshot next;
+        CodexTaskDiagnostics diagnostics;
+        DateTimeOffset? lastEvent;
         try
         {
             linked.Token.ThrowIfCancellationRequested();
@@ -118,8 +162,9 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
             {
                 DisposeWatcher();
                 _watcherUnavailable = false;
-                _sessions.Reconcile(forceDiscovery: false);
+                var tasks = _sessions.Reconcile(forceDiscovery: false);
                 next = Snapshot([], new ProviderHealth(ProviderHealthState.Unavailable, "SessionsDirectoryMissing", now));
+                lastEvent = MostRecentEvidence(tasks);
             }
             else
             {
@@ -129,7 +174,9 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
                     ? new ProviderHealth(ProviderHealthState.Degraded, "WatcherUnavailable", MostRecentEvidence(tasks))
                     : new ProviderHealth(ProviderHealthState.Ok, "Ok", MostRecentEvidence(tasks));
                 next = Snapshot(tasks, health);
+                lastEvent = MostRecentEvidence(tasks);
             }
+            diagnostics = BuildDiagnostics(next.Health);
         }
         catch (OperationCanceledException) when (linked.Token.IsCancellationRequested)
         {
@@ -138,52 +185,76 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
         catch (Exception)
         {
             next = Snapshot(Current.Tasks, new ProviderHealth(ProviderHealthState.Degraded, "ReconcileFailed", Current.Health.LastEvidence));
+            lastEvent = Current.Health.LastEvidence;
+            diagnostics = BuildDiagnostics(next.Health);
         }
         finally
         {
             _reconcileGate.Release();
         }
 
-        PublishIfChanged(next);
+        PublishIfChanged(next, diagnostics, lastEvent);
         ScheduleNextTimer();
     }
 
     void EnsureWatcher()
     {
-        if (!_watchFiles || _watcher is not null) return;
-        try
+        if (!_watchFiles) return;
+        lock (_gate)
         {
-            _watcher = new DirectoryWatcher(
-                _paths.SessionsDirectory,
-                _time,
-                _timings.WatcherDebounce,
-                OnWatcherChanged,
-                OnWatcherOverflow);
-            _watcherUnavailable = false;
-        }
-        catch (IOException)
-        {
-            _watcherUnavailable = true;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            _watcherUnavailable = true;
-        }
-        catch (ArgumentException)
-        {
-            _watcherUnavailable = true;
+            if (_disposed || _watcher is not null) return;
+            try
+            {
+                _watcher = new DirectoryWatcher(
+                    _paths.SessionsDirectory,
+                    _time,
+                    _timings.WatcherDebounce,
+                    OnWatcherChanged,
+                    OnWatcherOverflow);
+                _watcherUnavailable = false;
+            }
+            catch (IOException)
+            {
+                _watcherUnavailable = true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _watcherUnavailable = true;
+            }
+            catch (ArgumentException)
+            {
+                _watcherUnavailable = true;
+            }
         }
     }
 
     void DisposeWatcher()
     {
-        _watcher?.Dispose();
-        _watcher = null;
+        DirectoryWatcher? watcher;
+        lock (_gate)
+        {
+            watcher = _watcher;
+            _watcher = null;
+        }
+        watcher?.Dispose();
     }
 
     void OnWatcherChanged() => _ = ReconcileFromSignalAsync(forceDiscovery: true);
 
-    void OnWatcherOverflow() => Interlocked.Increment(ref _watcherOverflowCount);
+    void OnWatcherOverflow()
+    {
+        Interlocked.Increment(ref _watcherOverflowCount);
+        var handlers = WatcherOverflowed;
+        if (handlers is null) return;
+        ThreadPool.QueueUserWorkItem(static state =>
+        {
+            foreach (var subscriber in ((Action)state!).GetInvocationList())
+            {
+                try { ((Action)subscriber)(); }
+                catch (Exception) { }
+            }
+        }, handlers);
+    }
 
     async Task ReconcileFromSignalAsync(bool forceDiscovery)
     {
@@ -228,11 +299,27 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
         }
     }
 
-    void PublishIfChanged(ProviderTaskSnapshot next)
+    CodexTaskDiagnostics BuildDiagnostics(ProviderHealth health)
+    {
+        var trackedFiles = _sessions.TrackedFiles;
+        return new CodexTaskDiagnostics(
+            health,
+            trackedFiles,
+            _watchFiles && !_watcherUnavailable ? trackedFiles : 0,
+            null,
+            _sessions.ParseErrorCount,
+            _sessions.FormatDriftCount,
+            _sessions.FormatDriftBySignature,
+            Volatile.Read(ref _watcherOverflowCount));
+    }
+
+    void PublishIfChanged(ProviderTaskSnapshot next, CodexTaskDiagnostics diagnostics, DateTimeOffset? lastEvent)
     {
         Action<ProviderTaskSnapshot>? handlers;
         lock (_gate)
         {
+            _diagnostics = diagnostics;
+            _lastEvent = lastEvent;
             if (SnapshotEquals(_current, next)) return;
             _current = next;
             handlers = Changed;
@@ -253,8 +340,12 @@ internal sealed class CodexTaskProvider : IAgentTaskProvider
     static ProviderTaskSnapshot Snapshot(IReadOnlyList<AgentTask> tasks, ProviderHealth health) =>
         new(AgentProvider.Codex, Array.AsReadOnly(tasks.ToArray()), health);
 
-    static DateTimeOffset? MostRecentEvidence(IReadOnlyList<AgentTask> tasks) =>
-        tasks.Count == 0 ? null : tasks.Max(task => task.LastActivity);
+    static DateTimeOffset? MostRecentEvidence(IReadOnlyList<AgentTask> tasks)
+    {
+        if (tasks.Count == 0) return null;
+        var latest = tasks.Max(task => task.LastActivity);
+        return latest == DateTimeOffset.MinValue ? null : latest;
+    }
 
     static bool SnapshotEquals(ProviderTaskSnapshot left, ProviderTaskSnapshot right) =>
         left.Provider == right.Provider && left.Health == right.Health && left.Tasks.SequenceEqual(right.Tasks);

@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
+using StatusBar.Core.Codex;
 using StatusBar.Core.Usage;
 
 namespace ClaudeUsageWidget;
@@ -27,7 +28,8 @@ public static class DiagnosticsService
     public static string BuildReport(
         Version appVersion,
         IEnumerable<ProviderDiagnostic> providers,
-        CodexDiagnostic codex)
+        CodexDiagnostic codex,
+        CodexTaskDiagnostics? codexTasks = null)
     {
         var report = new StringBuilder();
         report.AppendLine("AI Usage Widget diagnostics (redacted)");
@@ -50,8 +52,60 @@ public static class DiagnosticsService
         report.AppendLine($"Codex.Source: {codex.Source}");
         report.AppendLine($"Codex.Executable: {codex.ExecutableName}");
         report.AppendLine($"Codex.Version: {codex.Version}");
+        AppendCodexTaskDiagnostics(report, codexTasks);
         report.AppendLine("Privacy: no tokens, account data, usage values, log contents, or full paths included.");
         return report.ToString();
+    }
+
+    static void AppendCodexTaskDiagnostics(StringBuilder report, CodexTaskDiagnostics? diagnostics)
+    {
+        if (diagnostics is null)
+        {
+            report.AppendLine("CodexTasks.Health: NotConfigured");
+            return;
+        }
+
+        report.AppendLine($"CodexTasks.Health: {diagnostics.Health.State}/{SanitizeStatusCode(diagnostics.Health.Code)}");
+        report.AppendLine($"CodexTasks.SessionsTracked: {Math.Max(0, diagnostics.SessionsTracked)}");
+        report.AppendLine($"CodexTasks.FilesWatched: {Math.Max(0, diagnostics.FilesWatched)}");
+        report.AppendLine($"CodexTasks.LastEventAge: {FormatAge(diagnostics.LastEventAge)}");
+        report.AppendLine($"CodexTasks.ParseErrors: {Math.Max(0, diagnostics.ParseErrors)}");
+        report.AppendLine($"CodexTasks.FormatDriftCount: {Math.Max(0, diagnostics.FormatDriftCount)}");
+        report.AppendLine($"CodexTasks.WatcherOverflowCount: {Math.Max(0, diagnostics.WatcherOverflowCount)}");
+        if (diagnostics.FormatDriftBySignature.Count == 0)
+        {
+            report.AppendLine("CodexTasks.FormatDriftBySignature: none");
+            return;
+        }
+
+        foreach (var (signature, count) in diagnostics.FormatDriftBySignature.OrderBy(item => item.Key, StringComparer.Ordinal))
+            report.AppendLine($"CodexTasks.FormatDrift.{SanitizeSignature(signature)}: {Math.Max(0, count)}");
+    }
+
+    static string SanitizeStatusCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Unknown";
+        var safe = new string(value.Where(ch => char.IsAsciiLetterOrDigit(ch) || ch is '-' or '_').ToArray());
+        return safe.Length is > 0 and <= 48 ? safe : "Unknown";
+    }
+
+    static string SanitizeSignature(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "other";
+        var components = value.Split('/');
+        if (components.Length is 0 or > 2) return "other";
+        return string.Join('/', components.Select(component =>
+            component.Length is > 0 and <= 48 && char.IsAsciiLetter(component[0]) &&
+            component.All(ch => char.IsAsciiLetterOrDigit(ch) || ch == '_')
+                ? component
+                : "other"));
+    }
+
+    static string FormatAge(TimeSpan? age)
+    {
+        if (age is null) return "Never";
+        var seconds = Math.Max(0, (long)age.Value.TotalSeconds);
+        return $"{seconds}s";
     }
 
     public static string ClassifyError(Exception exception) => exception switch

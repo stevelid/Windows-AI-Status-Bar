@@ -38,7 +38,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P2.2 Codex rollout parser ⚠️
 - [x] P2.3 Codex titles
 - [x] P2.4 CodexTaskProvider
-- [ ] P2.5 Wiring and diagnostics
+- [x] P2.5 Wiring and diagnostics
 - [ ] Phase 2 acceptance 🧑
 
 ## Phase 3 — Claude Code tasks (D16)
@@ -82,7 +82,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(The agent lists here, in plain steps, anything that needs Steve's Windows machine.)_
 
-- Phase 1 acceptance: download the latest `status-bar-win-x64` artifact from the branch's Windows workflow and launch `AIStatusBar.exe --demo`. Confirm the strip and tray tooltip show both providers' session allowances; click the strip to open the pane, check demo tasks move between sections and counts update, then click the strip again to confirm the pane stays closed. Use the tray menu to hide/show the strip, expand/collapse the pane, refresh, open Settings, inspect Sign in, Copy diagnostics, Check for updates and Quit. In Settings, change and restart-check language, theme, refresh interval, opacity, Codex/Cowork paths, notifications, recently-completed retention, pane timeout, attention label, monitor, quota thresholds and Demo tasks. Toggle Start with Windows on and off, then leave the app idle for a minute in Task Manager and check CPU use is approximately 0%.
+- Phase 2 acceptance: download the latest `status-bar-win-x64` artifact from this branch's Windows workflow and run `AIStatusBar.exe` with Demo tasks off. Start two Codex tasks and confirm both appear as Working. Trigger a task that asks for input, confirm it shows ⚠ within about 5 seconds, then answer and confirm it returns to Working. Complete a task and confirm it moves to Recently completed and disappears after the configured retention time. Quit and relaunch while another task is active and confirm its state recovers. Use Copy diagnostics and check it reports task health, sessions tracked, files watched, last event age, parse errors, drift signatures, and watcher overflows without titles, session IDs, or paths.
 
 ## Decisions and deviations
 
@@ -109,3 +109,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — Phase 1 accepted by Steve on build `c3e03d0` after the pane and start-up fixes.
 - 2026-09-28 — P2.4 — Added Codex path resolution, dated/recent rollout discovery, head-and-tail recovery with incremental offsets, a debounced JSONL watcher with overflow recovery, and periodic provider snapshots with independent health. Provider tests cover two-date discovery, appends, restart recovery, disabled-watcher reconciliation, missing-directory recovery, compressed-file exclusion and sub-agent attention folding. No private data is persisted or logged.
 - 2026-09-28 — P2.4 CI fix — `core-linux` failed (Windows passed): `IncrementalJsonlReader` used `File.GetCreationTimeUtc` as the file identity, but on Unix .NET reports a time that changes on every write, so each append looked like a replaced file and reading restarted at 0. The default identity now uses creation time on Windows only; elsewhere only truncation is detected. Tests that need replacement detection inject `fileIdProvider`.
+- 2026-09-28 — P2.5 — Registered the Codex task provider outside demo mode, using the settings override, `CODEX_HOME`, or the user-profile default. Copy diagnostics now include collector health and content-free counts for tracked sessions, watched files, event age, parse errors, sanitized drift signatures, and watcher overflow; overflow also writes a content-free log entry. Phase 2 now needs Steve's Windows acceptance run above.
