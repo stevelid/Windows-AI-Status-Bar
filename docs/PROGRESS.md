@@ -121,3 +121,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P3.5 — Added hover dismissal for inferred attention and unknown rows. Dismissal keys are scoped to the current evidence, expire after 24 hours, and are stored as hashes in `state.json`; unrelated state sections are preserved. Build clean; 149 Core tests pass.
 - 2026-09-28 — P3.5 privacy decision — Persist only a SHA-256 digest of `(taskId, evidenceKey)` plus its expiry so task/session IDs and evidence IDs do not appear in `state.json`.
 - 2026-09-28 — P3.6 — Added `KNOWN_LIMITATIONS.md` from §9 and the Claude Code recon findings. Phase 3 acceptance remains for Steve’s Windows test; steps are listed above.
+- 2026-09-28 — P0.2 refresh — Added the reviewed static recon collection at `docs/recon/ai-status-recon-20260928-171201/`; GUID-shaped connector IDs and temporary filenames were redacted. The separate Claude watcher report is not included.
