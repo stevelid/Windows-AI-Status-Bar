@@ -335,10 +335,15 @@ public partial class SettingsWindow : Window
                 StringComparison.OrdinalIgnoreCase));
             if (screen is null) continue;
             item.Content = string.Equals(deviceName, primaryName, StringComparison.OrdinalIgnoreCase)
-                ? L10n.T("settings_monitor_primary")
+                ? L10n.F(
+                    "settings_monitor_primary_display",
+                    deviceName,
+                    screen.Bounds.Width,
+                    screen.Bounds.Height)
                 : L10n.F(
                     "settings_monitor_display",
                     index + 1,
+                    deviceName,
                     screen.Bounds.Width,
                     screen.Bounds.Height);
         }

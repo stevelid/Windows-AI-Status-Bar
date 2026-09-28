@@ -67,7 +67,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P5.1 Click task to focus app
 - [x] P5.2 Attention notifications
 - [x] P5.3 Visual polish
-- [ ] P5.4 Multi-monitor and DPI
+- [x] P5.4 Multi-monitor and DPI
 - [ ] P5.5 Diagnostic bundle
 - [ ] Phase 5 acceptance 🧑
 
@@ -91,6 +91,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-28 — P5.4 — Monitor settings now show the device name and resolution for every display, and docking preserves a disconnected monitor selection for automatic fallback and restoration; 152 Core tests pass.
 - 2026-09-28 — P5.3 — Added a one-shot 400 ms attention-pill fade that respects Windows animation settings, plus an amber tray-icon attention dot; 152 Core tests pass.
 - 2026-09-28 — P5.2 — Added a restart-safe notification gate keyed by hashed task/evidence identifiers, seeded existing attention on startup, and connected gated events to tray balloons that open the details pane. The shared state file preserves dismissal entries; 152 Core tests pass.
 - 2026-09-28 — P5.1 — Task rows now focus the owning Codex or Claude desktop app through the resolved MSIX AUMID, with a process-window fallback; Claude terminal sessions focus the desktop app as documented. Build clean with apphost generation disabled for the synced workspace; 169 Core tests pass.
