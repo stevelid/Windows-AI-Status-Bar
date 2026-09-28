@@ -1,6 +1,8 @@
+using System.IO;
 using System.Windows;
 using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
+using StatusBar.Core.Claude;
 using StatusBar.Core.Codex;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
@@ -28,6 +30,8 @@ public partial class App : System.Windows.Application
     StatusBarState _taskState = StatusBarState.Empty;
     int? _agentStateRetentionMinutes;
     string? _agentStateCodexHomeOverride;
+    string? _agentStateClaudeHomeOverride;
+    bool _agentStateClaudeHooksEnabled;
     bool _agentStateDemoMode;
     bool _loginWindowOpen;
     bool _demoTasksRequested;
@@ -38,6 +42,20 @@ public partial class App : System.Windows.Application
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        if (ClaudeHookSink.IsInvocation(e.Args))
+        {
+            try
+            {
+                await ClaudeHookSink.HandleAsync(Console.OpenStandardInput());
+            }
+            catch
+            {
+                // Hook mode always exits successfully and never surfaces errors to Claude Code.
+            }
+            Shutdown(0);
+            return;
+        }
+
         base.OnStartup(e);
         AppPaths.Initialize();
 
@@ -147,6 +165,17 @@ public partial class App : System.Windows.Application
     void StartupCore()
     {
         _settings = Settings.Load();
+        if (_settings.UseClaudeCodeHooks)
+        {
+            try
+            {
+                ClaudeHookSettingsInstaller.EnsureCurrentCommand(_settings);
+            }
+            catch (Exception exception)
+            {
+                Log.Write($"Claude hook registration failed: {exception.GetType().Name}");
+            }
+        }
         string? autoStartNotice = null;
 
         L10n.Init(_settings.Language switch
@@ -523,11 +552,16 @@ public partial class App : System.Windows.Application
     {
         var demoMode = _demoTasksRequested || _settings.DemoTasks;
         var codexHomeOverride = demoMode ? null : _settings.CodexHomeOverride;
+        var claudeHomeOverride = demoMode ? null : _settings.ClaudeCodeHomeOverride;
+        var claudeHooksEnabled = !demoMode && _settings.UseClaudeCodeHooks;
 
         if (_agentStateService is not null &&
             _agentStateRetentionMinutes == _settings.RecentlyCompletedMinutes &&
             _agentStateDemoMode == demoMode &&
-            (demoMode || string.Equals(_agentStateCodexHomeOverride, codexHomeOverride, StringComparison.OrdinalIgnoreCase)))
+            (demoMode ||
+                string.Equals(_agentStateCodexHomeOverride, codexHomeOverride, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_agentStateClaudeHomeOverride, claudeHomeOverride, StringComparison.OrdinalIgnoreCase) &&
+                _agentStateClaudeHooksEnabled == claudeHooksEnabled))
         {
             return;
         }
@@ -554,18 +588,29 @@ public partial class App : System.Windows.Application
         {
             _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
             _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
-            taskProviders = [_codexTaskProvider];
+            var claudeHookPath = claudeHooksEnabled
+                ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
+                : null;
+            taskProviders =
+            [
+                _codexTaskProvider,
+                new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath),
+            ];
         }
 
+        var stateTime = TimeProvider.System;
         _agentStateService = new AgentStateService(
             taskProviders,
-            TimeProvider.System,
+            stateTime,
             new StateServiceOptions(
                 TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
-                TaskTimings.Default.UnknownVisibleFor));
+                TaskTimings.Default.UnknownVisibleFor),
+            new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
+        _agentStateClaudeHomeOverride = claudeHomeOverride;
+        _agentStateClaudeHooksEnabled = claudeHooksEnabled;
         _taskState = _agentStateService.Current;
         _agentStateService.StateChanged += OnTaskStateChanged;
         UpdateStrip();
@@ -611,6 +656,8 @@ public partial class App : System.Windows.Application
 
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 
+    void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
+
     void UpdateStrip()
     {
         if (_usageMonitor is null) return;
@@ -640,6 +687,7 @@ public partial class App : System.Windows.Application
             Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
+        _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;

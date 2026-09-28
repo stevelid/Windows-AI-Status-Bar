@@ -35,6 +35,8 @@ public partial class SettingsWindow : Window
         OpacitySlider.Value = _settings.BgTransparency;
         CodexPathBox.Text = _settings.CodexExecutablePath ?? "";
         CodexHomeBox.Text = _settings.CodexHomeOverride ?? "";
+        ClaudeCodeHomeBox.Text = _settings.ClaudeCodeHomeOverride ?? "";
+        ClaudeHooksCheckBox.IsChecked = _settings.UseClaudeCodeHooks;
         CoworkRootBox.Text = _settings.CoworkRootOverride ?? "";
         NotificationsCheckBox.IsChecked = _settings.NotificationsEnabled;
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
@@ -174,6 +176,30 @@ public partial class SettingsWindow : Window
     void OnCodexPathLostFocus(object sender, RoutedEventArgs e) => SaveCodexPath();
     void OnCodexHomeLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CodexHomeBox, value => _settings.CodexHomeOverride = value);
+    void OnClaudeCodeHomeLostFocus(object sender, RoutedEventArgs e) =>
+        SavePath(ClaudeCodeHomeBox, value => _settings.ClaudeCodeHomeOverride = value);
+    void OnClaudeHooksChanged(object sender, RoutedEventArgs e)
+    {
+        if (_initializing) return;
+
+        var enabled = ClaudeHooksCheckBox.IsChecked == true;
+        try
+        {
+            ClaudeHookSettingsInstaller.SetInstalled(enabled, _settings);
+        }
+        catch
+        {
+            _initializing = true;
+            ClaudeHooksCheckBox.IsChecked = _settings.UseClaudeCodeHooks;
+            _initializing = false;
+            System.Windows.MessageBox.Show(this, L10n.T("settings_claude_hooks_error"), L10n.T("settings_title"),
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _settings.UseClaudeCodeHooks = enabled;
+        SaveAndApply();
+    }
     void OnCoworkRootLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CoworkRootBox, value => _settings.CoworkRootOverride = value);
 
@@ -245,6 +271,10 @@ public partial class SettingsWindow : Window
         CodexBrowseButton.Content = L10n.T("settings_codex_browse");
         CodexPathHint.Text = L10n.T("settings_codex_hint");
         CodexHomeLabel.Text = L10n.T("settings_codex_home");
+        ClaudeCodeHomeLabel.Text = L10n.T("settings_claude_code_home");
+        ClaudeHooksCheckBox.Content = L10n.T("settings_claude_hooks");
+        ClaudeHooksHint.Text = L10n.T("settings_claude_hooks_hint");
+        ClaudeHooksPreview.Text = ClaudeHookSettingsInstaller.BuildPreview();
         CoworkRootLabel.Text = L10n.T("settings_cowork_root");
         NotificationsCheckBox.Content = L10n.T("settings_notifications");
         DemoTasksCheckBox.Content = L10n.T("settings_demo_tasks");
@@ -267,7 +297,7 @@ public partial class SettingsWindow : Window
         foreach (var label in new[]
                  {
                      LanguageLabel, ThemeLabel, IntervalLabel, OpacityLabel,
-                     OpacityValue, CodexPathLabel, CodexHomeLabel, CoworkRootLabel,
+                     OpacityValue, CodexPathLabel, CodexHomeLabel, ClaudeCodeHomeLabel, ClaudeHooksHint, CoworkRootLabel,
                      RecentCompletedLabel, PaneAutoCollapseLabel, AttentionLabelText,
                      MonitorLabel, ApproachingLabel, LowLabel,
                  })

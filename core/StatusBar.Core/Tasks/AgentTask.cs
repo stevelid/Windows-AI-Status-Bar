@@ -60,6 +60,9 @@ public sealed record AgentTask
     /// <summary>Short, content-free status context shown in the task tooltip.</summary>
     public string? StatusDetail { get; init; }
 
+    /// <summary>Stable, content-free key for the current attention or unknown evidence.</summary>
+    public string? EvidenceKey { get; init; }
+
     /// <summary>Opaque provider reference used to focus or open the session. Never shown to the user.</summary>
     public string? SessionReference { get; init; }
 }

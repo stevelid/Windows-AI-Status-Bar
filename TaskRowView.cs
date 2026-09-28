@@ -13,6 +13,11 @@ internal sealed class TaskRowView : Border
     readonly TextBlock _icon;
     readonly TextBlock _title;
     readonly TextBlock _provider;
+    readonly System.Windows.Controls.Button _dismissButton;
+    string? _taskId;
+    bool _canDismiss;
+
+    internal event Action<string>? DismissRequested;
 
     /// <summary>Creates a reusable row for one in-memory agent task.</summary>
     public TaskRowView()
@@ -40,16 +45,39 @@ internal sealed class TaskRowView : Border
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
         };
+        _dismissButton = new System.Windows.Controls.Button
+        {
+            Content = L10n.T("pane_dismiss"),
+            Padding = new Thickness(5, 1, 5, 1),
+            Margin = new Thickness(7, 0, 0, 0),
+            FontSize = 10,
+            Background = System.Windows.Media.Brushes.Transparent,
+            BorderBrush = System.Windows.Media.Brushes.Transparent,
+            Foreground = ThemeManager.Brush(ThemeManager.SubtleText),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = false,
+            Visibility = Visibility.Collapsed,
+        };
+        _dismissButton.Click += (_, _) =>
+        {
+            if (_taskId is { } taskId) DismissRequested?.Invoke(taskId);
+        };
+        MouseEnter += (_, _) => UpdateDismissVisibility();
+        MouseLeave += (_, _) => UpdateDismissVisibility();
+
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_icon, 0);
         Grid.SetColumn(_title, 1);
         Grid.SetColumn(_provider, 2);
+        Grid.SetColumn(_dismissButton, 3);
         grid.Children.Add(_icon);
         grid.Children.Add(_title);
         grid.Children.Add(_provider);
+        grid.Children.Add(_dismissButton);
         Child = grid;
     }
 
@@ -57,6 +85,13 @@ internal sealed class TaskRowView : Border
     public void Update(AgentTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
+        _taskId = task.Id;
+        _canDismiss = task.Status == AgentTaskStatus.Unknown ||
+            task.Status == AgentTaskStatus.NeedsAttention && task.Confidence != StateConfidence.Confirmed;
+        _dismissButton.Content = L10n.T("pane_dismiss");
+        _dismissButton.ToolTip = L10n.T("pane_dismiss");
+        _dismissButton.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
+        UpdateDismissVisibility();
         var unknown = task.Status == AgentTaskStatus.Unknown;
         var iconColor = task.Status switch
         {
@@ -99,6 +134,9 @@ internal sealed class TaskRowView : Border
         tooltip.Add(FormatActivity(task.LastActivity));
         ToolTip = string.Join(Environment.NewLine, tooltip);
     }
+
+    void UpdateDismissVisibility() =>
+        _dismissButton.Visibility = _canDismiss && IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
 
     static string ConfidenceLabel(StateConfidence confidence) => confidence switch
     {

@@ -30,6 +30,15 @@ public sealed record TaskTimings
     /// <summary>Age after which inactive Claude work is marked stale.</summary>
     public TimeSpan ClaudeWorkingStaleAfter { get; init; } = TimeSpan.FromMinutes(15);
 
+    /// <summary>Age after which an inactive Claude Code turn becomes unknown.</summary>
+    public TimeSpan ClaudeCodeWorkingUnknownAfter { get; init; } = TimeSpan.FromHours(2);
+
+    /// <summary>Age after which inactive Claude Code work is marked stale.</summary>
+    public TimeSpan ClaudeCodeWorkingStaleAfter { get; init; } = TimeSpan.FromMinutes(20);
+
+    /// <summary>Maximum age of a Claude Code transcript file considered for tracking.</summary>
+    public TimeSpan ClaudeCodeRecentFileWindow { get; init; } = TimeSpan.FromHours(24);
+
     /// <summary>Expiry for unresolved inferred Claude attention.</summary>
     public TimeSpan ClaudeInferredAttentionExpiry { get; init; } = TimeSpan.FromMinutes(30);
 
