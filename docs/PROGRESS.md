@@ -78,7 +78,8 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(The agent lists here, in plain steps, anything that needs Steve's Windows machine.)_
 
-- P0.3: a short (about 10 minute) watch re-run covering Cowork scenarios K1–K4 and Codex C4. Steps are at the end of `docs/recon/FINDINGS.md`.
+- P0.3: run `tools/recon/Find-ClaudeWrites.ps1` while using Cowork, to find where current Cowork tasks are stored (steps in `docs/recon/FINDINGS.md`). **Phases 3 and 4 are blocked on this;** Phases 1 and 2 are not.
+- Decide the open design question in `docs/recon/FINDINGS.md` (treat a turn that ends with a question as "needs you").
 
 ## Decisions and deviations
 

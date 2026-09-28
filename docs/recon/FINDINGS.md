@@ -66,11 +66,21 @@ Additional Cowork observations:
 - Each task folder has `.claude/projects/.../*.jsonl` (one transcript), `outputs/`, sometimes `uploads/`, and `.audit-key`. ClaudeLift's note that the transcript folder is empty on Windows is out of date. We do not need the transcript.
 - Claude desktop logs live under the same MSIX `LocalCache\Roaming\Claude\logs` folder; `main.log` was last written 2026-08-28, so logs are not a reliable live source. Not needed.
 
+## Follow-up from Steve (2026-09-28)
+
+- **Cowork produced nothing in the watched folder during a live task.** Together with the static report (newest `audit.jsonl` files from August although Cowork is in daily use), this indicates that **current Cowork tasks are no longer written to `local-agent-mode-sessions` in the MSIX `LocalCache`**. Possible explanations: a new storage location, a different layout, or tasks running remotely (new metadata keys `sessionType`, `dispatchParentOrigin` and `outboundCCRRemoteId` point that way). A-C3 is therefore **Refuted for the current location**, and Phase 3/4 are blocked until the live location is found.
+- **Neither Cowork nor Codex used a structured question.** Both asked their question in ordinary text at the end of the turn. Such a turn simply completes (`result` / `task_complete`), so the structured-question rules (A-C5, A-X4) will rarely fire in practice. See the open design question below.
+
 ## Still needed from Steve
 
-1. **P0.3 (short, about 10 minutes):** pull this branch, then run `Collect-Recon.ps1 -WatchSeconds 900` again (the script now keeps `tool_name` and picks Cowork tasks by real activity) and do only:
-   - **K1/K2:** start a short Cowork task and let it finish;
-   - **K4:** ask Cowork to "ask me a multiple-choice question before continuing", wait 60 s, answer;
-   - **K3:** trigger one permission prompt, wait 60 s, allow;
-   - **C4:** ask Codex to ask you a clarifying question before it starts, wait 60 s, answer.
-   Note the clock time of each action in `notes.md`. This verifies A-C3 (live writing) and A-X4 (Codex input requests), the two remaining unknowns that affect the rules.
+1. Pull this branch, then run:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\tools\recon\Find-ClaudeWrites.ps1
+   ```
+
+   During the five-minute countdown, start a short Cowork task and let it finish (a permission prompt as well, if one comes up naturally). The script lists every file under Claude's folders that changed during that window, with names redacted and only record types shown. Review the Desktop report and commit or paste it.
+
+## Open design question
+
+Because both apps ask questions in plain text at the end of a turn, a strictly "structured prompt" definition of *needs you* will miss most real cases. One option is to treat a completed turn whose final assistant message ends with a question mark as `NeedsAttention / Inferred` ("Asked you a question"). This would read the last message locally to test its final character and would never store or log it. It needs Steve's agreement because it widens what the app reads, and because the heuristic will sometimes be wrong (rhetorical questions, or questions in the middle of a summary).
