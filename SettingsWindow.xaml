@@ -43,6 +43,10 @@
             <TextBox x:Name="CodexHomeBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnCodexHomeLostFocus"/>
 
+            <TextBlock x:Name="ClaudeCodeHomeLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBox x:Name="ClaudeCodeHomeBox" Padding="6,5" Margin="0,6,0,0"
+                     LostFocus="OnClaudeCodeHomeLostFocus"/>
+
             <TextBlock x:Name="CoworkRootLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
             <TextBox x:Name="CoworkRootBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnCoworkRootLostFocus"/>

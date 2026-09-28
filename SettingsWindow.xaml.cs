@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window
         OpacitySlider.Value = _settings.BgTransparency;
         CodexPathBox.Text = _settings.CodexExecutablePath ?? "";
         CodexHomeBox.Text = _settings.CodexHomeOverride ?? "";
+        ClaudeCodeHomeBox.Text = _settings.ClaudeCodeHomeOverride ?? "";
         CoworkRootBox.Text = _settings.CoworkRootOverride ?? "";
         NotificationsCheckBox.IsChecked = _settings.NotificationsEnabled;
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
@@ -174,6 +175,8 @@ public partial class SettingsWindow : Window
     void OnCodexPathLostFocus(object sender, RoutedEventArgs e) => SaveCodexPath();
     void OnCodexHomeLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CodexHomeBox, value => _settings.CodexHomeOverride = value);
+    void OnClaudeCodeHomeLostFocus(object sender, RoutedEventArgs e) =>
+        SavePath(ClaudeCodeHomeBox, value => _settings.ClaudeCodeHomeOverride = value);
     void OnCoworkRootLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CoworkRootBox, value => _settings.CoworkRootOverride = value);
 
@@ -245,6 +248,7 @@ public partial class SettingsWindow : Window
         CodexBrowseButton.Content = L10n.T("settings_codex_browse");
         CodexPathHint.Text = L10n.T("settings_codex_hint");
         CodexHomeLabel.Text = L10n.T("settings_codex_home");
+        ClaudeCodeHomeLabel.Text = L10n.T("settings_claude_code_home");
         CoworkRootLabel.Text = L10n.T("settings_cowork_root");
         NotificationsCheckBox.Content = L10n.T("settings_notifications");
         DemoTasksCheckBox.Content = L10n.T("settings_demo_tasks");
@@ -267,7 +271,7 @@ public partial class SettingsWindow : Window
         foreach (var label in new[]
                  {
                      LanguageLabel, ThemeLabel, IntervalLabel, OpacityLabel,
-                     OpacityValue, CodexPathLabel, CodexHomeLabel, CoworkRootLabel,
+                     OpacityValue, CodexPathLabel, CodexHomeLabel, ClaudeCodeHomeLabel, CoworkRootLabel,
                      RecentCompletedLabel, PaneAutoCollapseLabel, AttentionLabelText,
                      MonitorLabel, ApproachingLabel, LowLabel,
                  })

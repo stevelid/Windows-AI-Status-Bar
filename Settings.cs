@@ -24,6 +24,7 @@ public class Settings
     public string ActiveProvider { get; set; } = "claude";
     public string? CodexExecutablePath { get; set; }
     public string? CodexHomeOverride { get; set; }
+    public string? ClaudeCodeHomeOverride { get; set; }
     public string? CoworkRootOverride { get; set; }
     public bool NotificationsEnabled { get; set; } = true;
     public int RecentlyCompletedMinutes { get; set; } = 10;
@@ -82,6 +83,7 @@ public class Settings
         MonitorDeviceName = NormalizeOptionalPath(MonitorDeviceName);
         CodexExecutablePath = NormalizeOptionalPath(CodexExecutablePath);
         CodexHomeOverride = NormalizeOptionalPath(CodexHomeOverride);
+        ClaudeCodeHomeOverride = NormalizeOptionalPath(ClaudeCodeHomeOverride);
         CoworkRootOverride = NormalizeOptionalPath(CoworkRootOverride);
     }
 

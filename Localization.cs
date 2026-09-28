@@ -155,6 +155,7 @@ public static class L10n
         ["settings_monitor_primary"] = ("主要顯示器", "Primary display"),
         ["settings_monitor_display"] = ("顯示器 {0}（{1} × {2}）", "Display {0} ({1} × {2})"),
         ["settings_codex_home"] = ("Codex 資料夾（選填）", "Codex data folder (optional)"),
+        ["settings_claude_code_home"] = ("Claude Code 資料夾（選填）", "Claude Code data folder (optional)"),
         ["settings_cowork_root"] = ("Cowork 資料夾（選填）", "Cowork data folder (optional)"),
         ["settings_threshold_approaching"] = ("接近用量上限（剩餘低於 %）", "Approaching limit below remaining (%)"),
         ["settings_threshold_low"] = ("用量偏低（剩餘低於 %）", "Low allowance below remaining (%)"),
