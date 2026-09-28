@@ -20,7 +20,7 @@ settings.json
 !.claude/settings.json
 
 # Recon output may contain machine details; commit only reviewed files under docs/recon/
-ai-status-recon-*/
+/ai-status-recon-*/
 
 # Codex loop transcripts (final messages per iteration)
 .codex-loop/

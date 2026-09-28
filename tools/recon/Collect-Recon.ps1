@@ -60,7 +60,8 @@ $KeepValueKeys = @(
     'type', 'subtype', 'name', 'role', 'status', 'kind', 'reason', 'stop_reason',
     'sandbox_permissions', 'originator', 'source', 'cli_version', 'model', 'effort',
     'history_mode', 'permission_mode', 'permissionMode', 'is_error', 'decision',
-    'approval_policy', 'sandbox_policy', 'mode', 'state', 'event', 'level'
+    'approval_policy', 'sandbox_policy', 'mode', 'state', 'event', 'level',
+    'tool_name', 'granted', 'sessionType', 'hostLoopMode', 'thread_source'
 )
 # Keys whose values are timestamps (kept so we can see timing behaviour).
 $TimestampKeys = @(
@@ -185,6 +186,10 @@ function Get-RecordSignature([string]$line) {
 
     $subtype = Get-Prop $o 'subtype'
     if ($subtype) { $parts.Add([string]$subtype) }
+    $toolName = Get-Prop $o 'tool_name'
+    if ($toolName -and ($toolName -match $EnumLikePattern)) { $parts.Add(':' + $toolName) }
+    $granted = Get-Prop $o 'granted'
+    if ($null -ne $granted) { $parts.Add('granted=' + $granted) }
 
     # Claude audit/transcript records: summarise content block types and tool names.
     $message = Get-Prop $o 'message'
@@ -425,8 +430,13 @@ foreach ($root in $roots) {
         if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { Add-Line '  - root is a reparse point (MSIX redirect)' }
     } catch { }
 
+    # Order tasks by real activity: the audit log's write time when present. Metadata files can be
+    # rewritten in bulk (e.g. after an app update), so their own write time is not a reliable signal.
     $metaFiles = @(Get-ChildItem -LiteralPath $root -Recurse -Depth 2 -File -Filter 'local_*.json' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending)
+        Sort-Object -Descending -Property {
+            $auditPath = Join-Path $_.DirectoryName (([IO.Path]::GetFileNameWithoutExtension($_.Name)) + '\audit.jsonl')
+            if (Test-Path -LiteralPath $auditPath) { (Get-Item -LiteralPath $auditPath).LastWriteTime } else { $_.LastWriteTime }
+        })
     $accounts = @(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)
     Add-Line ('  - account dirs: ' + $accounts.Count + '; task metadata files: ' + $metaFiles.Count)
 

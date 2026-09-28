@@ -126,9 +126,9 @@ Steve asked for suggestions before implementation. The following changes are **a
 | --- | --- | --- |
 | **D1** | Put all non-UI logic in a separate platform-neutral `StatusBar.Core` library. | Parsers and state rules are the fragile, high-value part. Keeping them free of WPF lets tests run on Linux CI and in cloud agent sessions, where the implementation agent works. |
 | **D2** | Phase 0 machine inspection is done by Steve running `tools/recon/Collect-Recon.ps1`, which records structure only (all free text redacted) plus an optional live timeline while he performs scripted scenarios. | A cloud agent cannot see Steve's machine. The timeline shows exactly which records appear when an approval is requested or answered, which is the evidence the state rules need. |
-| **D3** | Codex attention is inferred from pending tool calls, with a short debounce (3 s) and suppression when the turn's `approval_policy` is `never`. | Codex does not write approval requests to disk (2.3). Auto-approved escalations would otherwise flash a false alert. |
-| **D4** | Claude state comes primarily from **`audit.jsonl`** records (init → Working, `result` → Complete/Failed, pending `AskUserQuestion` → NeedsAttention), with metadata recency as the fallback. | This is likely stronger and cheaper than notifications or logs. It is undocumented, so it is verified in recon and covered by contract tests. |
-| **D5** | The Windows notification listener becomes an **optional spike in Phase 4** and a v1.1 feature by default. The architecture keeps an `IClaudeAttentionEvidenceSource` seam so it can be added without redesign. | Package identity, code signing and a TFM change add real maintenance cost; the evidence is partial. Proceed only if recon shows `audit.jsonl` misses permission prompts that matter. |
+| **D3** | Codex attention is inferred from pending tool calls, with a short debounce (3 s) and suppression when the turn's `approval_policy` is `never`. *Recon (2026-09-28): Steve runs with `approval_policy: never`, so in practice only "waiting for your input" applies.* | Codex does not write approval requests to disk (2.3). Auto-approved escalations would otherwise flash a false alert. |
+| **D4** | Claude state comes primarily from **`audit.jsonl`** records (init → Working, `result` → Complete/Failed, unanswered `system/permission_request` → NeedsAttention), with metadata recency as the fallback. | Recon confirmed explicit `permission_request`/`permission_response` records, including for `AskUserQuestion`. It is undocumented, so contract tests cover it. |
+| **D5** | The Windows notification listener is **dropped from v1**. The architecture keeps an `IClaudeAttentionEvidenceSource` seam so it can be added later without redesign. | Recon showed `audit.jsonl` records permission prompts directly (A-C6 confirmed), so the packaging, signing and TFM cost is not justified. |
 | **D6** | Both usage providers refresh **independently and continuously**. The upstream "active provider" tab model is removed. | The strip shows both allowances at once; upstream only fetched the selected provider. |
 | **D7** | The compact percentage for each provider is the **tightest window** (lowest remaining), not a fixed "session" window. The pane shows all windows. | If the weekly allowance is at 5 % while the five-hour window is at 80 %, the strip should not say 80 %. Works for whatever windows Codex returns. |
 | **D8** | The expanded pane is a **separate window** placed above the strip. The strip never moves or resizes when the pane opens. | Simpler docking, no layout jumps, and closing on deactivation ("click elsewhere") comes for free. |
@@ -368,7 +368,9 @@ Parser input is one JSONL line at a time; unknown record types are counted in `F
 | `response_item/function_call` where `name == "request_user_input"` | Add pending `{call_id, kind: Input, since: ts}`. |
 | `response_item/function_call` whose `arguments` JSON has `sandbox_permissions == "require_escalated"` | Add pending `{call_id, kind: Approval, since: ts}`. |
 | `response_item/function_call_output` (or `custom_tool_call_output`) | Remove pending by `call_id`. |
-| paginated equivalents (`event_msg/item_completed` …) | Same effects; exact shapes fixed after recon (spike S2). |
+| `response_item/custom_tool_call` (`name: "exec"`, free-form `input`) | Activity only. Never read or store `input`. |
+| `event_msg/item_completed` (paginated history; item types `AgentMessage`, `CommandExecution`, `FileChange`, `McpToolCall`, `Reasoning`, `UserMessage`, `DynamicToolCall`) | Activity only; a `UserMessage` item is also a title candidate. Rollouts on Steve's PC contain **both** these and `response_item` records (recon 2026-09-28). |
+| `world_state`, `token_usage_record`, `event_msg/token_count`, `event_msg/thread_settings_applied` | Activity only. |
 | first user message (`response_item/message` role `user`, or legacy `event_msg/user_message`) | Offer to `CodexTitleResolver` as a title candidate (sanitised immediately; raw text discarded). |
 | any record | `LastActivity = ts` (fall back to file write time if `timestamp` missing). |
 
@@ -394,6 +396,9 @@ Title precedence (`CodexTitleResolver`): `session_index.jsonl` latest `thread_na
 | `user` | For each `tool_result` block remove pending by `tool_use_id`. A user text message after `result` also means `Turn = Running`. |
 | `result` with `subtype == "success"` and `is_error != true` | `Turn = Completed`, clear pending. |
 | `result` with `is_error == true` or `subtype` starting `error` | `Turn = Failed`, clear pending. |
+| `system/permission_request` | Add pending permission `{uuid, tool_name, since}`. ⚠️ A-C6 (confirmed 2026-09-28) |
+| `system/permission_response` | Resolve the oldest pending permission with the same `tool_name` (the request and response `uuid`s are not guaranteed to match). |
+| `system/status`, `system/thinking_tokens`, `command_lifecycle`, `rate_limit_event` | Activity only (`Turn = Running` if a run has started). |
 | any | `LastActivity = _audit_timestamp` (or `timestamp`), else file write time. |
 
 Duplicate user prompts (Windows writes them twice) do not matter for state because they only touch `LastActivity`.
@@ -402,7 +407,8 @@ Duplicate user prompts (Windows writes them twice) do not matter for state becau
 
 1. **Metadata** — `isArchived == true` → hide. Non-empty `error` → `Failed / Confirmed`.
 2. **Audit** (if readable):
-   - pending `AskUserQuestion` or `ExitPlanMode` → `NeedsAttention`, reason "Waiting for your answer" / "Plan needs approval". Confidence `Inferred` until A-C5 is confirmed by recon, then `Confirmed`.
+   - pending permission request → `NeedsAttention / Confirmed`, reason by `tool_name`: `AskUserQuestion` → "Waiting for your answer", `ExitPlanMode` → "Plan needs approval", anything else → "Permission requested". Evidence key = request `uuid`.
+   - pending `AskUserQuestion`/`ExitPlanMode` `tool_use` without a permission request (older app versions) → `NeedsAttention / Inferred`.
    - `Turn == Running` → `Working / Confirmed` (stale/unknown rules as in the table).
    - `Turn == Completed` → `Complete / Confirmed`; `Failed` → `Failed / Confirmed`.
 3. **External evidence** (`IClaudeAttentionEvidenceSource`, only if implemented) — matched to a task by `TaskIdHint`, else by exact title match, else to the single most recently active Working Claude task; otherwise ignored. → `NeedsAttention / Inferred`, reason "Claude sent a notification".
@@ -410,7 +416,7 @@ Duplicate user prompts (Windows writes them twice) do not matter for state becau
 
 **Attention clearing** (brief §16), implemented in `ClaudeStateResolver` and `AgentStateService`:
 
-1. Any audit record written after the attention trigger (a `tool_result` for the pending ID, or a new `assistant` record) clears it → `Working`.
+1. A matching `system/permission_response`, or any audit record showing resumed work after the trigger (`tool_result`, new `assistant` record, `system/status`), clears it → `Working`.
 2. A `result` record clears it → `Complete`/`Failed`.
 3. Steve can dismiss a Claude alert from the pane. `DismissalStore` records `(taskId, evidenceKey)`; the same evidence never re-raises, a new trigger does. Dismissals are kept in memory and in the small state file for 24 h.
 4. Unresolved alerts expire: Inferred after `ClaudeInferredAttentionExpiry`, Confirmed after `ClaudeConfirmedAttentionExpiry`, to `Unknown / Stale` with `StatusDetail = "No recent activity"`. Never to `Complete`.
@@ -499,7 +505,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 - Tests: index title wins; injected-context messages skipped; truncation at word boundary; Markdown/emoji-safe; fallback chain.
 
 **P2.4 `CodexTaskProvider`**
-- `Codex/CodexPaths.cs` (`CODEX_HOME` → `%USERPROFILE%\.codex`; override from settings), `Codex/CodexSessionReader.cs` (discovery: `sessions/YYYY/MM/DD` folders for today and the two previous local dates, plus any `*.jsonl` with write time within `CodexRecentFileWindow`; initial state from `TailReader` (last 2 MB) and title from the first 64 KB; then incremental), `IO/DirectoryWatcher.cs` (wraps `FileSystemWatcher`, `IncludeSubdirectories = true`, filter `*.jsonl`, `InternalBufferSize = 64 KB`, debounced; on `Error` event (buffer overflow) triggers a full reconcile and logs), `Codex/CodexTaskProvider.cs` (reconcile timer; re-evaluates timing rules every 5 s only while any task is Working/pending, otherwise idle; publishes `ProviderTaskSnapshot`; health `Unavailable` when the sessions folder is missing, rechecked every reconcile).
+- `Codex/CodexPaths.cs` (`CODEX_HOME` → `%USERPROFILE%\.codex`; override from settings), `Codex/CodexSessionReader.cs` (discovery: `sessions/YYYY/MM/DD` folders for today and the two previous local dates, plus any `*.jsonl` with write time within `CodexRecentFileWindow`; initial state from `TailReader` (last 2 MB) and title from the first 256 KB (the `session_meta` line alone can be tens of kilobytes); then incremental), `IO/DirectoryWatcher.cs` (wraps `FileSystemWatcher`, `IncludeSubdirectories = true`, filter `*.jsonl`, `InternalBufferSize = 64 KB`, debounced; on `Error` event (buffer overflow) triggers a full reconcile and logs), `Codex/CodexTaskProvider.cs` (reconcile timer; re-evaluates timing rules every 5 s only while any task is Working/pending, otherwise idle; publishes `ProviderTaskSnapshot`; health `Unavailable` when the sessions folder is missing, rechecked every reconcile).
 - Tests (temp directory + FakeTimeProvider): discovers two sessions; appending lines updates state without re-reading from 0 (assert offsets); watcher disabled → reconcile still finds changes; restart (new provider instance) recovers state from tail; missing folder → `Unavailable` then `Ok` when created; `.jsonl.zst` ignored.
 
 **P2.5 Wiring and diagnostics**
@@ -509,7 +515,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 ### Phase 3 — Claude Cowork discovery
 
 **P3.1 Roots and task store ⚠️ A-C1, A-C2**
-- `Claude/CoworkRootLocator.cs` (inputs: `APPDATA`, `LOCALAPPDATA`, override; enumerates `Packages\Claude_*`; returns existing roots), `Claude/CoworkTaskMetadata.cs` (tolerant parse of the keys in 2.4; unknown keys ignored; `initialMessage` only passed to `TextSanitizer` for a fallback title, never stored), `Claude/CoworkTaskStoreReader.cs` (enumerate `<root>/<acct>/<ws>/local_*.json`, merge by task ID across roots preferring the record with `audit.jsonl`, then larger audit, then newer metadata).
+- `Claude/CoworkRootLocator.cs` (inputs: `APPDATA`, `LOCALAPPDATA`, override; enumerates `Packages\Claude_*`; returns existing roots), `Claude/CoworkTaskMetadata.cs` (tolerant parse of the keys in 2.4 using `JsonDocument` and reading only the needed properties, because files are ~200 KB; unknown keys ignored; `initialMessage` only passed to `TextSanitizer` for a fallback title, never stored; `accountName`/`emailAddress` never read; recency from `lastActivityAt`, never from the file's write time, which can change in bulk), `Claude/CoworkTaskStoreReader.cs` (enumerate `<root>/<acct>/<ws>/local_*.json`, merge by task ID across roots preferring the record with `audit.jsonl`, then larger audit, then newer metadata).
 - Fixtures: `Fixtures/cowork/two-roots/...` directory tree with a duplicated task.
 - Tests: discovery, merge preference, archived excluded, malformed metadata skipped and counted, title fallback "Claude task".
 
@@ -532,7 +538,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 **P4.2 Dismiss control**
 - Pane row shows a small "Dismiss" button on hover for Claude `NeedsAttention` rows whose confidence is not `Confirmed`, and for all `Unknown` rows. Calls `AgentStateService.Dismiss`. `DismissalStore` persists to `state.json`.
 
-**P4.3 🧪 Spike S5 — notification listener**
+**P4.3 🧪 Spike S5 — notification listener** — *not planned for v1 (recon confirmed audit permission records, see D5). Keep only as a fallback if a Claude update removes them.*
 - Only if recon shows that permission prompts (not only `AskUserQuestion`) leave no trace in `audit.jsonl` **and** Steve wants them detected. Prototype in `spikes/NotificationListenerSpike/` (not in the solution): sparse package manifest with `userNotificationListener`, self-signed certificate script, `RequestAccessAsync`, list current toasts filtered by Claude's AUMID from recon, test `NotificationChanged` vs polling. Write `docs/spikes/S5-notification-listener.md` with a go/no-go and the maintenance cost.
 - If go: **P4.4** implement `ClaudeNotificationMonitor : IClaudeAttentionEvidenceSource` in the WPF project, behind `Settings.UseNotificationListener` (default false), with evidence keys from the toast ID.
 
@@ -545,7 +551,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 ### Phase 5 — Interaction polish
 
 **P5.1 Click a task to focus the app**
-- `AppActivator.cs`: find top-level visible windows of processes `ChatGPT` / `Codex` (Codex tasks) or `Claude` (Claude tasks) via `EnumWindows` + `GetWindowThreadProcessId`; restore if minimised (`ShowWindow(SW_RESTORE)`), then `SetForegroundWindow`. Because the click happens in our foreground window, the foreground-lock rules allow it. If no window exists, launch the app via `shell:AppsFolder\<AUMID>` using the AUMID found in recon. Exact-session deep links only if spike S6 finds a supported URL scheme.
+- `AppActivator.cs`: both desktop apps are MSIX packages (recon): Codex `OpenAI.Codex_2p2nqsd0c76g0!App`, Claude `Claude_pzs8sxrjxfjjc!Claude`. Activate with `IApplicationActivationManager.ActivateApplication(aumid, null, AO_NONE)`, which brings an existing window forward or launches the app. Resolve the package family name at runtime (enumerate `%LOCALAPPDATA%\Packages\OpenAI.Codex_*` / `Claude_*`, or `PackageManager`) instead of hard-coding the publisher suffix. Fallback: find the top-level window of process `Codex`/`codex` or `claude` via `EnumWindows`, restore it and `SetForegroundWindow`. Exact-session deep links only if spike S6 finds a supported URL scheme.
 
 **P5.2 Attention notifications (D11)**
 - `NotificationGate` in Core (Section 5.3) with tests (restart does not repeat; new evidence key notifies; seeding on start). `AttentionNotifier.cs` shows `"<Provider> needs you — <title>"` via the tray balloon when `NotificationsEnabled`; clicking the balloon opens the pane.
@@ -590,25 +596,25 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 
 ## 8. Undocumented-behaviour assumption register
 
-Every rule marked ⚠️ cites one of these IDs in a code comment. Status starts as **Unverified** and is updated in P0.4.
+Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for each status is in [`recon/FINDINGS.md`](recon/FINDINGS.md).
 
-| ID | Assumption | Used by | If wrong |
-| --- | --- | --- | --- |
-| A-X1 | Codex desktop writes rollouts to `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex discovery | Setting override; recon path |
-| A-X2 | `task_started` / `task_complete` / `turn_aborted` records mark turn boundaries | Codex parser | Fall back to recency (`Working/Inferred`) |
-| A-X3 | Escalated commands carry `sandbox_permissions: require_escalated` in the call arguments | Codex attention | Attention missed; document |
-| A-X4 | `request_user_input` is recorded as a `function_call` | Codex attention | Attention missed; document |
-| A-X5 | `session_index.jsonl` holds user-visible thread names | Codex titles | First-message fallback |
-| A-X6 | Sub-agent sessions are identifiable from `session_meta.source` and name their parent | D12 | Count separately |
-| A-X7 | Rollouts compress only after 7 days | Discovery | Tail reader would skip `.zst`; acceptable |
-| A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override |
-| A-C2 | Metadata `local_<id>.json` contains `title`, `lastActivityAt`, `isArchived`, `error` | Titles, recency | Titles "Claude task"; recency from file time |
-| A-C3 | `audit.jsonl` is written live during a turn | Claude Working state | Recency fallback only |
-| A-C4 | A `result` record ends every turn, with `is_error` on failure | Claude Complete/Failed | Completion inferred from inactivity → `Unknown` |
-| A-C5 | `AskUserQuestion` appears as a pending `tool_use` until answered | Claude attention | Attention needs notifications (S5) |
-| A-C6 | Permission prompts leave a detectable trace in `audit.jsonl` | Claude attention | Missed unless S5 is adopted |
-| A-C7 | Claude toasts carry an AUMID found in the registry and a body containing the task title | S5 matching | Match to most recent task |
-| A-C8 | Claude Desktop's window belongs to a process named `Claude` | Focus on click | Launch via AUMID |
+| ID | Assumption | Used by | If wrong | Status (recon 2026-09-28) |
+| --- | --- | --- | --- | --- |
+| A-X1 | Codex desktop writes rollouts to `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex discovery | Setting override; recon path | Confirmed |
+| A-X2 | `task_started` / `task_complete` / `turn_aborted` records mark turn boundaries | Codex parser | Fall back to recency (`Working/Inferred`) | Confirmed |
+| A-X3 | Escalated commands carry `sandbox_permissions: require_escalated` in the call arguments | Codex attention | Attention missed; document | Refuted for Steve's setup |
+| A-X4 | `request_user_input` is recorded as a `function_call` | Codex attention | Attention missed; document | Unverified |
+| A-X5 | `session_index.jsonl` holds user-visible thread names | Codex titles | First-message fallback | Confirmed |
+| A-X6 | Sub-agent sessions are identifiable from `session_meta.source` and name their parent | D12 | Count separately | Unverified |
+| A-X7 | Rollouts compress only after 7 days | Discovery | Tail reader would skip `.zst`; acceptable | Not observed |
+| A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override | Confirmed (MSIX root only) |
+| A-C2 | Metadata `local_<id>.json` contains `title`, `lastActivityAt`, `isArchived`, `error` | Titles, recency | Titles "Claude task"; recency from file time | Confirmed (no `error` seen) |
+| A-C3 | `audit.jsonl` is written live during a turn | Claude Working state | Recency fallback only | Unverified |
+| A-C4 | A `result` record ends every turn, with `is_error` on failure | Claude Complete/Failed | Completion inferred from inactivity → `Unknown` | Confirmed |
+| A-C5 | `AskUserQuestion` appears as a pending `tool_use` until answered | Claude attention | Attention needs notifications (S5) | Confirmed |
+| A-C6 | Permission prompts leave a detectable trace in `audit.jsonl` | Claude attention | Missed unless S5 is adopted | Confirmed |
+| A-C7 | Claude toasts carry an AUMID found in the registry and a body containing the task title | S5 matching | Match to most recent task | Not needed |
+| A-C8 | Claude Desktop's window belongs to a process named `Claude` | Focus on click | Launch via AUMID | Confirmed (`claude`) |
 
 ---
 
@@ -620,6 +626,5 @@ These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P4.
 - Codex errors are not persisted, so a crashed turn appears as Working, then Stale, then Unknown, not Failed.
 - Cloud Codex tasks started on chatgpt.com are not visible; only local desktop/CLI sessions are.
 - Claude Cowork state is inferred from undocumented local files. A Claude update may change them; the contract tests and the diagnostics drift counters are designed to make this obvious.
-- Claude permission prompts may not be detected unless recon shows a trace in `audit.jsonl` or the notification listener is adopted.
-- Claude does not show a toast while its window is focused, so notification evidence is always partial.
+- Claude attention relies on undocumented `system/permission_request` records in `audit.jsonl`. If a Claude update removes them, alerts fall back to pending `AskUserQuestion` tool calls (inferred) and the notification-listener seam.
 - Allowance percentages come from undocumented (Claude) and app-server (Codex) sources and may lag by one refresh interval.
