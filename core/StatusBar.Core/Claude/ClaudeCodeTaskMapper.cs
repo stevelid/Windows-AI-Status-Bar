@@ -1,3 +1,4 @@
+using System.Globalization;
 using StatusBar.Core.Common;
 using StatusBar.Core.Tasks;
 
@@ -46,6 +47,7 @@ internal static class ClaudeCodeTaskMapper
                 Status = AgentTaskStatus.NeedsAttention,
                 Confidence = StateConfidence.Inferred,
                 AttentionReason = "Asked you a question",
+                EvidenceKey = "question:" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
             },
             ClaudeCodeTurnStatus.Completed => task with
             {

@@ -110,12 +110,15 @@ public class ClaudeCodeTranscriptParserTests
     public void Completed_question_returns_to_complete_at_the_configured_expiry()
     {
         var (state, _) = ReadFixture("provisional-turn-complete-with-question.jsonl");
+        var question = ClaudeCodeTaskMapper.Map(state, EvaluationTime, TaskTimings.Default);
 
         var expired = ClaudeCodeTaskMapper.Map(
             state,
             state.LastActivity.Add(TaskTimings.Default.QuestionAttentionExpiry),
             TaskTimings.Default);
 
+        Assert.Equal(AgentTaskStatus.NeedsAttention, question.Status);
+        Assert.StartsWith("question:", question.EvidenceKey);
         Assert.Equal(AgentTaskStatus.Complete, expired.Status);
     }
 

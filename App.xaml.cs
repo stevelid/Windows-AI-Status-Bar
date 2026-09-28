@@ -598,12 +598,14 @@ public partial class App : System.Windows.Application
             ];
         }
 
+        var stateTime = TimeProvider.System;
         _agentStateService = new AgentStateService(
             taskProviders,
-            TimeProvider.System,
+            stateTime,
             new StateServiceOptions(
                 TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
-                TaskTimings.Default.UnknownVisibleFor));
+                TaskTimings.Default.UnknownVisibleFor),
+            new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
@@ -654,6 +656,8 @@ public partial class App : System.Windows.Application
 
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 
+    void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
+
     void UpdateStrip()
     {
         if (_usageMonitor is null) return;
@@ -683,6 +687,7 @@ public partial class App : System.Windows.Application
             Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
+        _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;

@@ -47,7 +47,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P3.2 Hook event sink (`--claude-hook`)
 - [x] P3.3 Opt-in hook installer
 - [x] P3.4 ClaudeCodeTaskProvider
-- [ ] P3.5 Dismiss control
+- [x] P3.5 Dismiss control
 - [ ] P3.6 KNOWN_LIMITATIONS.md
 - [ ] Phase 3 acceptance 🧑
 
@@ -113,3 +113,5 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P3.2 — Added the `--claude-hook` early-startup sink. It accepts only the four configured hook events, copies only the event/session ID/notification type plus an ingestion timestamp, caps stdin at 1 MB, and rotates the app-owned file to the last 200 lines above 256 KB. All hook errors remain silent with exit code 0.
 - 2026-09-28 — P3.3 — Added the opt-in hook setting and command preview, a JSON merger that preserves unrelated settings/hooks, a one-time settings backup and atomic replacement. Enabling hooks repairs partial installs; startup refreshes the command when the executable path changes. Malformed settings are refused without overwriting the file.
 - 2026-09-28 — P3.4 — Added recent transcript discovery, tail recovery, optional hook evidence, debounced file watching and periodic reconciliation. Registered Claude Code beside Codex outside demo mode; provider tests cover multiple sessions, hook attention clearing, transcript-only behavior, sidechain filtering and restart recovery. Build clean; 145 Core tests pass.
+- 2026-09-28 — P3.5 — Added hover dismissal for inferred attention and unknown rows. Dismissal keys are scoped to the current evidence, expire after 24 hours, and are stored as hashes in `state.json`; unrelated state sections are preserved. Build clean; 149 Core tests pass.
+- 2026-09-28 — P3.5 privacy decision — Persist only a SHA-256 digest of `(taskId, evidenceKey)` plus its expiry so task/session IDs and evidence IDs do not appear in `state.json`.
