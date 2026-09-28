@@ -1,6 +1,6 @@
 # Prompts for the implementation agent
 
-Two ways to drive a smaller implementation agent (for example Claude Sonnet in Claude Code, locally or on claude.ai/code). Both rely on `CLAUDE.md`, `docs/PLAN.md` and `docs/PROGRESS.md` in the repository, so the prompts stay short.
+Three ways to drive a smaller implementation agent: Claude Code (options A and B, locally or on claude.ai/code) or the Codex CLI (option C). All rely on `CLAUDE.md` (Claude) or `AGENTS.md` (Codex), `docs/PLAN.md` and `docs/PROGRESS.md` in the repository, so the prompts stay short.
 
 ## Option A — Loop prompt (recommended)
 
@@ -35,6 +35,28 @@ Rules: logic goes in core/StatusBar.Core with tests; WPF code stays thin. Never 
 
 Done when: every non-🧑 item in Phase <N> is ticked, CI is green on the pull request, and PROGRESS.md "Waiting on Steve" lists the phase's 🧑 acceptance checks as short numbered steps he can follow using the status-bar-win-x64 CI artifact.
 ```
+
+## Option C — Codex loop (Codex CLI on Windows)
+
+Codex has no `/loop` command, so `tools/agent/Run-CodexLoop.ps1` provides the loop. Codex reads `AGENTS.md` automatically. Each iteration of the script:
+
+1. pulls the branch and runs `dotnet restore`, because Codex's `workspace-write` sandbox has no network access;
+2. runs one non-interactive turn, `codex exec --sandbox workspace-write`, with the prompt in `tools/agent/codex-iteration-prompt.md`, which asks for exactly one plan commit;
+3. reads the `LOOP_STATUS` line from Codex's final message;
+4. pushes the new commit.
+
+It stops when Codex reports `BLOCKED` (the next item needs you or a decision), `DONE` or `FAILED`, when an iteration makes no commit or leaves uncommitted changes, or after `-MaxIterations` (default 20). Each iteration's final message is saved in `.codex-loop/` (git-ignored) for review.
+
+Prerequisites: Git, the .NET 10 SDK and the Codex CLI on PATH, signed in to your ChatGPT account. Start from a clean working tree on a working branch, not `main`:
+
+```powershell
+git switch -c phase-1-status-strip
+powershell -ExecutionPolicy Bypass -File .\tools\agent\Run-CodexLoop.ps1
+```
+
+Useful options: `-MaxIterations 3` for a short first run, `-Model <name>` to choose the Codex model, and `-NoPush` to review commits locally before pushing. After the first push, open a draft pull request for the branch on GitHub so CI runs and produces the `status-bar-win-x64` build. If Codex's Windows sandbox gives trouble, run the same script from a WSL shell with PowerShell 7 (`pwsh`) installed.
+
+The per-iteration prompt, for reference or for pasting into the Codex app instead of using the script, is in [`tools/agent/codex-iteration-prompt.md`](../tools/agent/codex-iteration-prompt.md). When pasting it into the Codex app or a cloud task, delete "Do not push; the wrapper script pushes" and the network sentence if that environment can push and download packages, then send "continue" after each commit.
 
 ## Tips
 

@@ -11,6 +11,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] `WindowsAIStatusBar.slnx`, `StatusBar.Core` + tests, `AgentTask` model
 - [x] CI: Linux core job; Windows build, smoke tests, single-file artifact
 - [x] `tools/recon/Collect-Recon.ps1`; cloud SessionStart hook
+- [x] Codex loop script (`tools/agent/Run-CodexLoop.ps1`); `Microsoft.Extensions.TimeProvider.Testing` added to Core tests so sandboxed agents need no downloads
 
 ## Phase 0 — Reconnaissance
 
