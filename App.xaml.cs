@@ -17,6 +17,7 @@ public partial class App : System.Windows.Application
     AgentStateService? _agentStateService;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
+    long _detailsPaneClosedAtMs = long.MinValue;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
     Settings _settings = null!;
@@ -652,6 +653,11 @@ public partial class App : System.Windows.Application
             _detailsPane.UpdateState(usage, _taskState);
     }
 
+    // Clicking the strip activates it, which deactivates (and so closes) the open pane on
+    // mouse-down; the strip's toggle then fires on mouse-up. Treat a toggle that arrives just
+    // after a close as that same click, otherwise "click to close" would reopen the pane.
+    const long PaneReopenGuardMs = 400;
+
     void ToggleDetailsPane()
     {
         if (_detailsPane is { IsVisible: true })
@@ -660,8 +666,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        if (Environment.TickCount64 - _detailsPaneClosedAtMs < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
+        _detailsPane.Closed += (_, _) => _detailsPaneClosedAtMs = Environment.TickCount64;
         _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
         _detailsPane.ShowAbove(_widget);
     }
