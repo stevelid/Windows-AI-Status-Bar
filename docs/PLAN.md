@@ -445,7 +445,9 @@ Duplicate user prompts (Windows writes them twice) do not matter for state becau
 | `user` whose text starts with `[Request interrupted by user` | `Turn = Aborted` (`StatusDetail = "Stopped"`). ⚠️ A-K3 |
 | `user` with `tool_result` blocks | Resolve pending tool ids. |
 | `assistant` | `Turn = Running`; add pending for each `tool_use`. If `message.stop_reason == "end_turn"` → `Turn = Completed`, `EndedWithQuestion = QuestionDetector.EndsWithQuestion(last text block)` (D15). |
+| `custom-title` | Title shown in the desktop Code tab; preferred over everything else. Field name to be confirmed from a fixture (recon 2026-09-28 saw the record type only). |
 | `ai-title` (`aiTitle`) | Title (preferred over the first prompt). |
+| `last-prompt`, `attachment`, `agent-name`, `bridge-session`, `atis-latch` | Activity only (seen in recon 2026-09-28). Never read `last-prompt` content. |
 | any record with `isSidechain: true` | Activity for the parent session only (sub-agent; D12 analogue). |
 | everything else (`system`, `summary`, `file-history-snapshot`, …) | Activity only. |
 
@@ -574,7 +576,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 - Only the high-level, low-frequency events are used, so the hook adds no cost to individual tool calls.
 
 **P3.4 `ClaudeCodeTaskProvider`**
-- Watches `projects/**/*.jsonl` (sessions modified in the last 24 h; `DirectoryWatcher` with `IncludeSubdirectories`), plus `claude-hooks.jsonl`; reconciles every 20 s; recovers state from transcript tails on start-up; combines evidence per §5.3. Titles: `ai-title` → first prompt (sanitised, 48 characters) → `"Claude · " + working-folder leaf`. `SessionReference` = session id.
+- Watches `projects/**/*.jsonl` (sessions modified in the last 24 h; `DirectoryWatcher` with `IncludeSubdirectories`), plus `claude-hooks.jsonl`; reconciles every 20 s; recovers state from transcript tails on start-up; combines evidence per §5.3. Titles: `custom-title` → `ai-title` → first prompt (sanitised, 48 characters) → `"Claude · " + working-folder leaf`. `SessionReference` = session id.
 - Tests (temp folders + FakeTimeProvider): discovery of two sessions; hook permission event raises Confirmed attention and a later transcript record clears it; no hook file → transcript-only behaviour; sidechain records do not create tasks; restart recovery.
 
 **P3.5 Dismiss control** (moved from the old Phase 4)

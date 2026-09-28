@@ -79,9 +79,14 @@ function Get-SafeRelativePath([string]$root, [string]$fullPath) {
     $rel = $fullPath.Substring($root.Length).TrimStart('\', '/')
     $parts = $rel -split '[\\/]'
     $out = @()
+    $maskNext = $false
     foreach ($p in $parts) {
         if ($NoiseDirs -contains $p) { return $null }
+        # Claude Code names each project folder after the working-folder path
+        # (e.g. C--Users-name-Project), so never show the segment after 'projects'.
+        if ($maskNext) { $out += '<project>'; $maskNext = $false; continue }
         $out += (Get-SafeSegment $p)
+        if ($p -eq 'projects') { $maskNext = $true }
         if ($PrivateDirs -contains $p) { $out += '<private>'; break }
     }
     return ($out -join '/')
