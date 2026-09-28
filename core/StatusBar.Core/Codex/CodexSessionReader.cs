@@ -174,7 +174,7 @@ internal sealed class CodexSessionReader : IDisposable
 
     // Turn state, question flag and pending-call count only.
     static string Describe(CodexSessionState state) =>
-        $"turn={state.Turn}, question={(state.EndedWithQuestion ? "yes" : "no")}, pending={state.PendingCalls.Count}";
+        $"turn={state.Turn}, question={(state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "yes" : "no")}, pending={state.PendingCalls.Count}";
 
     // Rollout files are named rollout-<timestamp>-<uuid>.jsonl; the uuid matches the thread id.
     internal static string FileKeyFromPath(string path)

@@ -215,6 +215,15 @@ internal static class CodexRolloutParser
         if (string.IsNullOrWhiteSpace(callId)) return;
 
         var name = ReadString(payload, "name");
+        if (string.Equals(name, "request_user_input_async", StringComparison.Ordinal))
+        {
+            // ⚠️ A-X4 Recon 2026-09-28: the Codex app posts a structured question with this call, its
+            // output is recorded at once and the turn then completes while the question card stays
+            // open. So it is not a pending call; the turn is flagged and judged when it completes.
+            state.AskedStructuredQuestion = true;
+            return;
+        }
+
         if (string.Equals(name, "request_user_input", StringComparison.Ordinal))
         {
             // ⚠️ A-X4 This pending input request record remains unverified on Steve's setup.
@@ -262,6 +271,8 @@ internal static class CodexRolloutParser
         state.Turn = CodexTurnStatus.Running;
         state.HasSeenTurnEvent = true;
         state.EndedWithQuestion = false;
+        state.AskedStructuredQuestion = false;
+        state.EndedWithStructuredQuestion = false;
         state.TurnId = null;
         state.AbortReason = null;
         state.PendingCalls.Clear();
@@ -277,13 +288,16 @@ internal static class CodexRolloutParser
             // ⚠️ A-X8 A non-null error object distinguishes failed turns; never inspect its message.
             state.Turn = CodexTurnStatus.Failed;
             state.EndedWithQuestion = false;
+            state.EndedWithStructuredQuestion = false;
         }
         else
         {
             state.Turn = CodexTurnStatus.Completed;
             // D15: reduce the terminal message to one boolean and discard the text with this JSON record.
             state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(ReadString(payload, "last_agent_message"));
+            state.EndedWithStructuredQuestion = state.AskedStructuredQuestion;
         }
+        state.AskedStructuredQuestion = false;
         state.PendingCalls.Clear();
     }
 
@@ -292,6 +306,8 @@ internal static class CodexRolloutParser
         state.HasSeenTurnEvent = true;
         state.Turn = CodexTurnStatus.Aborted;
         state.EndedWithQuestion = false;
+        state.AskedStructuredQuestion = false;
+        state.EndedWithStructuredQuestion = false;
         state.AbortReason = NormalizeAbortReason(ReadString(payload, "reason"));
         state.PendingCalls.Clear();
     }

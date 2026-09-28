@@ -552,6 +552,19 @@ if ($WatchSeconds -gt 0) {
             $files += Get-ChildItem -LiteralPath $sd -Recurse -File -Filter '*.jsonl' -ErrorAction SilentlyContinue |
                 Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-1) } | ForEach-Object { @{ Path = $_.FullName; Source = 'codex' } }
         }
+        # Claude Code (desktop Code tab and terminal): per-session transcripts and the small
+        # per-process status files. Only record signatures and the status value are written.
+        $claudeHome = Join-Path $ProfilePath '.claude'
+        $cp = Join-Path $claudeHome 'projects'
+        if (Test-Path -LiteralPath $cp) {
+            $files += Get-ChildItem -LiteralPath $cp -Recurse -Depth 3 -File -Filter '*.jsonl' -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-1) } | ForEach-Object { @{ Path = $_.FullName; Source = 'claude-code' } }
+        }
+        $cs = Join-Path $claudeHome 'sessions'
+        if (Test-Path -LiteralPath $cs) {
+            $files += Get-ChildItem -LiteralPath $cs -File -Filter '*.json' -ErrorAction SilentlyContinue |
+                Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-1) } | ForEach-Object { @{ Path = $_.FullName; Source = 'claude-status' } }
+        }
         foreach ($r in $roots) {
             if (Test-Path -LiteralPath $r) {
                 $files += Get-ChildItem -LiteralPath $r -Recurse -File -Filter 'audit.jsonl' -ErrorAction SilentlyContinue |
@@ -576,6 +589,21 @@ if ($WatchSeconds -gt 0) {
                 $path = $f.Path
                 $id = Get-ShortId $path
                 try { $info = Get-Item -LiteralPath $path -ErrorAction Stop } catch { continue }
+
+                if ($f.Source -eq 'claude-status') {
+                    if (-not $metaStamps.ContainsKey($path)) { $metaStamps[$path] = $info.LastWriteTimeUtc; continue }
+                    if ($metaStamps[$path] -ne $info.LastWriteTimeUtc) {
+                        $metaStamps[$path] = $info.LastWriteTimeUtc
+                        $status = '<unreadable>'
+                        try {
+                            $o = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+                            $v = Get-Prop $o 'status'
+                            $status = if ($v -is [string] -and $v -match $EnumLikePattern) { $v } elseif ($null -eq $v) { '<none>' } else { '<redacted>' }
+                        } catch { }
+                        $timeline.Add((Get-Date -Format 'HH:mm:ss') + ' | claude-status | ' + $id + ' | status=`' + $status + '`')
+                    }
+                    continue
+                }
 
                 if ($f.Source -eq 'cowork-meta') {
                     if (-not $metaStamps.ContainsKey($path)) { $metaStamps[$path] = $info.LastWriteTimeUtc; continue }

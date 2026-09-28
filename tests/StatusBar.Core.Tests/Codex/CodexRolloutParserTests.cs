@@ -17,6 +17,8 @@ public class CodexRolloutParserTests
     [InlineData("provisional-pending-user-input.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your input", null)]
     [InlineData("provisional-approval-resolved.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-approval-policy-never.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-user-input-async-turn-complete.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your answer", null)]
+    [InlineData("provisional-user-input-async-answered.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-user-input-policy-never.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your input", null)]
     [InlineData("provisional-malformed-and-truncated.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-paginated-turn.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]

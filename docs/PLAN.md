@@ -381,6 +381,7 @@ Parser input is one JSONL line at a time; unknown record types are counted in `F
 | `event_msg/task_complete` or `turn_complete` | If `payload.error` is a non-null object → `Turn = Failed` (recon 2026-09-28: `{message, codex_error_info}`; never read or log the message). Otherwise `Turn = Completed` and set `EndedWithQuestion = QuestionDetector.EndsWithQuestion(payload.last_agent_message)` (D15; text discarded immediately). Clear pending. |
 | `event_msg/turn_aborted` | `Turn = Aborted`, record reason, clear pending. |
 | `response_item/function_call` where `name == "request_user_input"` | Add pending `{call_id, kind: Input, since: ts}`. |
+| `response_item/function_call` where `name == "request_user_input_async"` | Set `AskedStructuredQuestion` for this turn (not a pending call: recon 2026-09-28 shows its output written at once, then `task_complete` while the question card stays open). On `task_complete` without error it becomes `EndedWithStructuredQuestion` → `NeedsAttention / Inferred`, reason "Waiting for your answer", until the next `task_started` or `QuestionAttentionExpiry`. Arguments are never read. ⚠️ A-X4 |
 | `response_item/function_call` whose `arguments` JSON has `sandbox_permissions == "require_escalated"` | Add pending `{call_id, kind: Approval, since: ts}`. |
 | `response_item/function_call_output` (or `custom_tool_call_output`) | Remove pending by `call_id`. |
 | `response_item/custom_tool_call` (`name: "exec"`, free-form `input`) | Activity only. Never read or store `input`. |
@@ -681,7 +682,7 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-X1 | Codex desktop writes rollouts to `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex discovery | Setting override; recon path | Confirmed |
 | A-X2 | `task_started` / `task_complete` / `turn_aborted` records mark turn boundaries | Codex parser | Fall back to recency (`Working/Inferred`) | Confirmed |
 | A-X3 | Escalated commands carry `sandbox_permissions: require_escalated` in the call arguments | Codex attention | Attention missed; document | Refuted for Steve's setup |
-| A-X4 | `request_user_input` is recorded as a `function_call` | Codex attention | Attention missed; document | Unverified |
+| A-X4 | Codex structured questions are recorded as a `function_call`; answering starts a new turn | Codex attention | Attention missed, or stays until expiry/dismiss; document | **Partly confirmed 2026-09-28**: the Codex app uses `request_user_input_async` (output at once, then `task_complete`). That the answer starts a new turn is unverified |
 | A-X5 | `session_index.jsonl` holds user-visible thread names | Codex titles | First-message fallback | Confirmed |
 | A-X6 | Sub-agent sessions are identifiable from `session_meta.source` and name their parent | D12 | Count separately | Unverified |
 | A-X8 | `task_complete` carries `last_agent_message` and, on failure, an `error` object | D15, Codex Failed state | Question flag and Failed state not shown | Confirmed |
@@ -689,7 +690,7 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-K1 | Claude Code transcripts are in `~/.claude/projects/<folder>/<session>.jsonl` | Claude Code discovery | Settings override; recon path | **Confirmed for desktop Code tab with default Claude home; terminal and `CLAUDE_CONFIG_DIR` override untested** |
 | A-K2 | Transcript records: `type`, `message.stop_reason`, `isSidechain`, `ai-title` | Claude Code turn state and titles | Recency fallback (`Working/Inferred`) | Unverified; only top-level type signatures observed |
 | A-K3 | Interruptions are recorded as a user message starting `[Request interrupted by user` | Stopped state | Shows Complete instead of Stopped | Unverified |
-| A-K5 | A structured question or plan approval in Claude Code is an `assistant` `tool_use` named `AskUserQuestion` / `ExitPlanMode` with no `tool_result` until answered | Claude Code structured-question attention | Hooks (`elicitation_dialog`) if enabled; otherwise shows Working | Unverified in Claude Code (confirmed for Cowork, A-C5) |
+| A-K5 | A structured question or plan approval in Claude Code is an `assistant` `tool_use` named `AskUserQuestion` / `ExitPlanMode` with no `tool_result` until answered | Claude Code structured-question attention | Hooks (`elicitation_dialog`) if enabled; otherwise shows Working | **Confirmed 2026-09-28** (Steve's log on build `bb23e91`: ⚠ "Waiting for your answer" while the question was open, cleared on answer) |
 | A-K4 | Sessions started from the desktop Code tab run user hooks from `~/.claude/settings.json` | Confirmed Claude attention | Transcript-only (permission waits show as Working) | Unverified |
 | A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override | Confirmed (MSIX root only) |
 | A-C2 | Metadata `local_<id>.json` contains `title`, `lastActivityAt`, `isArchived`, `error` | Titles, recency | Titles "Claude task"; recency from file time | Confirmed (no `error` seen) |

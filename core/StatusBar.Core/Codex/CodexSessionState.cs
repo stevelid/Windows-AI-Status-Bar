@@ -36,6 +36,12 @@ internal sealed class CodexSessionState
     internal DateTimeOffset LastActivity { get; set; }
     internal bool HasActivity { get; set; }
     internal bool EndedWithQuestion { get; set; }
+
+    /// <summary>The running turn posted a structured question card (request_user_input_async).</summary>
+    internal bool AskedStructuredQuestion { get; set; }
+
+    /// <summary>The last turn completed with a structured question card still open for Steve.</summary>
+    internal bool EndedWithStructuredQuestion { get; set; }
     internal string? TurnId { get; set; }
     internal string? AbortReason { get; set; }
     internal string? TitleCandidate { get; set; }

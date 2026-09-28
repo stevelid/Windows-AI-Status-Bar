@@ -68,6 +68,14 @@ internal static class CodexTaskMapper
 
         return state.Turn switch
         {
+            // ⚠️ A-X4 The answer to a question card is expected to start a new turn, which clears this.
+            CodexTurnStatus.Completed when state.EndedWithStructuredQuestion && inactivity < timings.QuestionAttentionExpiry => task with
+            {
+                Status = AgentTaskStatus.NeedsAttention,
+                Confidence = StateConfidence.Inferred,
+                AttentionReason = "Waiting for your answer",
+                EvidenceKey = "question:" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+            },
             CodexTurnStatus.Completed when state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry => task with
             {
                 Status = AgentTaskStatus.NeedsAttention,
