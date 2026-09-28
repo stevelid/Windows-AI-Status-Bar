@@ -4,12 +4,24 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
+  core-linux:
+    # Fast feedback for the platform-neutral core (parsers, state machine, docking geometry).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build solution (compile-only for Windows projects)
+        run: dotnet build WindowsAIStatusBar.slnx -c Release --nologo
+      - name: Core tests
+        run: dotnet test tests/StatusBar.Core.Tests/StatusBar.Core.Tests.csproj -c Release --nologo
+
   windows:
     runs-on: windows-latest
     steps:
@@ -19,7 +31,16 @@ jobs:
           dotnet-version: 10.0.x
       - name: Build widget
         run: dotnet build ClaudeUsageWidget.csproj -c Release --nologo
+      - name: Core tests
+        run: dotnet test tests/StatusBar.Core.Tests/StatusBar.Core.Tests.csproj -c Release --nologo
       - name: Build mock Codex app-server
         run: dotnet publish tests/CodexAppServerMock/CodexAppServerMock.csproj -c Release -r win-x64 --self-contained false -o tests/mock-out
       - name: Run smoke tests
         run: dotnet run --project tests/ClaudeUsageWidget.SmokeTests/ClaudeUsageWidget.SmokeTests.csproj -c Release -- tests/mock-out/CodexAppServerMock.exe
+      - name: Publish single-file exe for manual testing
+        run: dotnet publish ClaudeUsageWidget.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: status-bar-win-x64
+          path: dist/
+          retention-days: 14

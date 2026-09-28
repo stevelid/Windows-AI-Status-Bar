@@ -12,11 +12,19 @@
     <Version>2.1.1</Version>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <!-- Allows compile-only builds on Linux/macOS (CI and cloud agents). The app still runs only on Windows. -->
+    <EnableWindowsTargeting Condition="'$(OS)' != 'Windows_NT'">true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="core\**\*.cs" />
+    <Compile Remove="tools\**\*.cs" />
     <InternalsVisibleTo Include="ClaudeUsageWidget.SmokeTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="core\StatusBar.Core\StatusBar.Core.csproj" />
   </ItemGroup>
 
 </Project>

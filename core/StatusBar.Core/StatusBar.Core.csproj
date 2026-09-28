@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Platform-neutral core: normalized task model, provider parsers and the state service.
+    It must not reference WPF, WinForms or Windows-only APIs so that its tests run on any OS
+    (including Linux CI and cloud coding agents).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>StatusBar.Core</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="StatusBar.Core.Tests" />
+  </ItemGroup>
+
+</Project>

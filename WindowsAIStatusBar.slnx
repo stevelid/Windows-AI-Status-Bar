@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/core/">
+    <Project Path="core/StatusBar.Core/StatusBar.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ClaudeUsageWidget.SmokeTests/ClaudeUsageWidget.SmokeTests.csproj" />
+    <Project Path="tests/CodexAppServerMock/CodexAppServerMock.csproj" />
+    <Project Path="tests/StatusBar.Core.Tests/StatusBar.Core.Tests.csproj" />
+    <Project Path="tests/WidgetVisualHarness/WidgetVisualHarness.csproj" />
+  </Folder>
+  <Project Path="ClaudeUsageWidget.csproj" />
+</Solution>

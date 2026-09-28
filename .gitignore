@@ -15,3 +15,9 @@ tests/mock-out/
 tokens.dat
 auth.json
 settings.json
+
+# Claude Code project settings must be tracked (the rule above ignores every settings.json)
+!.claude/settings.json
+
+# Recon output may contain machine details; commit only reviewed files under docs/recon/
+ai-status-recon-*/

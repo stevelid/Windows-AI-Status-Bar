@@ -25,8 +25,9 @@ public record UpdateProgress(UpdateStage Stage, long CompletedBytes = 0, long? T
 /// <summary>Checks GitHub releases for a newer version and self-updates by swapping the exe.</summary>
 public static class UpdateService
 {
-    const string Owner = "Kilin-570";
-    const string Repo = "AIUsageWidget";
+    // Points at this fork. The upstream repo would otherwise replace this build with the upstream app.
+    const string Owner = "stevelid";
+    const string Repo = "Windows-AI-Status-Bar";
     const string AssetName = "ClaudeUsageWidget-win-x64.zip";
     const string ChecksumAssetName = "SHA256SUMS.txt";
     const int BufferSize = 128 * 1024;
