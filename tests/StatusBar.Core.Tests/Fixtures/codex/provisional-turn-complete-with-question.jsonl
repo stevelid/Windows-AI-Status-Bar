@@ -1,2 +1,2 @@
 {"timestamp":"2026-01-01T12:00:00Z","type":"event_msg","payload":{"type":"task_started"}}
-{"timestamp":"2026-01-01T12:00:01Z","type":"event_msg","payload":{"type":"task_complete"}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"I have drafted the summary. Which format would you like?"}}

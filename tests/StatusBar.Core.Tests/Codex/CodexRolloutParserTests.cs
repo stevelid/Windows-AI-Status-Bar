@@ -40,10 +40,15 @@ public class CodexRolloutParserTests
         if (fixture == "provisional-malformed-and-truncated.jsonl") Assert.Equal(1, drift.MalformedCount);
     }
 
-    [Fact]
-    public void Approval_fixture_only_uses_the_permission_marker_at_test_time()
+    [Theory]
+    // Real rollouts store arguments as a JSON string; accept an object too in case the format changes.
+    [InlineData("\"{\\\"sandbox_permissions\\\":\\\"require_escalated\\\"}\"")]
+    [InlineData("{\"sandbox_permissions\":\"require_escalated\"}")]
+    public void Escalated_call_is_pending_approval_whether_arguments_are_a_string_or_an_object(string argumentsJson)
     {
-        var line = AddApprovalMarker(File.ReadAllLines(FixturePath("provisional-pending-escalated-approval.jsonl"))[1]);
+        var line = "{\"timestamp\":\"2026-01-01T12:00:01Z\",\"type\":\"response_item\",\"payload\":" +
+                   "{\"type\":\"function_call\",\"call_id\":\"call-approval\",\"name\":\"exec\",\"arguments\":" +
+                   argumentsJson + "}}";
         var state = new CodexSessionState();
         var drift = new FormatDriftCounter();
         CodexRolloutParser.Apply(state, line, FallbackTime, drift);
@@ -153,23 +158,9 @@ public class CodexRolloutParserTests
         var drift = new FormatDriftCounter();
         var lines = File.ReadAllLines(FixturePath(fixture));
         foreach (var line in lines)
-        {
-            var applied = fixture switch
-            {
-                "provisional-pending-escalated-approval.jsonl" or "provisional-approval-resolved.jsonl"
-                    when line.Contains("\"name\":\"exec\"", StringComparison.Ordinal) => AddApprovalMarker(line),
-                "provisional-turn-complete-with-question.jsonl"
-                    when line.Contains("\"type\":\"task_complete\"", StringComparison.Ordinal) =>
-                        line.Replace("\"type\":\"task_complete\"", "\"type\":\"task_complete\",\"last_agent_message\":\"?\"", StringComparison.Ordinal),
-                _ => line,
-            };
-            CodexRolloutParser.Apply(state, applied, FallbackTime, drift);
-        }
+            CodexRolloutParser.Apply(state, line, FallbackTime, drift);
         return (state, drift);
     }
-
-    static string AddApprovalMarker(string line) =>
-        line.Replace("\"name\":\"exec\"", "\"name\":\"exec\",\"arguments\":{\"sandbox_permissions\":\"require_escalated\"}", StringComparison.Ordinal);
 
     static string FixturePath(string fixture) => Path.Combine(
         AppContext.BaseDirectory,

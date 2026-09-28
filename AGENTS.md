@@ -23,7 +23,7 @@ WPF projects compile on Linux (`EnableWindowsTargeting`) but cannot run there. W
 
 ## Rules
 
-- Never log, persist or put in test fixtures: prompts, transcript text, tool arguments, session file paths, tokens, cookies or account identifiers. Titles are truncated and kept in memory only.
+- Never log, persist or put in test fixtures any *real* prompts, transcript text, tool arguments, session file paths, tokens, cookies or account identifiers. Titles are truncated and kept in memory only. Fixtures **should** contain the real field names with short made-up placeholder values (e.g. `"last_agent_message":"Which format would you like?"`), so each fixture file on its own proves the format; do not patch fixture lines inside tests.
 - Every rule that relies on undocumented Codex/Claude behaviour cites its assumption ID from `docs/PLAN.md` §8 in a comment, e.g. `// ⚠️ A-C5`.
 - JSON property names and log strings stay inside the provider's parser class. View code consumes `AgentTask`, `UsageSnapshot` and `StatusBarState` only.
 - Use `TimeProvider` for all time in Core; tests use `FakeTimeProvider`.
