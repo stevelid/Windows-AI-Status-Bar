@@ -16,7 +16,7 @@ Clicking the strip expands a small pane with reset times and the list of tasks.
 
 ## Status
 
-Under development. See [`docs/PLAN.md`](docs/PLAN.md) for the implementation plan and [`docs/BRIEF.md`](docs/BRIEF.md) for the product brief.
+Under development. See [`docs/PLAN.md`](docs/PLAN.md) for the implementation plan, [`docs/PROGRESS.md`](docs/PROGRESS.md) for progress, [`docs/BRIEF.md`](docs/BRIEF.md) for the product brief and [`docs/AGENT_PROMPT.md`](docs/AGENT_PROMPT.md) for the prompts that drive the implementation agent. Phase 0 steps for Steve are in [`docs/recon/README.md`](docs/recon/README.md).
 
 ## Origin and licence
 
