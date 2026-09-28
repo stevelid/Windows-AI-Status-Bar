@@ -17,7 +17,7 @@ public partial class App : System.Windows.Application
     AgentStateService? _agentStateService;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
-    long _detailsPaneClosedAtMs = long.MinValue;
+    long? _detailsPaneClosedAtMs;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
     Settings _settings = null!;
@@ -556,14 +556,32 @@ public partial class App : System.Windows.Application
         UpdateStrip();
     }
 
+    readonly Dictionary<UsageSource, string> _loggedUsageStatus = new();
+
     void OnUsageChanged(UsageSnapshot snapshot)
     {
+        LogUsageStatusChange(snapshot);
         Dispatcher.BeginInvoke(() =>
         {
             if (_exitStarted || _usageMonitor is null) return;
             UpdateTray();
             UpdateStrip();
         });
+    }
+
+    // Logs provider availability transitions only (status code and exception type, never
+    // messages or values), so a slow or failed start can be diagnosed from log.txt.
+    void LogUsageStatusChange(UsageSnapshot snapshot)
+    {
+        var status = snapshot.ErrorType is null
+            ? $"{snapshot.StatusCode}/{snapshot.Health}"
+            : $"{snapshot.StatusCode}/{snapshot.Health}/{snapshot.ErrorType}";
+        lock (_loggedUsageStatus)
+        {
+            if (_loggedUsageStatus.TryGetValue(snapshot.Source, out var previous) && previous == status) return;
+            _loggedUsageStatus[snapshot.Source] = status;
+        }
+        Log.Write($"Usage {snapshot.Source}: {status}");
     }
 
     void OnTaskStateChanged(StatusBarState state)
@@ -599,7 +617,10 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        if (Environment.TickCount64 - _detailsPaneClosedAtMs < PaneReopenGuardMs) return;
+        // Null until the pane has closed once. (A long.MinValue sentinel overflowed the
+        // subtraction and blocked every open.)
+        if (_detailsPaneClosedAtMs is long closedAt &&
+            Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
         _detailsPane.Closed += (_, _) =>

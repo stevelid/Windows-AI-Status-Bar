@@ -17,4 +17,5 @@ public sealed record UsageSnapshot(
     IReadOnlyList<UsageWindow> Windows,
     UsageHealth Health,
     DateTimeOffset? LastSuccess,
-    string StatusCode);
+    string StatusCode,
+    string? ErrorType = null);

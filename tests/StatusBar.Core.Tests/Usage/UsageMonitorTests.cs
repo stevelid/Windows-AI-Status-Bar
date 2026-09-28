@@ -62,7 +62,7 @@ public class UsageMonitorTests
     }
 
     [Fact]
-    public async Task General_failures_back_off_from_90_to_180_to_360_and_cap_at_600_seconds()
+    public async Task Never_loaded_provider_retries_twice_after_15_seconds_then_backs_off_to_600()
     {
         var provider = new TestProvider(
             UsageSource.Codex,
@@ -76,7 +76,7 @@ public class UsageMonitorTests
         await AllowLoopToScheduleAsync();
 
         var calls = 1;
-        foreach (var delaySeconds in new[] { 90, 180, 360, 600 })
+        foreach (var delaySeconds in new[] { 15, 15, 90, 180, 360, 600 })
         {
             var before = monitor.Current[UsageSource.Codex];
             var nextFailure = WaitForSnapshotChangeAsync(monitor, UsageSource.Codex, before);
@@ -91,7 +91,9 @@ public class UsageMonitorTests
             await AllowLoopToScheduleAsync();
         }
 
-        Assert.Equal(5, provider.Calls);
+        Assert.Equal(7, provider.Calls);
+        // Only the exception type is recorded, never its message.
+        Assert.Equal(nameof(InvalidOperationException), monitor.Current[UsageSource.Codex].ErrorType);
     }
 
     [Theory]

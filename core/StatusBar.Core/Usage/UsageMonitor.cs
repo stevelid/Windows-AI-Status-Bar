@@ -171,6 +171,8 @@ public sealed class UsageMonitor : IAsyncDisposable
                     _time.GetUtcNow(),
                     "Ready"));
 
+                runtime.QuickRetriesLeft = 0;
+
                 backoff = ReadBaseInterval();
                 nextDelay = backoff;
             }
@@ -191,7 +193,7 @@ public sealed class UsageMonitor : IAsyncDisposable
             {
                 return;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 var current = ReadSnapshot(runtime.Provider.Source);
                 var health = current.Windows.Count > 0 ? UsageHealth.Stale : UsageHealth.Unavailable;
@@ -199,11 +201,23 @@ public sealed class UsageMonitor : IAsyncDisposable
                 {
                     Health = health,
                     StatusCode = health == UsageHealth.Stale ? "RefreshFailed" : "Unavailable",
+                    // Type name only: exception messages can contain account or network details.
+                    ErrorType = ex.GetType().Name,
                 });
 
-                var baseInterval = ReadBaseInterval();
-                nextDelay = ClampDelay(backoff, baseInterval);
-                backoff = DoubleBackoff(nextDelay, baseInterval);
+                if (health == UsageHealth.Unavailable && runtime.QuickRetriesLeft > 0)
+                {
+                    // A provider that has never loaded retries quickly, so one transient failure
+                    // at start-up does not leave the strip blank for a full refresh interval.
+                    runtime.QuickRetriesLeft--;
+                    nextDelay = QuickRetryDelay;
+                }
+                else
+                {
+                    var baseInterval = ReadBaseInterval();
+                    nextDelay = ClampDelay(backoff, baseInterval);
+                    backoff = DoubleBackoff(nextDelay, baseInterval);
+                }
             }
             finally
             {
@@ -303,6 +317,9 @@ public sealed class UsageMonitor : IAsyncDisposable
 
     static TaskCompletionSource<bool> NewRefreshSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+    internal static readonly TimeSpan QuickRetryDelay = TimeSpan.FromSeconds(15);
+    const int InitialQuickRetries = 2;
+
     sealed class ProviderRuntime(IUsageProvider provider)
     {
         public IUsageProvider Provider { get; } = provider;
@@ -311,5 +328,6 @@ public sealed class UsageMonitor : IAsyncDisposable
         public TaskCompletionSource<bool> RefreshSignal { get; set; } = NewRefreshSignal();
         public bool IsFetching { get; set; }
         public Task? LoopTask { get; set; }
+        public int QuickRetriesLeft { get; set; } = InitialQuickRetries;
     }
 }
