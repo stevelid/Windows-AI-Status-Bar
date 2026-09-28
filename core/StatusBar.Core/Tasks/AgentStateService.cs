@@ -12,6 +12,7 @@ public sealed class AgentStateService : IAsyncDisposable
     readonly Dictionary<AgentProvider, ProviderTaskSnapshot> _snapshots = new();
     readonly HashSet<AgentProvider> _receivedFirstUpdate = new();
     readonly DismissalStore _dismissals;
+    readonly NotificationGate _notifications;
     readonly TimeProvider _time;
     readonly StateServiceOptions _options;
     readonly ITimer _expiryTimer;
@@ -22,7 +23,7 @@ public sealed class AgentStateService : IAsyncDisposable
     /// <summary>Raised when tasks or provider health visible to the UI changes.</summary>
     public event Action<StatusBarState>? StateChanged;
 
-    /// <summary>Raised when a task enters NeedsAttention after the provider's initial snapshot.</summary>
+    /// <summary>Raised when a new attention evidence key is ready for notification.</summary>
     public event Action<AgentTask>? EnteredNeedsAttention;
 
     /// <summary>The latest merged immutable state.</summary>
@@ -36,7 +37,8 @@ public sealed class AgentStateService : IAsyncDisposable
         IEnumerable<IAgentTaskProvider> providers,
         TimeProvider time,
         StateServiceOptions options,
-        DismissalStore? dismissalStore = null)
+        DismissalStore? dismissalStore = null,
+        NotificationGate? notificationGate = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(time);
@@ -55,6 +57,7 @@ public sealed class AgentStateService : IAsyncDisposable
         _time = time;
         _options = options;
         _dismissals = dismissalStore ?? new DismissalStore(time);
+        _notifications = notificationGate ?? new NotificationGate(time);
         _expiryTimer = time.CreateTimer(
             OnExpiryTimer,
             null,
@@ -78,6 +81,7 @@ public sealed class AgentStateService : IAsyncDisposable
         lock (_gate)
         {
             _current = BuildState(_time.GetUtcNow());
+            _notifications.Seed(_current.Tasks);
             ScheduleNextExpiry(_time.GetUtcNow());
         }
 
@@ -200,11 +204,21 @@ public sealed class AgentStateService : IAsyncDisposable
             }
             var isInitialUpdate = _receivedFirstUpdate.Add(expectedProvider);
             changed = RebuildIfChanged(_time.GetUtcNow());
+            if (isInitialUpdate)
+                _notifications.Seed(_current.Tasks);
+
             entered = isInitialUpdate || changed is null
                 ? Array.Empty<AgentTask>()
                 : _current.Tasks
                     .Where(task => task.Status == AgentTaskStatus.NeedsAttention &&
-                        !previous.Tasks.Any(old => old.Id == task.Id && old.Status == AgentTaskStatus.NeedsAttention))
+                        !previous.Tasks.Any(old =>
+                            old.Id == task.Id &&
+                            old.Status == AgentTaskStatus.NeedsAttention &&
+                            string.Equals(
+                                EvidenceKeyFor(old),
+                                EvidenceKeyFor(task),
+                                StringComparison.Ordinal)))
+                    .Where(_notifications.ShouldNotify)
                     .ToArray();
         }
 

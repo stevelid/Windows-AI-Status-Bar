@@ -7,22 +7,26 @@ using System.Text.Json.Nodes;
 
 namespace StatusBar.Core.Tasks;
 
-/// <summary>Stores dismissed task evidence in memory and, optionally, in an app-owned JSON file.</summary>
-public sealed class DismissalStore
+/// <summary>De-duplicates attention notifications for each task evidence key.</summary>
+/// <remarks>
+/// Only a digest of the task and evidence identifiers is persisted. Existing state-file
+/// sections are retained so this can share the file with <see cref="DismissalStore"/>.
+/// </remarks>
+public sealed class NotificationGate
 {
     static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
     const long MaximumStateFileBytes = 1024 * 1024;
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     readonly object _gate = new();
-    readonly Dictionary<string, DateTimeOffset> _expiresAt = new(StringComparer.Ordinal);
+    readonly Dictionary<string, DateTimeOffset> _notifiedAt = new(StringComparer.Ordinal);
     readonly TimeProvider _time;
     readonly string? _filePath;
     JsonObject _document = new();
     bool _canWrite = true;
 
-    /// <summary>Creates a dismissal store, optionally persisted to the given state file.</summary>
-    public DismissalStore(TimeProvider time, string? filePath = null)
+    /// <summary>Creates a gate with optional persistence in the app state file.</summary>
+    public NotificationGate(TimeProvider time, string? filePath = null)
     {
         ArgumentNullException.ThrowIfNull(time);
         _time = time;
@@ -30,27 +34,47 @@ public sealed class DismissalStore
         Load();
     }
 
-    internal bool Contains(string taskId, string evidenceKey)
+    /// <summary>
+    /// Seeds attention already visible at startup. Seeded evidence is shown in the pane but
+    /// does not produce a notification until a new evidence key arrives.
+    /// </summary>
+    public void Seed(IEnumerable<AgentTask> tasks)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidenceKey);
-        lock (_gate)
-        {
-            if (PruneExpired(_time.GetUtcNow())) Persist();
-            return _expiresAt.ContainsKey(ComputeKey(taskId, evidenceKey));
-        }
-    }
-
-    internal void Dismiss(string taskId, string evidenceKey)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(evidenceKey);
+        ArgumentNullException.ThrowIfNull(tasks);
         lock (_gate)
         {
             var now = _time.GetUtcNow();
-            PruneExpired(now);
-            _expiresAt[ComputeKey(taskId, evidenceKey)] = now + Lifetime;
+            var changed = PruneExpired(now);
+            foreach (var task in tasks)
+            {
+                if (task is null || task.Status != AgentTaskStatus.NeedsAttention) continue;
+                changed |= _notifiedAt.TryAdd(ComputeKey(task.Id, EvidenceKeyFor(task)), now);
+            }
+
+            if (changed) Persist();
+        }
+    }
+
+    /// <summary>Claims a new attention evidence key for notification.</summary>
+    public bool ShouldNotify(AgentTask task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.Status != AgentTaskStatus.NeedsAttention) return false;
+
+        lock (_gate)
+        {
+            var now = _time.GetUtcNow();
+            var changed = PruneExpired(now);
+            var key = ComputeKey(task.Id, EvidenceKeyFor(task));
+            if (_notifiedAt.ContainsKey(key))
+            {
+                if (changed) Persist();
+                return false;
+            }
+
+            _notifiedAt[key] = now;
             Persist();
+            return true;
         }
     }
 
@@ -73,7 +97,7 @@ public sealed class DismissalStore
             }
 
             _document = document;
-            if (!document.TryGetPropertyValue("dismissals", out var node)) return;
+            if (!document.TryGetPropertyValue("notifications", out var node)) return;
             if (node is not JsonArray entries)
             {
                 _canWrite = false;
@@ -85,31 +109,36 @@ public sealed class DismissalStore
             {
                 if (!ReadString(item, "key", out var key) ||
                     key.Length != 64 || !key.All(Uri.IsHexDigit) ||
-                    !ReadString(item, "expiresAt", out var expiresText) ||
-                    !DateTimeOffset.TryParse(expiresText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expiresAt) ||
-                    expiresAt <= now)
+                    !ReadString(item, "notifiedAt", out var notifiedText) ||
+                    !DateTimeOffset.TryParse(
+                        notifiedText,
+                        CultureInfo.InvariantCulture,
+                        DateTimeStyles.RoundtripKind,
+                        out var notifiedAt) ||
+                    notifiedAt + Lifetime <= now)
                 {
                     continue;
                 }
 
-                _expiresAt[key] = expiresAt;
+                _notifiedAt[key] = notifiedAt;
             }
         }
         catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidOperationException)
+            exception is IOException or UnauthorizedAccessException or JsonException or
+            ArgumentException or InvalidOperationException)
         {
-            // Keep a malformed or unreadable state file intact; dismissals still work for this run.
+            // Keep an unreadable state file intact; the gate still works for this run.
             _canWrite = false;
         }
     }
 
     bool PruneExpired(DateTimeOffset now)
     {
-        var expired = _expiresAt
-            .Where(pair => pair.Value <= now)
+        var expired = _notifiedAt
+            .Where(pair => pair.Value + Lifetime <= now)
             .Select(pair => pair.Key)
             .ToArray();
-        foreach (var key in expired) _expiresAt.Remove(key);
+        foreach (var key in expired) _notifiedAt.Remove(key);
         return expired.Length > 0;
     }
 
@@ -119,16 +148,16 @@ public sealed class DismissalStore
 
         RefreshDocument();
         var entries = new JsonArray();
-        foreach (var pair in _expiresAt.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        foreach (var pair in _notifiedAt.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             entries.Add(new JsonObject
             {
                 ["key"] = pair.Key,
-                ["expiresAt"] = pair.Value.ToString("O", CultureInfo.InvariantCulture),
+                ["notifiedAt"] = pair.Value.ToString("O", CultureInfo.InvariantCulture),
             });
         }
-        _document["dismissals"] = entries;
 
+        _document["notifications"] = entries;
         var directory = Path.GetDirectoryName(_filePath);
         if (string.IsNullOrWhiteSpace(directory)) return;
         var temporaryPath = Path.Combine(directory, "state." + Guid.NewGuid().ToString("N") + ".tmp");
@@ -139,9 +168,10 @@ public sealed class DismissalStore
             File.Move(temporaryPath, _filePath, overwrite: true);
         }
         catch (Exception exception) when (
-            exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or JsonException or InvalidOperationException)
+            exception is IOException or UnauthorizedAccessException or ArgumentException or
+            NotSupportedException or JsonException or InvalidOperationException)
         {
-            // A persistence failure must not stop the user from dismissing a row in this run.
+            // Notification persistence is best effort and must not stop task collection.
         }
         finally
         {
@@ -168,6 +198,11 @@ public sealed class DismissalStore
         catch (JsonException) { }
     }
 
+    static string EvidenceKeyFor(AgentTask task) =>
+        !string.IsNullOrWhiteSpace(task.EvidenceKey)
+            ? task.EvidenceKey
+            : task.Status + ":" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
+
     static string ComputeKey(string taskId, string evidenceKey)
     {
         var taskBytes = Encoding.UTF8.GetBytes(taskId);
@@ -184,7 +219,9 @@ public sealed class DismissalStore
     static bool ReadString(JsonObject value, string propertyName, out string result)
     {
         result = string.Empty;
-        if (value[propertyName] is not JsonValue jsonValue || !jsonValue.TryGetValue<string>(out var found) || found is null)
+        if (value[propertyName] is not JsonValue jsonValue ||
+            !jsonValue.TryGetValue<string>(out var found) ||
+            found is null)
             return false;
         result = found;
         return true;

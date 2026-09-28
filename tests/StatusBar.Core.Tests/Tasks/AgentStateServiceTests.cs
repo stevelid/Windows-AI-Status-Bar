@@ -125,7 +125,7 @@ public sealed class AgentStateServiceTests
         provider.Publish(TaskSnapshot(AgentProvider.Claude,
             [CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.Working, Now.AddSeconds(1))]));
         provider.Publish(TaskSnapshot(AgentProvider.Claude, [attention with { LastActivity = Now.AddSeconds(2) }]));
-        Assert.Equal(new[] { "claude:one" }, attentionEvents);
+        Assert.Empty(attentionEvents);
 
         service.Dismiss("claude:one");
         Assert.Empty(service.Current.Tasks);
@@ -133,13 +133,13 @@ public sealed class AgentStateServiceTests
         provider.Publish(TaskSnapshot(AgentProvider.Claude, [attention with { LastActivity = Now.AddSeconds(3) }]));
 
         Assert.Empty(service.Current.Tasks);
-        Assert.Equal(new[] { "claude:one" }, attentionEvents);
+        Assert.Empty(attentionEvents);
 
         provider.Publish(TaskSnapshot(AgentProvider.Claude,
             [attention with { EvidenceKey = "question:two", LastActivity = Now.AddSeconds(4) }]));
 
         Assert.Single(service.Current.Tasks);
-        Assert.Equal(new[] { "claude:one", "claude:one" }, attentionEvents);
+        Assert.Equal(new[] { "claude:one" }, attentionEvents);
     }
 
     [Fact]

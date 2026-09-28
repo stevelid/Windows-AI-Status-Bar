@@ -41,6 +41,7 @@ public sealed class TrayController : IDisposable
     bool _stripVisible = true;
     bool _paneVisible;
     bool _updateClickPending;
+    Action? _balloonClickAction;
     bool _disposed;
 
     /// <summary>Creates the tray icon and connects menu actions to the application.</summary>
@@ -155,13 +156,23 @@ public sealed class TrayController : IDisposable
     public void ShowBalloonTip(int timeout, string title, string text, WinForms.ToolTipIcon icon)
     {
         _updateClickPending = false;
+        _balloonClickAction = null;
         _icon.ShowBalloonTip(timeout, title, text, icon);
+    }
+
+    /// <summary>Shows an attention balloon whose click opens the details pane.</summary>
+    public void ShowAttention(string title, string text)
+    {
+        _updateClickPending = false;
+        _balloonClickAction = _actions.TogglePane;
+        _icon.ShowBalloonTip(8000, title, text, WinForms.ToolTipIcon.Warning);
     }
 
     /// <summary>Shows an update notice and opens the update flow if the user clicks it.</summary>
     public void ShowUpdateAvailable(string latestVersion)
     {
         _updateClickPending = true;
+        _balloonClickAction = null;
         _icon.ShowBalloonTip(
             8000,
             "Windows AI Status Bar",
@@ -177,6 +188,7 @@ public sealed class TrayController : IDisposable
         L10n.Changed -= ApplyLanguage;
         _icon.MouseClick -= OnIconMouseClick;
         _icon.BalloonTipClicked -= OnBalloonTipClicked;
+        _balloonClickAction = null;
         _autoStart.CheckedChanged -= OnAutoStartCheckedChanged;
         _icon.Visible = false;
         var icon = _icon.Icon;
@@ -245,6 +257,13 @@ public sealed class TrayController : IDisposable
 
     void OnBalloonTipClicked(object? sender, EventArgs e)
     {
+        if (_balloonClickAction is { } action)
+        {
+            _balloonClickAction = null;
+            action();
+            return;
+        }
+
         if (!_updateClickPending) return;
         _updateClickPending = false;
         _actions.CheckForUpdates();

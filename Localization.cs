@@ -32,6 +32,7 @@ public static class L10n
         ["strip_provider_claude"] = ("Claude", "Claude"),
         ["strip_working_tooltip"] = ("{0} 個 AI 任務正在工作", "{0} AI tasks working"),
         ["strip_attention_tooltip"] = ("{0} 個任務需要你的注意", "{0} tasks need your attention"),
+        ["notification_needs_you"] = ("需要你處理", "needs you"),
         ["pane_codex"] = ("CODEX", "CODEX"),
         ["pane_claude"] = ("CLAUDE", "CLAUDE"),
         ["pane_needs_you"] = ("需要你處理", "NEEDS YOU"),

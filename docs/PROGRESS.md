@@ -65,7 +65,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 ## Phase 5 — Interaction polish
 
 - [x] P5.1 Click task to focus app
-- [ ] P5.2 Attention notifications
+- [x] P5.2 Attention notifications
 - [ ] P5.3 Visual polish
 - [ ] P5.4 Multi-monitor and DPI
 - [ ] P5.5 Diagnostic bundle
@@ -91,6 +91,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-28 — P5.2 — Added a restart-safe notification gate keyed by hashed task/evidence identifiers, seeded existing attention on startup, and connected gated events to tray balloons that open the details pane. The shared state file preserves dismissal entries; 152 Core tests pass.
 - 2026-09-28 — P5.1 — Task rows now focus the owning Codex or Claude desktop app through the resolved MSIX AUMID, with a process-window fallback; Claude terminal sessions focus the desktop app as documented. Build clean with apphost generation disabled for the synced workspace; 169 Core tests pass.
 
 - 2026-09-28 — P0.4 (partial) — Recon confirmed Cowork `system/permission_request`/`permission_response` records, so Claude attention is Confirmed from `audit.jsonl` and the notification listener is dropped (D4, D5, §5.2). Codex runs with `approval_policy: never` and records shell calls as `custom_tool_call` `exec`, so Codex attention is limited to input requests (D3, §5.1). Codex is its own MSIX app; activation by AUMID (P5.1). Cowork metadata is ~200 KB and its write time is unreliable; recency comes from `lastActivityAt` and the audit log (P3.1).

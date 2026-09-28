@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application
     CodexTaskProvider? _codexTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
+    AttentionNotifier? _attentionNotifier;
     long? _detailsPaneClosedAtMs;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
@@ -214,6 +215,7 @@ public partial class App : System.Windows.Application
         UpdateService.CleanupOldBinary();
         UpdateService.CleanupStaleTemporaryDirectories();
         SetupTray();
+        _attentionNotifier = new AttentionNotifier(_settings, _trayController);
         if (autoStartNotice is not null)
         {
             _trayController.ShowBalloonTip(
@@ -499,7 +501,10 @@ public partial class App : System.Windows.Application
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
         if (_agentStateService is not null)
+        {
+            _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
             await _agentStateService.DisposeAsync();
+        }
         _detailsPane?.Close();
         DisposeChatGptService();
         _trayController.Dispose();
@@ -569,6 +574,7 @@ public partial class App : System.Windows.Application
         if (_agentStateService is not null)
         {
             _agentStateService.StateChanged -= OnTaskStateChanged;
+            _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
             _ = _agentStateService.DisposeAsync();
         }
 
@@ -605,7 +611,8 @@ public partial class App : System.Windows.Application
             new StateServiceOptions(
                 TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
                 TaskTimings.Default.UnknownVisibleFor),
-            new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
+            new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")),
+            new NotificationGate(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
@@ -613,6 +620,7 @@ public partial class App : System.Windows.Application
         _agentStateClaudeHooksEnabled = claudeHooksEnabled;
         _taskState = _agentStateService.Current;
         _agentStateService.StateChanged += OnTaskStateChanged;
+        _agentStateService.EnteredNeedsAttention += OnEnteredNeedsAttention;
         UpdateStrip();
     }
 
@@ -651,6 +659,15 @@ public partial class App : System.Windows.Application
             if (_exitStarted) return;
             _taskState = _agentStateService?.Current ?? state;
             UpdateStrip();
+        });
+    }
+
+    void OnEnteredNeedsAttention(AgentTask task)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_exitStarted) return;
+            _attentionNotifier?.Notify(task);
         });
     }
 
