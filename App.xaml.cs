@@ -19,6 +19,7 @@ public partial class App : System.Windows.Application
     UsageMonitor? _usageMonitor;
     AgentStateService? _agentStateService;
     CodexTaskProvider? _codexTaskProvider;
+    ClaudeCodeTaskProvider? _claudeTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
     long? _detailsPaneClosedAtMs;
@@ -578,6 +579,8 @@ public partial class App : System.Windows.Application
             _codexTaskProvider.Trace -= OnCodexTrace;
         }
         _codexTaskProvider = null;
+        if (_claudeTaskProvider is not null) _claudeTaskProvider.Trace -= OnClaudeTrace;
+        _claudeTaskProvider = null;
         IAgentTaskProvider[] taskProviders;
         if (demoMode)
         {
@@ -595,11 +598,9 @@ public partial class App : System.Windows.Application
             var claudeHookPath = claudeHooksEnabled
                 ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
                 : null;
-            taskProviders =
-            [
-                _codexTaskProvider,
-                new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath),
-            ];
+            _claudeTaskProvider = new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath);
+            _claudeTaskProvider.Trace += OnClaudeTrace;
+            taskProviders = [_codexTaskProvider, _claudeTaskProvider];
         }
 
         var stateTime = TimeProvider.System;
@@ -678,6 +679,8 @@ public partial class App : System.Windows.Application
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 
     static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
+
+    static void OnClaudeTrace(string message) => Log.Write("Claude: " + message);
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 

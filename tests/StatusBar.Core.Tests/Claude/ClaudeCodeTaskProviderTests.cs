@@ -121,6 +121,46 @@ public sealed class ClaudeCodeTaskProviderTests
         Assert.True(Assert.Single(restarted.ReaderPositions).LastReadStartOffset > 0);
     }
 
+    [Fact]
+    public async Task Trace_reports_a_pending_question_without_any_text()
+    {
+        using var temp = new TempRoot();
+        var time = new FakeTimeProvider(Now);
+        var paths = ClaudeCodePaths.Resolve(overrideHome: temp.Path);
+        var sessionPath = SessionPath(paths, "session-trace-0000aaaa");
+        WriteTranscript(sessionPath, "session-trace-0000aaaa", "project-trace", Now,
+            AssistantRecord("session-trace-0000aaaa", "project-trace", Now));
+
+        await using var provider = NewProvider(paths, time);
+        var lines = new List<string>();
+        provider.Trace += lines.Add;
+        await provider.ReconcileAsync();
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        AppendRecord(sessionPath, JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            sessionId = "session-trace-0000aaaa",
+            timestamp = time.GetUtcNow(),
+            message = new
+            {
+                content = new object[]
+                {
+                    new { type = "tool_use", id = "toolu-q", name = "AskUserQuestion", input = new { question = "Secret choice?" } },
+                },
+                stop_reason = "tool_use",
+            },
+        }));
+        SetWriteTime(sessionPath, time.GetUtcNow());
+        await provider.ReconcileAsync();
+
+        Assert.Contains(lines, line => line.StartsWith("session 0000aaaa tracked: turn=Running", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains("-> turn=Running, question=no, pending=1 (ask=1, plan=0)", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.Contains("Secret", StringComparison.Ordinal) ||
+            line.Contains("AskUserQuestion", StringComparison.Ordinal) ||
+            line.Contains("project-trace", StringComparison.Ordinal));
+    }
+
     static ClaudeCodeTaskProvider NewProvider(ClaudeCodePaths paths, FakeTimeProvider time, string? hookPath = null) =>
         new(paths, hookPath, time, watchFiles: false);
 
