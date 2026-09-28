@@ -1,0 +1,9 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"event_msg","payload":{"type":"task_started"}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"Placeholder reasoning."}]}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"event_msg","payload":{"type":"user_message","message":"Placeholder request."}}
+{"timestamp":"2026-01-01T12:00:03Z","type":"event_msg","payload":{"type":"agent_message","message":"Placeholder reply."}}
+{"timestamp":"2026-01-01T12:00:04Z","type":"response_item","payload":{"type":"agent_message","content":"Placeholder reply."}}
+{"timestamp":"2026-01-01T12:00:05Z","type":"response_item","payload":{"type":"tool_search_call","call_id":"call-search"}}
+{"timestamp":"2026-01-01T12:00:06Z","type":"response_item","payload":{"type":"compaction","encrypted_content":"placeholder"}}
+{"timestamp":"2026-01-01T12:00:07Z","type":"compacted","payload":{"message":"Placeholder summary."}}
+{"timestamp":"2026-01-01T12:00:08Z","type":"inter_agent_communication_metadata","payload":{"kind":"placeholder"}}

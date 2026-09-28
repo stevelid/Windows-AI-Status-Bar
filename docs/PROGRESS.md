@@ -39,7 +39,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P2.3 Codex titles
 - [x] P2.4 CodexTaskProvider
 - [x] P2.5 Wiring and diagnostics
-- [ ] Phase 2 acceptance 🧑
+- [x] Phase 2 acceptance 🧑 (Steve, 2026-09-28, build `+a213f57`: two concurrent tasks, question ⚠, completion, restart recovery, diagnostics)
 
 ## Phase 3 — Claude Code tasks (D16)
 
@@ -110,3 +110,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P2.4 — Added Codex path resolution, dated/recent rollout discovery, head-and-tail recovery with incremental offsets, a debounced JSONL watcher with overflow recovery, and periodic provider snapshots with independent health. Provider tests cover two-date discovery, appends, restart recovery, disabled-watcher reconciliation, missing-directory recovery, compressed-file exclusion and sub-agent attention folding. No private data is persisted or logged.
 - 2026-09-28 — P2.4 CI fix — `core-linux` failed (Windows passed): `IncrementalJsonlReader` used `File.GetCreationTimeUtc` as the file identity, but on Unix .NET reports a time that changes on every write, so each append looked like a replaced file and reading restarted at 0. The default identity now uses creation time on Windows only; elsewhere only truncation is detected. Tests that need replacement detection inject `fileIdProvider`.
 - 2026-09-28 — P2.5 — Registered the Codex task provider outside demo mode, using the settings override, `CODEX_HOME`, or the user-profile default. Copy diagnostics now include collector health and content-free counts for tracked sessions, watched files, event age, parse errors, sanitized drift signatures, and watcher overflow; overflow also writes a content-free log entry. Phase 2 now needs Steve's Windows acceptance run above.
+- 2026-09-28 — Phase 2 accepted by Steve. His diagnostics showed 749 format-drift records, all ordinary Codex records (`response_item/reasoning` 649, agent/user messages, compaction, sub-agent metadata, tool search). The parser now treats Codex's persisted record types as activity, so the drift counter again flags only genuinely new formats.

@@ -68,6 +68,9 @@ internal static class CodexRolloutParser
                     return;
                 case "world_state":
                 case "token_usage_record":
+                // Activity only (seen on Steve's machine 2026-09-28; persisted per codex-rs rollout policy).
+                case "compacted":
+                case "inter_agent_communication_metadata":
                     return;
                 default:
                     drift.RecordUnknown(GetSignature(recordType, payloadType));
@@ -129,6 +132,21 @@ internal static class CodexRolloutParser
                 return;
             case "token_count":
             case "thread_settings_applied":
+            // Activity only. Legacy-history events Codex persists (codex-rs rollout policy); the first
+            // two were seen on Steve's machine 2026-09-28. Never read their text.
+            case "agent_message":
+            case "user_message":
+            case "agent_reasoning":
+            case "agent_reasoning_raw_content":
+            case "context_compacted":
+            case "entered_review_mode":
+            case "exited_review_mode":
+            case "patch_apply_end":
+            case "mcp_tool_call_end":
+            case "web_search_end":
+            case "image_generation_end":
+            case "thread_goal_updated":
+            case "thread_rolled_back":
                 return;
             default:
                 drift.RecordUnknown(GetSignature(recordType, eventType));
@@ -164,6 +182,19 @@ internal static class CodexRolloutParser
                 return;
             case "custom_tool_call":
                 // Activity only. Deliberately do not inspect or retain the free-form input field. ⚠️ A-X2
+                return;
+            // Activity only. Response items Codex persists (codex-rs rollout policy); reasoning,
+            // agent_message, compaction and tool_search_call were seen on Steve's machine 2026-09-28.
+            case "reasoning":
+            case "agent_message":
+            case "compaction":
+            case "context_compaction":
+            case "tool_search_call":
+            case "tool_search_call_output":
+            case "web_search_call":
+            case "local_shell_call":
+            case "image_generation_call":
+            case "ghost_snapshot":
                 return;
             case "message":
                 if (state.TitleCandidate is null &&

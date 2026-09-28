@@ -58,6 +58,16 @@ public class CodexRolloutParserTests
     }
 
     [Fact]
+    public void Known_activity_records_do_not_count_as_format_drift()
+    {
+        var (state, drift) = ReadFixture("provisional-known-activity.jsonl");
+
+        Assert.Equal(0, drift.UnknownCount);
+        Assert.Equal(0, drift.MalformedCount);
+        Assert.Equal(AgentTaskStatus.Working, CodexTaskMapper.Map(state, EvaluationTime, TaskTimings.Default).Status);
+    }
+
+    [Fact]
     public void Pending_call_is_working_at_two_seconds_and_attention_at_four_seconds()
     {
         var (state, _) = ReadFixture("provisional-pending-user-input.jsonl");
