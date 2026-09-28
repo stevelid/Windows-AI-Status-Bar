@@ -1,9 +1,10 @@
 namespace StatusBar.Core.Claude;
 
 /// <summary>Resolved Claude Code home and transcript discovery directory.</summary>
-internal sealed record ClaudeCodePaths(string Home, string ProjectsDirectory)
+public sealed record ClaudeCodePaths(string Home, string ProjectsDirectory)
 {
-    internal static ClaudeCodePaths Resolve(
+    /// <summary>Resolves the settings override, environment override or profile default in that order.</summary>
+    public static ClaudeCodePaths Resolve(
         string? overrideHome = null,
         string? environmentConfigDir = null,
         string? userProfile = null)

@@ -25,6 +25,7 @@ public class Settings
     public string? CodexExecutablePath { get; set; }
     public string? CodexHomeOverride { get; set; }
     public string? ClaudeCodeHomeOverride { get; set; }
+    public bool UseClaudeCodeHooks { get; set; }
     public string? CoworkRootOverride { get; set; }
     public bool NotificationsEnabled { get; set; } = true;
     public int RecentlyCompletedMinutes { get; set; } = 10;

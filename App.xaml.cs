@@ -161,6 +161,17 @@ public partial class App : System.Windows.Application
     void StartupCore()
     {
         _settings = Settings.Load();
+        if (_settings.UseClaudeCodeHooks)
+        {
+            try
+            {
+                ClaudeHookSettingsInstaller.EnsureCurrentCommand(_settings);
+            }
+            catch (Exception exception)
+            {
+                Log.Write($"Claude hook registration failed: {exception.GetType().Name}");
+            }
+        }
         string? autoStartNotice = null;
 
         L10n.Init(_settings.Language switch
