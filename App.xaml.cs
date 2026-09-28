@@ -573,7 +573,10 @@ public partial class App : System.Windows.Application
         }
 
         if (_codexTaskProvider is not null)
+        {
             _codexTaskProvider.WatcherOverflowed -= OnCodexWatcherOverflow;
+            _codexTaskProvider.Trace -= OnCodexTrace;
+        }
         _codexTaskProvider = null;
         IAgentTaskProvider[] taskProviders;
         if (demoMode)
@@ -588,6 +591,7 @@ public partial class App : System.Windows.Application
         {
             _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
             _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
+            _codexTaskProvider.Trace += OnCodexTrace;
             var claudeHookPath = claudeHooksEnabled
                 ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
                 : null;
@@ -611,6 +615,7 @@ public partial class App : System.Windows.Application
         _agentStateCodexHomeOverride = codexHomeOverride;
         _agentStateClaudeHomeOverride = claudeHomeOverride;
         _agentStateClaudeHooksEnabled = claudeHooksEnabled;
+        LogTaskChanges(StatusBarState.Empty, _agentStateService.Current);
         _taskState = _agentStateService.Current;
         _agentStateService.StateChanged += OnTaskStateChanged;
         UpdateStrip();
@@ -649,12 +654,30 @@ public partial class App : System.Windows.Application
         Dispatcher.BeginInvoke(() =>
         {
             if (_exitStarted) return;
-            _taskState = _agentStateService?.Current ?? state;
+            var next = _agentStateService?.Current ?? state;
+            LogTaskChanges(_taskState, next);
+            _taskState = next;
             UpdateStrip();
         });
     }
 
+    // Content-free task transitions (short ids, states, counts); titles are never logged.
+    static void LogTaskChanges(StatusBarState previous, StatusBarState next)
+    {
+        try
+        {
+            foreach (var line in StatusBar.Core.Diagnostics.TaskChangeLog.Describe(previous, next))
+                Log.Write(line);
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Task change logging failed ({ex.GetType().Name})");
+        }
+    }
+
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
+
+    static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 

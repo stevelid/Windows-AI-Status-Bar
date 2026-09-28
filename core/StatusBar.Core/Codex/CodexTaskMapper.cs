@@ -11,7 +11,10 @@ internal static class CodexTaskMapper
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timings);
 
-        var id = "codex:" + (string.IsNullOrWhiteSpace(state.ThreadId) ? "unknown" : state.ThreadId);
+        var key = !string.IsNullOrWhiteSpace(state.ThreadId) ? state.ThreadId
+            : !string.IsNullOrWhiteSpace(state.FileKey) ? state.FileKey
+            : "unknown";
+        var id = "codex:" + key;
         var title = state.TitleCandidate ?? (IsSubAgent(state.Source)
             ? "Codex sub-task"
             : state.CwdLeaf is { Length: > 0 } leaf ? "Codex · " + leaf : "Codex task");
@@ -31,24 +34,25 @@ internal static class CodexTaskMapper
         var inactivity = now >= task.LastActivity ? now - task.LastActivity : TimeSpan.Zero;
         if (state.Turn == CodexTurnStatus.Running)
         {
-            if (!string.Equals(state.ApprovalPolicy, "never", StringComparison.OrdinalIgnoreCase))
+            // With approval_policy "never" Codex cannot be waiting for an approval, but a structured
+            // question (request_user_input) still waits for Steve, so only approvals are filtered out.
+            var approvalsPossible = !string.Equals(state.ApprovalPolicy, "never", StringComparison.OrdinalIgnoreCase);
+            var pending = state.PendingCalls.Values
+                .Where(call => call.Kind == CodexPendingKind.Input || approvalsPossible)
+                .Where(call => now >= call.Since && now - call.Since >= timings.CodexApprovalDebounce)
+                .OrderBy(call => call.Since)
+                .FirstOrDefault();
+            if (pending is not null)
             {
-                var pending = state.PendingCalls.Values
-                    .Where(call => now >= call.Since && now - call.Since >= timings.CodexApprovalDebounce)
-                    .OrderBy(call => call.Since)
-                    .FirstOrDefault();
-                if (pending is not null)
+                return task with
                 {
-                    return task with
-                    {
-                        Status = AgentTaskStatus.NeedsAttention,
-                        Confidence = StateConfidence.Inferred,
-                        AttentionReason = pending.Kind == CodexPendingKind.Input
-                            ? "Waiting for your input"
-                            : "Waiting for approval",
-                        EvidenceKey = "pending-call:" + pending.CallId,
-                    };
-                }
+                    Status = AgentTaskStatus.NeedsAttention,
+                    Confidence = StateConfidence.Inferred,
+                    AttentionReason = pending.Kind == CodexPendingKind.Input
+                        ? "Waiting for your input"
+                        : "Waiting for approval",
+                    EvidenceKey = "pending-call:" + pending.CallId,
+                };
             }
 
             if (inactivity >= timings.CodexWorkingUnknownAfter)
@@ -64,6 +68,14 @@ internal static class CodexTaskMapper
 
         return state.Turn switch
         {
+            // ⚠️ A-X4 The answer to a question card is expected to start a new turn, which clears this.
+            CodexTurnStatus.Completed when state.EndedWithStructuredQuestion && inactivity < timings.QuestionAttentionExpiry => task with
+            {
+                Status = AgentTaskStatus.NeedsAttention,
+                Confidence = StateConfidence.Inferred,
+                AttentionReason = "Waiting for your answer",
+                EvidenceKey = "question:" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
+            },
             CodexTurnStatus.Completed when state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry => task with
             {
                 Status = AgentTaskStatus.NeedsAttention,

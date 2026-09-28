@@ -33,6 +33,26 @@ internal static class ClaudeCodeTaskMapper
         var inactivity = now >= task.LastActivity ? now - task.LastActivity : TimeSpan.Zero;
         if (state.Turn == ClaudeCodeTurnStatus.Running)
         {
+            // ⚠️ A-K5 A pending AskUserQuestion/ExitPlanMode waits for Steve, however long it has been.
+            // Ordinary pending tools stay Working: a running command and a permission prompt look the
+            // same in the transcript (the opt-in hooks tell them apart).
+            var waiting = state.PendingTools.Values
+                .Where(tool => tool.Kind != ClaudePendingToolKind.Other)
+                .OrderBy(tool => tool.Since)
+                .FirstOrDefault();
+            if (waiting is not null)
+            {
+                return task with
+                {
+                    Status = AgentTaskStatus.NeedsAttention,
+                    Confidence = StateConfidence.Inferred,
+                    AttentionReason = waiting.Kind == ClaudePendingToolKind.Question
+                        ? "Waiting for your answer"
+                        : "Plan needs approval",
+                    EvidenceKey = "pending-tool:" + waiting.ToolUseId,
+                };
+            }
+
             if (inactivity >= timings.ClaudeCodeWorkingUnknownAfter)
                 return task with { Status = AgentTaskStatus.Unknown, Confidence = StateConfidence.Stale };
             if (inactivity >= timings.ClaudeCodeWorkingStaleAfter)

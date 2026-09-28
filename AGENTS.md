@@ -19,7 +19,7 @@ dotnet build WindowsAIStatusBar.slnx --nologo
 dotnet test tests/StatusBar.Core.Tests --nologo
 ```
 
-WPF projects compile on Linux (`EnableWindowsTargeting`) but cannot run there. Windows behaviour is verified by CI (`windows-latest`) and by Steve using the `status-bar-win-x64` artifact.
+WPF projects compile on Linux (`EnableWindowsTargeting`) but cannot run there. Windows behaviour is verified by CI (`windows-latest`) and by Steve using the `status-bar-win-x64-<commit>` artifact (named after the PR commit it was built from).
 
 ## Rules
 

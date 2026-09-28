@@ -17,6 +17,9 @@ public class ClaudeCodeTranscriptParserTests
     [InlineData("provisional-turn-complete-with-question.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Asked you a question", null)]
     [InlineData("provisional-interrupted.jsonl", AgentTaskStatus.Complete, StateConfidence.Confirmed, null, "Stopped")]
     [InlineData("provisional-tool-pending.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-ask-user-question.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your answer", null)]
+    [InlineData("provisional-ask-user-question-answered.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-exit-plan-mode.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Plan needs approval", null)]
     [InlineData("provisional-ai-title.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-custom-title.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-sidechain.jsonl", AgentTaskStatus.Unknown, StateConfidence.Stale, null, null)]
@@ -120,6 +123,18 @@ public class ClaudeCodeTranscriptParserTests
         Assert.Equal(AgentTaskStatus.NeedsAttention, question.Status);
         Assert.StartsWith("question:", question.EvidenceKey);
         Assert.Equal(AgentTaskStatus.Complete, expired.Status);
+    }
+
+    [Fact]
+    public void Pending_question_stays_attention_while_unanswered_and_uses_the_tool_id_as_evidence()
+    {
+        var (state, _) = ReadFixture("provisional-ask-user-question.jsonl");
+
+        // A structured question does not age into Working/Unknown the way a silent running turn does.
+        var later = ClaudeCodeTaskMapper.Map(state, EvaluationTime.AddHours(3), TaskTimings.Default);
+
+        Assert.Equal(AgentTaskStatus.NeedsAttention, later.Status);
+        Assert.Equal("pending-tool:synthetic-question", later.EvidenceKey);
     }
 
     [Fact]

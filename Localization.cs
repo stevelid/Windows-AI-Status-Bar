@@ -31,6 +31,8 @@ public static class L10n
         ["strip_provider_codex"] = ("GPT", "GPT"),
         ["strip_provider_claude"] = ("Claude", "Claude"),
         ["strip_working_tooltip"] = ("{0} 個 AI 任務正在工作", "{0} AI tasks working"),
+        ["strip_done_tooltip"] = ("{0} 個任務在過去 {1} 分鐘內完成", "{0} tasks finished in the last {1} minutes"),
+        ["strip_done_failed_tooltip"] = ("{0} 個任務完成，{1} 個失敗（過去 {2} 分鐘）", "{0} finished, {1} failed in the last {2} minutes"),
         ["strip_attention_tooltip"] = ("{0} 個任務需要你的注意", "{0} tasks need your attention"),
         ["pane_codex"] = ("CODEX", "CODEX"),
         ["pane_claude"] = ("CLAUDE", "CLAUDE"),
