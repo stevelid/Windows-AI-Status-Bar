@@ -34,7 +34,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Phase 2 — Codex tasks
 
-- [ ] P2.1 Incremental JSONL reading
+- [x] P2.1 Incremental JSONL reading
 - [ ] P2.2 Codex rollout parser ⚠️
 - [ ] P2.3 Codex titles
 - [ ] P2.4 CodexTaskProvider
@@ -100,3 +100,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — D16 (Steve) — Steve works mainly in Claude Code and Codex, not Cowork. Phase 3 is now Claude Code tasks (transcripts plus opt-in documented hooks); the Cowork design moves to an optional Phase 4 (IDs renumbered P4.1–P4.7). Dismiss control and KNOWN_LIMITATIONS.md moved to P3.5/P3.6.
 - 2026-09-28 — P0.3 / S9 — A five-minute Claude Code desktop watch observed a project JSONL stream and session metadata update during Steve's Code-tab task. A-K1 is confirmed for the desktop Code tab with its default Claude home; nested record fields, terminal sessions and user-hook behavior remain unverified. Committed only the content-free, path-redacted findings in `docs/recon/claude-code-writes-20260928.md`.
 - 2026-09-28 — Phase 1 acceptance (Steve) — Items 1–3 and 8–12 passed. **Item 4 failed: the pane never opened**, caused by the P1.7 review fix (a `long.MinValue` sentinel overflowed `TickCount64 - closedAt`, so every open was treated as "just closed"). Fixed with a nullable timestamp. Claude needed a manual refresh on first start: `UsageMonitor` now retries a never-loaded provider twice after 15 s before normal back-off, records the exception type in `UsageSnapshot.ErrorType`, and `App` logs provider status transitions to `log.txt`. Items 4–7 need re-testing.
+- 2026-09-28 — P2.1 — Added byte-oriented incremental JSONL reading with newline-delimited UTF-8 decoding, buffered partial lines, replacement/truncation reset detection, and a bounded tail reader. The reader consumes through EOF and retains any unterminated bytes in memory so later appends complete the same line; no transcript content is logged or persisted.
