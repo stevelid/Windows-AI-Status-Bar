@@ -3,11 +3,13 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
+using StatusBar.Core.Usage;
 
 namespace ClaudeUsageWidget;
 
 public sealed record ProviderDiagnostic(
-    UsageProviderKind Provider,
+    UsageSource Provider,
+    UsageHealth Health,
     DateTimeOffset? LastSuccess,
     string Status);
 
@@ -17,14 +19,13 @@ public sealed record CodexDiagnostic(
     string Version);
 
 /// <summary>
-/// Builds an intentionally redacted support report. It never receives credentials,
-/// usage values, account identifiers, log contents, or full filesystem paths.
+/// Builds an intentionally redacted support report from provider status projections.
+/// It never outputs credentials, individual usage values, account identifiers, log contents, or full paths.
 /// </summary>
 public static class DiagnosticsService
 {
     public static string BuildReport(
         Version appVersion,
-        UsageProviderKind activeProvider,
         IEnumerable<ProviderDiagnostic> providers,
         CodexDiagnostic codex)
     {
@@ -33,11 +34,16 @@ public static class DiagnosticsService
         report.AppendLine($"AppVersion: {NormalizeVersion(appVersion)}");
         report.AppendLine($"OS: {RuntimeInformation.OSDescription}");
         report.AppendLine($"Architecture: {RuntimeInformation.OSArchitecture}");
-        report.AppendLine($"ActiveProvider: {activeProvider.DisplayName()}");
         foreach (var item in providers.OrderBy(item => item.Provider))
         {
-            var prefix = item.Provider.DisplayName();
+            var prefix = item.Provider switch
+            {
+                UsageSource.Claude => "Claude",
+                UsageSource.Codex => "ChatGPT",
+                _ => "Unknown",
+            };
             report.AppendLine($"{prefix}.LastSuccess: {FormatTimestamp(item.LastSuccess)}");
+            report.AppendLine($"{prefix}.Health: {item.Health}");
             report.AppendLine($"{prefix}.Status: {item.Status}");
         }
         report.AppendLine($"Codex.Source: {codex.Source}");

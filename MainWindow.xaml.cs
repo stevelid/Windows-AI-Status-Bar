@@ -5,6 +5,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using StatusBar.Core.Usage;
 using Color = System.Windows.Media.Color;
 using Cursor = System.Windows.Input.Cursor;
 using Cursors = System.Windows.Input.Cursors;
@@ -19,7 +20,7 @@ namespace ClaudeUsageWidget;
 public partial class MainWindow : Window
 {
     readonly Settings _settings;
-    List<UsageBucket> _lastBuckets = new();
+    IReadOnlyList<UsageWindow> _lastWindows = Array.Empty<UsageWindow>();
     bool _hasError;
     bool _showingUpdateProgress;
     DateTimeOffset? _lastSuccessfulRefresh;
@@ -288,7 +289,7 @@ public partial class MainWindow : Window
         _activeProvider = provider;
         _settings.ActiveProvider = provider.StorageKey();
         _settings.Save();
-        _lastBuckets = new List<UsageBucket>();
+        _lastWindows = Array.Empty<UsageWindow>();
         _lastSuccessfulRefresh = null;
         _hasError = false;
         RowsPanel.Children.Clear();
@@ -364,12 +365,12 @@ public partial class MainWindow : Window
         ApplyCollapsedState();
     }
 
-    public void ShowUsage(List<UsageBucket> buckets, DateTimeOffset? refreshedAt = null)
+    public void ShowUsage(UsageSnapshot snapshot)
     {
-        _lastBuckets = buckets;
-        _lastSuccessfulRefresh = refreshedAt ?? DateTimeOffset.Now;
+        _lastWindows = snapshot.Windows;
+        _lastSuccessfulRefresh = snapshot.LastSuccess;
         _hasError = false;
-        StatusText.Text = _lastSuccessfulRefresh.Value.ToLocalTime().ToString("HH:mm");
+        StatusText.Text = _lastSuccessfulRefresh?.ToLocalTime().ToString("HH:mm") ?? "";
         if (IsVisible) UpdateRows();
         else _rowsDirty = true; // hidden (tray-only): defer UI work until shown again
         ApplyCollapsedState();
@@ -422,7 +423,7 @@ public partial class MainWindow : Window
         if (collapsed) RebuildCompact();
     }
 
-    /// <summary>Compact summary shown while collapsed: "64% · 28% · 49%" colored per bucket.</summary>
+    /// <summary>Compact summary shown while collapsed: "64% · 28% · 49%" colored per window.</summary>
     void RebuildCompact()
     {
         CompactText.Inlines.Clear();
@@ -435,16 +436,16 @@ public partial class MainWindow : Window
             return;
         }
         var first = true;
-        foreach (var bucket in _lastBuckets)
+        foreach (var window in _lastWindows)
         {
             if (!first)
                 CompactText.Inlines.Add(new System.Windows.Documents.Run(" · ")
                 {
                     Foreground = ThemeManager.Brush(ThemeManager.SubtleText),
                 });
-            CompactText.Inlines.Add(new System.Windows.Documents.Run($"{Math.Round(bucket.Utilization)}%")
+            CompactText.Inlines.Add(new System.Windows.Documents.Run($"{Math.Round(window.UsedPercent)}%")
             {
-                Foreground = ThemeManager.Brush(ThemeManager.ColorFor(bucket.Utilization)),
+                Foreground = ThemeManager.Brush(ThemeManager.ColorFor(window.UsedPercent)),
             });
             first = false;
         }
@@ -625,39 +626,39 @@ public partial class MainWindow : Window
     {
         RowsPanel.Children.Clear();
         _rows.Clear();
-        foreach (var bucket in _lastBuckets)
+        foreach (var window in _lastWindows)
         {
-            var row = CreateRow(bucket);
+            var row = CreateRow(window);
             _rows.Add(row);
             RowsPanel.Children.Add(row.Panel);
-            UpdateRow(row, bucket);
+            UpdateRow(row, window);
         }
     }
 
     void UpdateRows()
     {
         _rowsDirty = false;
-        var structureMatches = _rows.Count == _lastBuckets.Count &&
-            _rows.Zip(_lastBuckets).All(pair => pair.First.Key == pair.Second.Key);
+        var structureMatches = _rows.Count == _lastWindows.Count &&
+            _rows.Zip(_lastWindows).All(pair => pair.First.Key == pair.Second.Key);
         if (!structureMatches)
         {
             RebuildRows();
             return;
         }
-        foreach (var (row, bucket) in _rows.Zip(_lastBuckets))
-            UpdateRow(row, bucket);
+        foreach (var (row, window) in _rows.Zip(_lastWindows))
+            UpdateRow(row, window);
     }
 
-    static void UpdateRow(UsageRow row, UsageBucket bucket)
+    static void UpdateRow(UsageRow row, UsageWindow window)
     {
-        var brush = ThemeManager.Brush(ThemeManager.ColorFor(bucket.Utilization));
-        row.ResetsAt = bucket.ResetsAt;
-        row.Label.Text = bucket.Label;
-        row.Pct.Text = $"{Math.Round(bucket.Utilization)}%";
+        var brush = ThemeManager.Brush(ThemeManager.ColorFor(window.UsedPercent));
+        row.ResetsAt = window.ResetsAt;
+        row.Label.Text = window.Label;
+        row.Pct.Text = $"{Math.Round(window.UsedPercent)}%";
         row.Pct.Foreground = brush;
         row.Fill.Fill = brush;
-        row.Fill.Width = Math.Max(Math.Clamp(bucket.Utilization, 0, 100) / 100.0 * BarWidth, 2);
-        if (bucket.ResetsAt is DateTimeOffset resetsAt)
+        row.Fill.Width = Math.Max(Math.Clamp(window.UsedPercent, 0, 100) / 100.0 * BarWidth, 2);
+        if (window.ResetsAt is DateTimeOffset resetsAt)
         {
             row.Countdown.Text = UsageParser.FormatCountdown(resetsAt);
             row.Countdown.Visibility = Visibility.Visible;
@@ -668,7 +669,7 @@ public partial class MainWindow : Window
         }
     }
 
-    static UsageRow CreateRow(UsageBucket bucket)
+    static UsageRow CreateRow(UsageWindow window)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 3, 0, 3) };
 
@@ -714,7 +715,7 @@ public partial class MainWindow : Window
 
         return new UsageRow
         {
-            Key = bucket.Key,
+            Key = window.Key,
             Panel = panel,
             Label = label,
             Pct = pct,

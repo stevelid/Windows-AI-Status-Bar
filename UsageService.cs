@@ -43,25 +43,25 @@ public class UsageService
 
     /// <summary>Fetches usage; refreshes the token if expired/rejected. Throws
     /// UnauthorizedAccessException when a full re-login is required.</summary>
-    public async Task<List<UsageBucket>> GetUsageAsync()
+    public async Task<List<UsageBucket>> GetUsageAsync(CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync();
+        await _gate.WaitAsync(cancellationToken);
         try
         {
             var tokens = Tokens ?? throw new UnauthorizedAccessException(L10n.T("err_not_signed_in"));
 
             if (tokens.ExpiresAt <= DateTimeOffset.UtcNow.AddMinutes(2))
-                tokens = await RefreshOrThrowAsync(tokens);
+                tokens = await RefreshOrThrowAsync(tokens, cancellationToken);
 
             try
             {
-                return await AnthropicOAuth.FetchUsageAsync(tokens.AccessToken);
+                return await AnthropicOAuth.FetchUsageAsync(tokens.AccessToken, cancellationToken);
             }
             catch (UnauthorizedAccessException)
             {
                 // Access token rejected despite not being expired — try one refresh.
-                tokens = await RefreshOrThrowAsync(tokens);
-                return await AnthropicOAuth.FetchUsageAsync(tokens.AccessToken);
+                tokens = await RefreshOrThrowAsync(tokens, cancellationToken);
+                return await AnthropicOAuth.FetchUsageAsync(tokens.AccessToken, cancellationToken);
             }
         }
         finally
@@ -70,7 +70,7 @@ public class UsageService
         }
     }
 
-    async Task<StoredTokens> RefreshOrThrowAsync(StoredTokens current)
+    async Task<StoredTokens> RefreshOrThrowAsync(StoredTokens current, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(current.RefreshToken))
         {
@@ -79,11 +79,15 @@ public class UsageService
         }
         try
         {
-            var fresh = await AnthropicOAuth.RefreshAsync(current.RefreshToken);
+            var fresh = await AnthropicOAuth.RefreshAsync(current.RefreshToken, cancellationToken);
             if (string.IsNullOrEmpty(fresh.RefreshToken))
                 fresh.RefreshToken = current.RefreshToken;
             SetTokens(fresh);
             return fresh;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
         {

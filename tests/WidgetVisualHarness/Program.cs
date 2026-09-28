@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ClaudeUsageWidget;
+using StatusBar.Core.Usage;
 
 namespace WidgetVisualHarness;
 
@@ -151,28 +152,22 @@ static class Program
         encoder.Save(stream);
     }
 
-    static List<UsageBucket> Sample(UsageProviderKind provider) => provider switch
+    static UsageSnapshot Sample(UsageProviderKind provider) => provider switch
     {
-        UsageProviderKind.Claude =>
-        [
-            new(
-                "session",
-                "Session",
-                17,
-                DateTimeOffset.Now.AddHours(3)),
-            new(
-                "weekly_all",
-                "Weekly (all)",
-                42,
-                DateTimeOffset.Now.AddDays(4)),
-        ],
-        _ =>
-        [
-            new(
-                "chatgpt_1_10080",
-                L10n.T("chatgpt_limit_weekly"),
-                35,
-                DateTimeOffset.Now.AddDays(7)),
-        ],
+        UsageProviderKind.Claude => new UsageSnapshot(
+            UsageSource.Claude,
+            [
+                new("session", "Session", 17, DateTimeOffset.Now.AddHours(3)),
+                new("weekly_all", "Weekly (all)", 42, DateTimeOffset.Now.AddDays(4)),
+            ],
+            UsageHealth.Ok,
+            DateTimeOffset.Now,
+            "Ready"),
+        _ => new UsageSnapshot(
+            UsageSource.Codex,
+            [new("chatgpt_1_10080", L10n.T("chatgpt_limit_weekly"), 35, DateTimeOffset.Now.AddDays(7))],
+            UsageHealth.Ok,
+            DateTimeOffset.Now,
+            "Ready"),
     };
 }

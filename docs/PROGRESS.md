@@ -25,7 +25,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P1.1 Product identity and data folder
 - [x] P1.2 Usage model in Core
 - [x] P1.3 UsageMonitor
-- [ ] P1.4 Usage adapters and App wiring
+- [x] P1.4 Usage adapters and App wiring
 - [ ] P1.5 Task state service and demo provider
 - [ ] P1.6 Docking geometry and compact strip
 - [ ] P1.7 Details pane
@@ -86,3 +86,4 @@ _(The agent lists here, in plain steps, anything that needs Steve's Windows mach
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
 - 2026-09-28 — P0.4 (partial) — Recon confirmed Cowork `system/permission_request`/`permission_response` records, so Claude attention is Confirmed from `audit.jsonl` and the notification listener is dropped (D4, D5, §5.2). Codex runs with `approval_policy: never` and records shell calls as `custom_tool_call` `exec`, so Codex attention is limited to input requests (D3, §5.1). Codex is its own MSIX app; activation by AUMID (P5.1). Cowork metadata is ~200 KB and its write time is unreliable; recency comes from `lastActivityAt` and the audit log (P3.1).
+- 2026-09-28 — P1.4 — Propagated the monitor cancellation token through Claude usage and token HTTP requests so disposal can stop in-flight fetches before shutting down; the app and adapters otherwise follow the planned provider split.

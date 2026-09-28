@@ -118,7 +118,7 @@ public class AnthropicOAuth
             OpenBrowser(BuildAuthorizeUrl(LocalRedirectUri));
             var (code, state) = await WaitForCallbackAsync(listener, ct);
             if (state != _state) throw new InvalidOperationException(L10n.T("oauth_state_mismatch"));
-            return await ExchangeCodeAsync(code, _state, LocalRedirectUri);
+            return await ExchangeCodeAsync(code, _state, LocalRedirectUri, ct);
         }
         finally
         {
@@ -186,7 +186,11 @@ public class AnthropicOAuth
 
     // ---------- Token endpoints ----------
 
-    async Task<StoredTokens> ExchangeCodeAsync(string code, string state, string redirectUri)
+    async Task<StoredTokens> ExchangeCodeAsync(
+        string code,
+        string state,
+        string redirectUri,
+        CancellationToken cancellationToken = default)
     {
         var payload = JsonSerializer.Serialize(new Dictionary<string, string>
         {
@@ -197,10 +201,12 @@ public class AnthropicOAuth
             ["redirect_uri"] = redirectUri,
             ["code_verifier"] = _verifier,
         });
-        return await PostTokenAsync(payload);
+        return await PostTokenAsync(payload, cancellationToken);
     }
 
-    public static async Task<StoredTokens> RefreshAsync(string refreshToken)
+    public static async Task<StoredTokens> RefreshAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
     {
         var payload = JsonSerializer.Serialize(new Dictionary<string, string>
         {
@@ -208,14 +214,15 @@ public class AnthropicOAuth
             ["refresh_token"] = refreshToken,
             ["client_id"] = ClientId,
         });
-        return await PostTokenAsync(payload);
+        return await PostTokenAsync(payload, cancellationToken);
     }
 
-    static async Task<StoredTokens> PostTokenAsync(string jsonPayload)
+    static async Task<StoredTokens> PostTokenAsync(string jsonPayload, CancellationToken cancellationToken)
     {
         using var resp = await Http.PostAsync(TokenUrl,
-            new StringContent(jsonPayload, Encoding.UTF8, "application/json"));
-        var body = await resp.Content.ReadAsStringAsync();
+            new StringContent(jsonPayload, Encoding.UTF8, "application/json"),
+            cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (!resp.IsSuccessStatusCode)
             throw OAuthTokenRequestException.FromResponse(resp.StatusCode, body);
 
@@ -234,13 +241,15 @@ public class AnthropicOAuth
 
     // ---------- Usage ----------
 
-    public static async Task<List<UsageBucket>> FetchUsageAsync(string accessToken)
+    public static async Task<List<UsageBucket>> FetchUsageAsync(
+        string accessToken,
+        CancellationToken cancellationToken = default)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, UsageUrl);
         req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {accessToken}");
         req.Headers.TryAddWithoutValidation("anthropic-beta", "oauth-2025-04-20");
-        using var resp = await Http.SendAsync(req);
-        var body = await resp.Content.ReadAsStringAsync();
+        using var resp = await Http.SendAsync(req, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
         if (resp.StatusCode == HttpStatusCode.Unauthorized || resp.StatusCode == HttpStatusCode.Forbidden)
             throw new UnauthorizedAccessException($"usage API 授權失敗 ({(int)resp.StatusCode})");
         if ((int)resp.StatusCode == 429)

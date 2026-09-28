@@ -1,4 +1,5 @@
 using ClaudeUsageWidget;
+using StatusBar.Core.Usage;
 
 static void Require(bool condition, string message)
 {
@@ -130,14 +131,14 @@ finally
 var privateError = new IOException(@"secret-token at C:\Users\Alice\private");
 var diagnosticReport = DiagnosticsService.BuildReport(
     new Version(2, 0, 4),
-    UsageProviderKind.ChatGpt,
     new[]
     {
         new ProviderDiagnostic(
-            UsageProviderKind.Claude,
+            UsageSource.Claude,
+            UsageHealth.Unavailable,
             DateTimeOffset.Parse("2030-01-01T00:00:00Z"),
             DiagnosticsService.ClassifyError(privateError)),
-        new ProviderDiagnostic(UsageProviderKind.ChatGpt, null, "NotChecked"),
+        new ProviderDiagnostic(UsageSource.Codex, UsageHealth.Loading, null, "NotChecked"),
     },
     new CodexDiagnostic("Configured", "codex.exe", "1.2.3"));
 Require(!diagnosticReport.Contains("secret-token"), "Diagnostics should not include exception messages.");

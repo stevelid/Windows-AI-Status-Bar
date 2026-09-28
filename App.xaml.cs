@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Threading;
 using System.Security.Principal;
+using ClaudeUsageWidget.Providers;
+using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
 using WinForms = System.Windows.Forms;
 
@@ -9,19 +11,18 @@ namespace ClaudeUsageWidget;
 public partial class App : System.Windows.Application
 {
     readonly UsageService _claudeService = new();
-    readonly Dictionary<UsageProviderKind, List<UsageBucket>> _cache = new();
-    readonly Dictionary<UsageProviderKind, DateTimeOffset> _lastSuccessAt = new();
-    readonly Dictionary<UsageProviderKind, string> _providerStatus = new();
-    readonly SemaphoreSlim _fetchGate = new(1, 1);
+    readonly object _chatGptServiceGate = new();
 
+    UsageMonitor? _usageMonitor;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
     Settings _settings = null!;
     MainWindow _widget = null!;
     WinForms.NotifyIcon _tray = null!;
-    DispatcherTimer _fetchTimer = null!;
     DispatcherTimer _countdownTimer = null!;
     bool _loginWindowOpen;
+    bool _exitStarted;
+    int? _lastTrayPct;
     Mutex? _singleInstanceMutex;
     EventWaitHandle? _activationSignal;
     RegisteredWaitHandle? _activationWait;
@@ -166,9 +167,9 @@ public partial class App : System.Windows.Application
         }
 
         _widget = new MainWindow(_settings);
-        _widget.RefreshRequested += () => _ = FetchAndRenderAsync();
-        _widget.ReloginRequested += () => _ = ConnectCurrentProviderAsync(force: true);
-        _widget.ProviderChanged += provider => _ = ActivateProviderAsync(provider);
+        _widget.RefreshRequested += () => _usageMonitor?.RefreshNow();
+        _widget.ReloginRequested += () => _ = SignInActiveProviderAsync(force: true);
+        _widget.ProviderChanged += ActivateProvider;
         _widget.HideRequested += HideWidget;
         _widget.ExitRequested += ExitApp;
         _widget.SettingsRequested += ShowSettings;
@@ -189,23 +190,26 @@ public partial class App : System.Windows.Application
         }
         if (_settings.WidgetVisible) _widget.Show();
 
-        _backoffSec = BaseIntervalSec;
-        _fetchTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(BaseIntervalSec) };
-        _fetchTimer.Tick += (_, _) => _ = FetchAndRenderAsync();
-        _fetchTimer.Start();
-
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _countdownTimer.Tick += (_, _) => _widget.RefreshCountdowns();
         _countdownTimer.Start();
 
+        _usageMonitor = new UsageMonitor(
+            [
+                new ClaudeUsageProvider(_claudeService),
+                new CodexUsageProvider(GetChatGptService),
+            ],
+            TimeProvider.System,
+            () => TimeSpan.FromSeconds(BaseIntervalSec));
+        _usageMonitor.Changed += OnUsageChanged;
+        RenderUsage(_usageMonitor.Current[ActiveSource]);
+        UpdateTray();
+        _usageMonitor.Start();
+
         if (_widget.ActiveProvider == UsageProviderKind.Claude && !_claudeService.HasTokens)
         {
             _widget.ShowError(L10n.T("err_not_signed_in_hint"));
-            _ = ConnectCurrentProviderAsync(force: false);
-        }
-        else
-        {
-            _ = FetchAndRenderAsync();
+            _ = SignInClaudeAsync(force: false);
         }
 
         _ = AutoCheckUpdatesAsync();
@@ -370,12 +374,12 @@ public partial class App : System.Windows.Application
         var menu = new WinForms.ContextMenuStrip();
         menu.Items.Add(_trayShowHide = new WinForms.ToolStripMenuItem("", null, (_, _) => ToggleWidget()));
         menu.Items.Add(_trayResetPosition = new WinForms.ToolStripMenuItem("", null, (_, _) => ResetWidgetPosition()));
-        menu.Items.Add(_trayRefresh = new WinForms.ToolStripMenuItem("", null, (_, _) => _ = FetchAndRenderAsync()));
+        menu.Items.Add(_trayRefresh = new WinForms.ToolStripMenuItem("", null, (_, _) => _usageMonitor?.RefreshNow()));
         _trayProvider = new WinForms.ToolStripMenuItem();
         _trayProvider.DropDownItems.Add(_trayClaude = new WinForms.ToolStripMenuItem("Claude", null,
-            (_, _) => _ = ActivateProviderAsync(UsageProviderKind.Claude)));
+            (_, _) => ActivateProvider(UsageProviderKind.Claude)));
         _trayProvider.DropDownItems.Add(_trayChatGpt = new WinForms.ToolStripMenuItem("ChatGPT", null,
-            (_, _) => _ = ActivateProviderAsync(UsageProviderKind.ChatGpt)));
+            (_, _) => ActivateProvider(UsageProviderKind.ChatGpt)));
         menu.Items.Add(_trayProvider);
         menu.Items.Add(_traySettings = new WinForms.ToolStripMenuItem("", null, (_, _) => ShowSettings()));
         menu.Items.Add(_trayDiagnostics = new WinForms.ToolStripMenuItem("", null, (_, _) => CopyDiagnostics()));
@@ -385,7 +389,7 @@ public partial class App : System.Windows.Application
             Enabled = false,
             Visible = false,
         });
-        menu.Items.Add(_trayRelogin = new WinForms.ToolStripMenuItem("", null, (_, _) => _ = ConnectCurrentProviderAsync(force: true)));
+        menu.Items.Add(_trayRelogin = new WinForms.ToolStripMenuItem("", null, (_, _) => _ = SignInActiveProviderAsync(force: true)));
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add(_trayExit = new WinForms.ToolStripMenuItem("", null, (_, _) => ExitApp()));
         _tray.ContextMenuStrip = menu;
@@ -409,6 +413,7 @@ public partial class App : System.Windows.Application
         _trayCancelUpdate.Text = L10n.T("update_cancel");
         _trayRelogin.Text = L10n.T("menu_relogin");
         _trayExit.Text = L10n.T("menu_exit");
+        UpdateTray();
     }
 
     void UpdateProviderChecks()
@@ -435,14 +440,15 @@ public partial class App : System.Windows.Application
     {
         try
         {
-            var providers = Enum.GetValues<UsageProviderKind>()
-                .Select(provider => new ProviderDiagnostic(
-                    provider,
-                    _lastSuccessAt.TryGetValue(provider, out var timestamp) ? timestamp : null,
-                    _providerStatus.GetValueOrDefault(provider, "NotChecked")));
+            var providers = _usageMonitor?.Current.Values
+                .Select(snapshot => new ProviderDiagnostic(
+                    snapshot.Source,
+                    snapshot.Health,
+                    snapshot.LastSuccess,
+                    snapshot.StatusCode))
+                ?? Enumerable.Empty<ProviderDiagnostic>();
             var report = DiagnosticsService.BuildReport(
                 typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0),
-                _widget.ActiveProvider,
                 providers,
                 DiagnosticsService.InspectCodex(_settings.CodexExecutablePath));
             System.Windows.Clipboard.SetText(report);
@@ -466,17 +472,17 @@ public partial class App : System.Windows.Application
     void ApplySettingsChanges()
     {
         _widget.ApplyAppearance();
-        ApplyRefreshInterval();
 
         if (!string.Equals(_chatGptServicePath, _settings.CodexExecutablePath, StringComparison.OrdinalIgnoreCase))
         {
-            _chatGptService?.Dispose();
-            _chatGptService = null;
-            _chatGptServicePath = null;
-            _cache.Remove(UsageProviderKind.ChatGpt);
-            if (_widget.ActiveProvider == UsageProviderKind.ChatGpt)
-                _ = FetchAndRenderAsync();
+            lock (_chatGptServiceGate)
+            {
+                _chatGptService?.Dispose();
+                _chatGptService = null;
+                _chatGptServicePath = null;
+            }
         }
+        _usageMonitor?.RefreshNow();
     }
 
     void ToggleWidget()
@@ -526,11 +532,14 @@ public partial class App : System.Windows.Application
 
     void ExitAfterUpdate() => ExitAppCore();
 
-    void ExitAppCore()
+    async void ExitAppCore()
     {
+        if (_exitStarted) return;
+        _exitStarted = true;
         Log.Write("使用者選擇結束");
-        _chatGptService?.Dispose();
-        _chatGptService = null;
+        if (_usageMonitor is not null)
+            await _usageMonitor.DisposeAsync();
+        DisposeChatGptService();
         _tray.Visible = false;
         _tray.Dispose();
         Shutdown();
@@ -555,172 +564,155 @@ public partial class App : System.Windows.Application
     // ---------- providers and data flow ----------
 
     int BaseIntervalSec => Math.Max(30, _settings.RefreshIntervalSec);
-    int _backoffSec;
 
-    void ApplyRefreshInterval()
+    UsageSource ActiveSource => ToUsageSource(_widget.ActiveProvider);
+
+    static UsageSource ToUsageSource(UsageProviderKind provider) => provider switch
     {
-        _backoffSec = BaseIntervalSec;
-        _fetchTimer.Interval = TimeSpan.FromSeconds(BaseIntervalSec);
-    }
+        UsageProviderKind.Claude => UsageSource.Claude,
+        UsageProviderKind.ChatGpt => UsageSource.Codex,
+        _ => throw new ArgumentOutOfRangeException(nameof(provider)),
+    };
 
     ChatGptUsageService GetChatGptService()
     {
-        if (_chatGptService is not null) return _chatGptService;
-        _chatGptServicePath = _settings.CodexExecutablePath;
-        _chatGptService = new ChatGptUsageService(() => _settings.CodexExecutablePath);
-        return _chatGptService;
+        lock (_chatGptServiceGate)
+        {
+            if (_chatGptService is not null) return _chatGptService;
+            _chatGptServicePath = _settings.CodexExecutablePath;
+            _chatGptService = new ChatGptUsageService(() => _settings.CodexExecutablePath);
+            return _chatGptService;
+        }
     }
 
-    async Task ActivateProviderAsync(UsageProviderKind provider)
+    void DisposeChatGptService()
+    {
+        lock (_chatGptServiceGate)
+        {
+            _chatGptService?.Dispose();
+            _chatGptService = null;
+            _chatGptServicePath = null;
+        }
+    }
+
+    void ActivateProvider(UsageProviderKind provider)
     {
         _widget.SetActiveProvider(provider);
         _settings.ActiveProvider = provider.StorageKey();
         _settings.Save();
         UpdateProviderChecks();
-        _backoffSec = BaseIntervalSec;
-        _fetchTimer.Interval = TimeSpan.FromSeconds(BaseIntervalSec);
-
-        if (_cache.TryGetValue(provider, out var cached))
-            _widget.ShowUsage(
-                cached,
-                _lastSuccessAt.TryGetValue(provider, out var cachedAt) ? cachedAt : null);
+        var source = ActiveSource;
+        if (_usageMonitor?.Current.TryGetValue(source, out var snapshot) == true)
+            RenderUsage(snapshot);
         else
             _widget.ShowLoading(L10n.T("updating"));
-        await FetchAndRenderAsync();
+        _usageMonitor?.RefreshNow(source);
     }
 
-    async Task FetchAndRenderAsync()
+    void OnUsageChanged(UsageSnapshot snapshot)
     {
-        if (!await _fetchGate.WaitAsync(0)) return;
-        var provider = _widget.ActiveProvider;
-        try
+        Dispatcher.BeginInvoke(() =>
         {
-            if (provider == UsageProviderKind.Claude && !_claudeService.HasTokens)
-            {
-                _providerStatus[provider] = "AuthenticationRequired";
-                if (_widget.ActiveProvider == provider)
-                    _widget.ShowError(L10n.T("err_not_signed_in_hint"));
-                return;
-            }
+            if (_exitStarted || _usageMonitor is null) return;
+            UpdateTray();
+            if (snapshot.Source == ActiveSource) RenderUsage(snapshot);
+        });
+    }
 
-            if (_widget.ActiveProvider == provider) _widget.ShowLoading(L10n.T("updating"));
-            var buckets = provider == UsageProviderKind.Claude
-                ? await _claudeService.GetUsageAsync()
-                : await GetChatGptService().GetUsageAsync();
-
-            _cache[provider] = buckets;
-            var refreshedAt = DateTimeOffset.Now;
-            _lastSuccessAt[provider] = refreshedAt;
-            _providerStatus[provider] = "Ready";
-            if (_widget.ActiveProvider == provider)
-            {
-                _widget.ShowUsage(buckets, refreshedAt);
-                UpdateTray(provider, buckets);
-            }
-            if (_backoffSec != BaseIntervalSec)
-            {
-                _backoffSec = BaseIntervalSec;
-                _fetchTimer.Interval = TimeSpan.FromSeconds(BaseIntervalSec);
-            }
-        }
-        catch (RateLimitedException ex)
+    void RenderUsage(UsageSnapshot snapshot)
+    {
+        switch (snapshot.Health)
         {
-            _providerStatus[provider] = "RateLimited";
-            _backoffSec = Math.Min(600, _backoffSec * 2);
-            var waitSec = ex.RetryAfter?.TotalSeconds is double retryAfter && retryAfter > 0
-                ? Math.Clamp(retryAfter, BaseIntervalSec, 600)
-                : _backoffSec;
-            _fetchTimer.Interval = TimeSpan.FromSeconds(waitSec);
-            Log.Write($"usage API 限流 (429)，{waitSec:F0} 秒後重試");
-            if (_widget.ActiveProvider == provider)
-            {
-                if (_cache.ContainsKey(provider) && _lastSuccessAt.TryGetValue(provider, out var lastSuccess))
-                    _widget.ShowStaleData(lastSuccess);
-                else
-                    _widget.ShowNotice(L10n.F("retry_at", DateTime.Now.AddSeconds(waitSec).ToString("HH:mm")));
-            }
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _providerStatus[provider] = DiagnosticsService.ClassifyError(ex);
-            if (_widget.ActiveProvider == provider) _widget.ShowError(ex.Message);
-            _tray.Text = L10n.T("tray_need_login");
-        }
-        catch (Exception ex)
-        {
-            _providerStatus[provider] = DiagnosticsService.ClassifyError(ex);
-            Log.Error($"{provider.DisplayName()} 用量更新失敗", ex);
-            if (_widget.ActiveProvider == provider)
-            {
-                if (_cache.TryGetValue(provider, out var cached) &&
-                    _lastSuccessAt.TryGetValue(provider, out var lastSuccess))
-                {
-                    _widget.ShowUsage(cached, lastSuccess);
-                    _widget.ShowStaleData(lastSuccess);
-                }
-                else
-                {
-                    _widget.ShowError(L10n.F("err_update_prefix", ex.Message));
-                }
-            }
-        }
-        finally
-        {
-            _fetchGate.Release();
+            case UsageHealth.Loading:
+                _widget.ShowLoading(L10n.T("updating"));
+                break;
+            case UsageHealth.Ok:
+                _widget.ShowUsage(snapshot);
+                break;
+            case UsageHealth.Stale when snapshot.Windows.Count > 0 && snapshot.LastSuccess is DateTimeOffset lastSuccess:
+                _widget.ShowUsage(snapshot);
+                _widget.ShowStaleData(lastSuccess);
+                break;
+            case UsageHealth.SignedOut:
+                _widget.ShowError(snapshot.Source == UsageSource.Claude
+                    ? L10n.T("err_not_signed_in_hint")
+                    : L10n.T("err_chatgpt_not_signed_in"));
+                break;
+            default:
+                _widget.ShowError(L10n.T("err_usage_unavailable"));
+                break;
         }
     }
 
-    int? _lastTrayPct;
-    UsageProviderKind? _lastTrayProvider;
-
-    void UpdateTray(UsageProviderKind provider, List<UsageBucket> buckets)
+    void UpdateTray()
     {
-        var primary = provider == UsageProviderKind.Claude
-            ? buckets.FirstOrDefault(bucket => bucket.Key is "session" or "five_hour") ?? buckets.FirstOrDefault()
-            : buckets.FirstOrDefault();
-        var pct = primary is null ? (int?)null : (int)Math.Round(primary.Utilization);
-        if (pct != _lastTrayPct || provider != _lastTrayProvider)
+        var snapshots = _usageMonitor?.Current;
+        if (snapshots is null) return;
+
+        var allWindows = snapshots.Values.SelectMany(snapshot => snapshot.Windows).ToArray();
+        var principal = UsageSummary.Principal(allWindows);
+        var pct = principal is null ? (int?)null : (int)Math.Round(principal.UsedPercent);
+        if (pct != _lastTrayPct)
         {
             _lastTrayPct = pct;
-            _lastTrayProvider = provider;
             var old = _tray.Icon;
-            _tray.Icon = TrayIconRenderer.Render(primary?.Utilization);
+            _tray.Icon = TrayIconRenderer.Render(principal?.UsedPercent);
             old?.Dispose();
         }
 
-        var lines = new[] { provider.DisplayName() }
-            .Concat(buckets.Select(bucket => $"{bucket.Label}: {Math.Round(bucket.Utilization)}%"));
+        var lines = new[] { UsageSource.Claude, UsageSource.Codex }
+            .Select(source =>
+            {
+                var name = source == UsageSource.Claude ? L10n.T("provider_claude") : L10n.T("provider_chatgpt");
+                var snapshot = snapshots.GetValueOrDefault(source);
+                var window = snapshot is null ? null : UsageSummary.Principal(snapshot.Windows);
+                var remaining = window is null
+                    ? L10n.T("tray_usage_unavailable")
+                    : L10n.F("tray_usage_remaining", Math.Round(window.RemainingPercent)) +
+                      (snapshot!.Health is UsageHealth.Stale or UsageHealth.SignedOut
+                          ? L10n.T("tray_usage_stale")
+                          : "");
+                return $"{name}: {remaining}";
+            });
         var tip = string.Join("\n", lines);
         var trimmed = tip.Length > 127 ? tip[..127] : tip;
         if (_tray.Text != trimmed) _tray.Text = trimmed;
     }
 
-    async Task ConnectCurrentProviderAsync(bool force)
+    Task SignInActiveProviderAsync(bool force) => _widget.ActiveProvider == UsageProviderKind.Claude
+        ? SignInClaudeAsync(force)
+        : SignInChatGptAsync(force);
+
+    Task SignInClaudeAsync(bool force)
     {
-        if (_loginWindowOpen) return;
-        var provider = _widget.ActiveProvider;
-        if (provider == UsageProviderKind.Claude)
+        if (_loginWindowOpen) return Task.CompletedTask;
+        if (!force && _claudeService.HasTokens)
         {
-            if (!force && _claudeService.HasTokens) return;
-            _loginWindowOpen = true;
-            try
-            {
-                var login = new LoginWindow();
-                var ok = login.ShowDialog() == true && login.Result is not null;
-                if (ok)
-                {
-                    _claudeService.SetTokens(login.Result!);
-                    _cache.Remove(UsageProviderKind.Claude);
-                    await FetchAndRenderAsync();
-                }
-            }
-            finally
-            {
-                _loginWindowOpen = false;
-            }
-            return;
+            _usageMonitor?.RefreshNow(UsageSource.Claude);
+            return Task.CompletedTask;
         }
 
+        _loginWindowOpen = true;
+        try
+        {
+            var login = new LoginWindow();
+            var ok = login.ShowDialog() == true && login.Result is not null;
+            if (ok)
+            {
+                _claudeService.SetTokens(login.Result!);
+                _usageMonitor?.RefreshNow(UsageSource.Claude);
+            }
+        }
+        finally
+        {
+            _loginWindowOpen = false;
+        }
+        return Task.CompletedTask;
+    }
+
+    async Task SignInChatGptAsync(bool force)
+    {
+        if (_loginWindowOpen) return;
         _loginWindowOpen = true;
         try
         {
@@ -728,7 +720,7 @@ public partial class App : System.Windows.Application
             var accountType = await service.GetAccountTypeAsync();
             if (!force && accountType is "chatgpt" or "personalAccessToken")
             {
-                await FetchAndRenderAsync();
+                _usageMonitor?.RefreshNow(UsageSource.Codex);
                 return;
             }
             if (accountType == "apiKey")
@@ -743,13 +735,13 @@ public partial class App : System.Windows.Application
 
             _widget.ShowNotice(L10n.T("chatgpt_login_waiting"));
             await service.LoginViaBrowserAsync();
-            _cache.Remove(UsageProviderKind.ChatGpt);
-            await FetchAndRenderAsync();
+            _usageMonitor?.RefreshNow(UsageSource.Codex);
         }
         catch (Exception ex)
         {
-            Log.Error("ChatGPT 登入失敗", ex);
-            _widget.ShowError(ex.Message);
+            Log.Write($"ChatGPT sign-in failed ({DiagnosticsService.ClassifyError(ex)})");
+            if (_widget.ActiveProvider == UsageProviderKind.ChatGpt)
+                _widget.ShowError(L10n.T("err_usage_unavailable"));
         }
         finally
         {

@@ -28,6 +28,9 @@ public static class L10n
         ["widget_title"] = ("AI 用量", "AI Usage"),
         ["provider_claude"] = ("Claude", "Claude"),
         ["provider_chatgpt"] = ("ChatGPT", "ChatGPT"),
+        ["tray_usage_remaining"] = ("剩餘 {0}%", "{0}% remaining"),
+        ["tray_usage_unavailable"] = ("無可用資料", "unavailable"),
+        ["tray_usage_stale"] = (" · 過期", " · stale"),
         ["updating"] = ("更新中…", "Updating…"),
         ["data_stale"] = ("資料可能已過期 · {0}", "Data may be stale · {0}"),
         ["retry_at"] = ("{0} 重試", "retry {0}"),
@@ -51,6 +54,7 @@ public static class L10n
         ["autostart_problem"] = ("Windows 無法完整套用開機自動啟動設定（{0}）。請檢查「啟動」資料夾權限或公司裝置政策。", "Windows could not fully apply the auto-start setting ({0}). Check the Startup folder permission or your organization device policy."),
         // errors / status
         ["err_update_prefix"] = ("更新失敗:{0}", "Update failed: {0}"),
+        ["err_usage_unavailable"] = ("目前無法取得用量資料。", "Usage is temporarily unavailable."),
         ["err_not_signed_in_hint"] = ("尚未登入，右鍵選「連結 / 重新登入」。", "Not signed in — right-click and choose \"Connect / sign in again\"."),
         ["tray_need_login"] = ("AI Usage — 需要登入", "AI Usage — sign-in required"),
         ["err_not_signed_in"] = ("尚未登入", "Not signed in"),
