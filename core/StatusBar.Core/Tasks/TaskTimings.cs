@@ -21,6 +21,9 @@ public sealed record TaskTimings
     /// <summary>Maximum age of a Codex rollout file considered for tracking.</summary>
     public TimeSpan CodexRecentFileWindow { get; init; } = TimeSpan.FromHours(24);
 
+    /// <summary>How long a Codex completed-question flag remains visible.</summary>
+    public TimeSpan QuestionAttentionExpiry { get; init; } = TimeSpan.FromHours(4);
+
     /// <summary>Recent metadata-only activity window for Claude tasks.</summary>
     public TimeSpan ClaudeRecentActivityWindow { get; init; } = TimeSpan.FromMinutes(2);
 

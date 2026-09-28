@@ -35,7 +35,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 ## Phase 2 — Codex tasks
 
 - [x] P2.1 Incremental JSONL reading
-- [ ] P2.2 Codex rollout parser ⚠️
+- [x] P2.2 Codex rollout parser ⚠️
 - [ ] P2.3 Codex titles
 - [ ] P2.4 CodexTaskProvider
 - [ ] P2.5 Wiring and diagnostics
@@ -102,3 +102,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — Phase 1 acceptance (Steve) — Items 1–3 and 8–12 passed. **Item 4 failed: the pane never opened**, caused by the P1.7 review fix (a `long.MinValue` sentinel overflowed `TickCount64 - closedAt`, so every open was treated as "just closed"). Fixed with a nullable timestamp. Claude needed a manual refresh on first start: `UsageMonitor` now retries a never-loaded provider twice after 15 s before normal back-off, records the exception type in `UsageSnapshot.ErrorType`, and `App` logs provider status transitions to `log.txt`. Items 4–7 need re-testing.
 - 2026-09-28 — P2.1 — Added byte-oriented incremental JSONL reading with newline-delimited UTF-8 decoding, buffered partial lines, replacement/truncation reset detection, and a bounded tail reader. The reader consumes through EOF and retains any unterminated bytes in memory so later appends complete the same line; no transcript content is logged or persisted.
 - 2026-09-28 — P2.1 review note for P2.4 — `TailReader.Read` does not report where its tail ends, and `IncrementalJsonlReader` cannot start from a given offset, so the first read of a session file would read the whole file (Steve has 24 MB rollouts). In P2.4, have `TailReader` also return the byte offset just after the last complete line it returned, add `IncrementalJsonlReader.StartAt(long offset)` (with the current file id), and call it after the tail read so incremental reading continues from there with no gap or duplicate. Add a test with a large file that asserts the incremental reader never reads before the tail offset.
+- 2026-09-28 — P2.2 — Added the Codex rollout state parser, task mapper, question-ending heuristic and format-drift counters. Codex fixtures remain provisional pending P0.4; tests add the minimal question marker and approval policy marker at runtime so fixtures contain no transcript text or tool arguments.
