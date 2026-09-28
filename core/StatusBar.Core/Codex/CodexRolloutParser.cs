@@ -291,7 +291,7 @@ internal static class CodexRolloutParser
             builder.Append(nestedText);
         }
 
-        return SanitizeTitleCandidate(builder.ToString());
+        return TextSanitizer.SanitizeTitleCandidate(builder.ToString());
     }
 
     static void AppendTextBlock(StringBuilder builder, string? text)
@@ -300,28 +300,6 @@ internal static class CodexRolloutParser
         if (builder.Length > 0) builder.Append(' ');
         builder.Append(text);
     }
-
-    static string? SanitizeTitleCandidate(string text)
-    {
-        var firstLine = text.Split('\n', 2)[0].Trim();
-        if (firstLine.Length == 0 || IsInjectedContext(firstLine)) return null;
-
-        var normalized = string.Join(' ', firstLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        normalized = normalized.TrimStart('#', '>', '-', '*', '_', '`').Trim();
-        if (normalized.Length == 0) return null;
-        if (normalized.Length <= 48) return normalized;
-
-        var limit = 47;
-        var boundary = normalized.LastIndexOf(' ', limit);
-        if (boundary > 0) limit = boundary;
-        return normalized[..limit].TrimEnd() + "…";
-    }
-
-    static bool IsInjectedContext(string text) =>
-        text.StartsWith("<environment_context>", StringComparison.OrdinalIgnoreCase) ||
-        text.StartsWith("<user_instructions>", StringComparison.OrdinalIgnoreCase) ||
-        text.StartsWith("<permissions", StringComparison.OrdinalIgnoreCase) ||
-        text.StartsWith("# AGENTS.md", StringComparison.OrdinalIgnoreCase);
 
     static DateTimeOffset ReadTimestamp(JsonElement root, DateTimeOffset fallback) =>
         TryReadTimestamp(root, "timestamp", out var timestamp) || TryReadTimestamp(root, "ts", out timestamp)

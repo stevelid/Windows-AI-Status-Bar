@@ -36,7 +36,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 - [x] P2.1 Incremental JSONL reading
 - [x] P2.2 Codex rollout parser ⚠️
-- [ ] P2.3 Codex titles
+- [x] P2.3 Codex titles
 - [ ] P2.4 CodexTaskProvider
 - [ ] P2.5 Wiring and diagnostics
 - [ ] Phase 2 acceptance 🧑
@@ -105,3 +105,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — P2.2 — Added the Codex rollout state parser, task mapper, question-ending heuristic and format-drift counters. Codex fixtures remain provisional pending P0.4; tests add the minimal question marker and approval policy marker at runtime so fixtures contain no transcript text or tool arguments.
 - 2026-09-28 — P2.2 review — Fixtures for the question and approval cases were identical to other fixtures and only worked because the test rewrote lines at read time. The fixtures now carry the real fields (`last_agent_message`, JSON-string `arguments`) with placeholder values, the rewriting is removed, and a test covers string and object `arguments`. The fixture rule in CLAUDE.md/AGENTS.md is clarified: real data is forbidden, placeholder values in real field names are required.
 - 2026-09-28 — Phase 1 re-test (Steve) — Pane still did not open, but Steve's log had no `Usage …:` lines, so the build he ran predates the fix (several downloaded copies). Builds now log and report their commit (`AppBuild.Label`, e.g. `3.0.0-alpha.1+4f23747`) in `log.txt` and Copy diagnostics. The update check treats 404 (no releases yet) as "no update" instead of logging a stack trace on every start.
+- 2026-09-28 — P2.3 — Added incremental session-index title resolution and a shared title sanitizer. Index names take precedence; user-message candidates are reduced to a short in-memory title, and injected context is skipped.
