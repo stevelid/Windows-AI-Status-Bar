@@ -144,6 +144,63 @@ public class IncrementalJsonlReaderTests
         Assert.Equal(["first", "second"], result);
     }
 
+    [Fact]
+    public void Tail_offset_restarts_incremental_reading_at_the_unfinished_line()
+    {
+        using var file = new TempJsonlFile();
+        file.Write("first\nsecond\npartial");
+
+        var tail = TailReader.ReadWithOffset(file.Path, maxBytes: 12);
+        var reader = new IncrementalJsonlReader(file.Path);
+        reader.StartAt(tail.Offset);
+        file.Append("\nnew\n");
+
+        var result = reader.ReadNewLines();
+
+        Assert.Equal([], tail.Lines);
+        Assert.Equal(13, tail.Offset);
+        Assert.Equal(file.Length, result.Offset);
+        Assert.Equal(tail.Offset, reader.LastReadStartOffset);
+        Assert.Equal(["partial", "new"], result.Lines);
+    }
+
+    [Fact]
+    public void Tail_offset_avoids_replaying_a_large_file_prefix()
+    {
+        using var file = new TempJsonlFile();
+        file.Write(new string('x', 5 * 1024 * 1024) + "\nfirst\nsecond\n");
+
+        var tail = TailReader.ReadWithOffset(file.Path, maxBytes: 32);
+        var reader = new IncrementalJsonlReader(file.Path);
+        reader.StartAt(tail.Offset);
+        file.Append("third\n");
+
+        var result = reader.ReadNewLines();
+
+        Assert.Equal(["first", "second"], tail.Lines);
+        Assert.Equal(tail.Offset, reader.LastReadStartOffset);
+        Assert.Equal(["third"], result.Lines);
+    }
+
+    [Fact]
+    public void Tail_reader_replays_a_line_larger_than_its_suffix_when_it_is_completed_later()
+    {
+        using var file = new TempJsonlFile();
+        var line = new string('x', 64);
+        file.Write(line);
+
+        var tail = TailReader.ReadWithOffset(file.Path, maxBytes: 16);
+        var reader = new IncrementalJsonlReader(file.Path);
+        reader.StartAt(tail.Offset);
+        file.Append("\n");
+
+        var result = reader.ReadNewLines();
+
+        Assert.Empty(tail.Lines);
+        Assert.Equal(0, tail.Offset);
+        Assert.Equal([line], result.Lines);
+    }
+
     sealed class TempJsonlFile : IDisposable
     {
         readonly string _directory = System.IO.Path.Combine(

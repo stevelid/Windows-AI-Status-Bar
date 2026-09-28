@@ -23,10 +23,55 @@ internal sealed class IncrementalJsonlReader
 
         _path = path;
         _bufferSize = bufferSize;
-        _fileIdProvider = fileIdProvider ?? File.GetCreationTimeUtc;
+        _fileIdProvider = fileIdProvider ?? DefaultFileId;
     }
 
+    // Windows keeps a file's creation time when it is appended to, so a changed creation time
+    // means the file was replaced. Unix has no creation time: .NET reports a time that moves
+    // on every write, which would look like a replacement after each append. There, only
+    // truncation (length below the offset) is detected. The app itself runs on Windows.
+    static DateTime DefaultFileId(string path) =>
+        OperatingSystem.IsWindows() ? File.GetCreationTimeUtc(path) : DateTime.MinValue;
+
     internal long Offset { get; private set; }
+
+    internal long LastReadStartOffset { get; private set; }
+
+    internal void StartAt(long offset)
+    {
+        if (offset < 0) throw new ArgumentOutOfRangeException(nameof(offset));
+
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(
+                _path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                _bufferSize,
+                FileOptions.SequentialScan);
+        }
+        catch (FileNotFoundException)
+        {
+            OnFileMissing();
+            return;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            OnFileMissing();
+            return;
+        }
+
+        using (stream)
+        {
+            _fileId = _fileIdProvider(_path);
+            _hasFileId = true;
+            Offset = offset <= stream.Length ? offset : 0;
+            LastReadStartOffset = Offset;
+            _pendingPartialLine = [];
+        }
+    }
 
     internal JsonlReadResult ReadNewLines()
     {
@@ -64,6 +109,7 @@ internal sealed class IncrementalJsonlReader
             _fileId = fileId;
             _hasFileId = true;
             stream.Position = Offset;
+            LastReadStartOffset = Offset;
 
             var bytesToRead = length - Offset;
             if (bytesToRead <= 0)
@@ -98,6 +144,7 @@ internal sealed class IncrementalJsonlReader
         _hasFileId = false;
         _fileId = default;
         Offset = 0;
+        LastReadStartOffset = 0;
         _pendingPartialLine = [];
         return new JsonlReadResult([], reset, Offset);
     }

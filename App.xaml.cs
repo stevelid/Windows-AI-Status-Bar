@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
+using StatusBar.Core.Codex;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
@@ -15,6 +16,7 @@ public partial class App : System.Windows.Application
 
     UsageMonitor? _usageMonitor;
     AgentStateService? _agentStateService;
+    CodexTaskProvider? _codexTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
     long? _detailsPaneClosedAtMs;
@@ -25,6 +27,8 @@ public partial class App : System.Windows.Application
     TrayController _trayController = null!;
     StatusBarState _taskState = StatusBarState.Empty;
     int? _agentStateRetentionMinutes;
+    string? _agentStateCodexHomeOverride;
+    bool _agentStateDemoMode;
     bool _loginWindowOpen;
     bool _demoTasksRequested;
     bool _exitStarted;
@@ -377,7 +381,8 @@ public partial class App : System.Windows.Application
             var report = DiagnosticsService.BuildReport(
                 typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0),
                 providers,
-                DiagnosticsService.InspectCodex(_settings.CodexExecutablePath));
+                DiagnosticsService.InspectCodex(_settings.CodexExecutablePath),
+                _codexTaskProvider?.Diagnostics);
             System.Windows.Clipboard.SetText(report);
             _trayController.ShowBalloonTip(
                 3500,
@@ -516,22 +521,13 @@ public partial class App : System.Windows.Application
 
     void ConfigureAgentTaskService()
     {
-        var enabled = _demoTasksRequested || _settings.DemoTasks;
-        if (!enabled)
-        {
-            if (_agentStateService is null) return;
-            var previous = _agentStateService;
-            previous.StateChanged -= OnTaskStateChanged;
-            _agentStateService = null;
-            _agentStateRetentionMinutes = null;
-            _taskState = StatusBarState.Empty;
-            _ = previous.DisposeAsync();
-            UpdateStrip();
-            return;
-        }
+        var demoMode = _demoTasksRequested || _settings.DemoTasks;
+        var codexHomeOverride = demoMode ? null : _settings.CodexHomeOverride;
 
         if (_agentStateService is not null &&
-            _agentStateRetentionMinutes == _settings.RecentlyCompletedMinutes)
+            _agentStateRetentionMinutes == _settings.RecentlyCompletedMinutes &&
+            _agentStateDemoMode == demoMode &&
+            (demoMode || string.Equals(_agentStateCodexHomeOverride, codexHomeOverride, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -541,16 +537,35 @@ public partial class App : System.Windows.Application
             _agentStateService.StateChanged -= OnTaskStateChanged;
             _ = _agentStateService.DisposeAsync();
         }
-        _agentStateService = new AgentStateService(
+
+        if (_codexTaskProvider is not null)
+            _codexTaskProvider.WatcherOverflowed -= OnCodexWatcherOverflow;
+        _codexTaskProvider = null;
+        IAgentTaskProvider[] taskProviders;
+        if (demoMode)
+        {
+            taskProviders =
             [
                 new DemoTaskProvider(AgentProvider.Codex, TimeProvider.System),
                 new DemoTaskProvider(AgentProvider.Claude, TimeProvider.System),
-            ],
+            ];
+        }
+        else
+        {
+            _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
+            _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
+            taskProviders = [_codexTaskProvider];
+        }
+
+        _agentStateService = new AgentStateService(
+            taskProviders,
             TimeProvider.System,
             new StateServiceOptions(
                 TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
                 TaskTimings.Default.UnknownVisibleFor));
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
+        _agentStateDemoMode = demoMode;
+        _agentStateCodexHomeOverride = codexHomeOverride;
         _taskState = _agentStateService.Current;
         _agentStateService.StateChanged += OnTaskStateChanged;
         UpdateStrip();
@@ -593,6 +608,8 @@ public partial class App : System.Windows.Application
             UpdateStrip();
         });
     }
+
+    void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 
     void UpdateStrip()
     {
