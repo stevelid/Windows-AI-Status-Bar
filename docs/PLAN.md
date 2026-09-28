@@ -112,6 +112,15 @@ We adopt these rules, but for **all** recent sessions (not only the newest), inc
 - `audit.jsonl` records look like **Claude Agent SDK stream messages**: `type` = `system` (subtype `init`), `assistant`, `user`, `result`, with `message.content` blocks (`text`, `tool_use`, `tool_result`, `thinking`) and an `_audit_timestamp`. Windows writes each user prompt twice. If `result` records are written per turn, they give a **confirmed completion signal**, and a pending `AskUserQuestion` `tool_use` gives a strong **needs-input signal**. Both must be verified (assumptions A-C3 to A-C5).
 - ClaudeLift uses a file watcher at depth 2 with a 500 ms debounce and root rediscovery every 60 s.
 
+### 2.6 Claude Code (added 2026-09-28)
+
+Steve works mostly in Claude Code, in the Claude desktop app's Code tab and in terminals. Relevant facts:
+
+- Sessions are written as JSONL transcripts to `~/.claude/projects/<encoded-working-folder>/<session-id>.jsonl` (the folder can be moved with the `CLAUDE_CONFIG_DIR` environment variable). The format is not formally documented but is stable in practice and widely parsed by community tools (ClaudeLift reads it, including `ai-title` records for titles). Records carry `type` (`user`, `assistant`, `system`, `summary`, `ai-title`, …), `sessionId`, `cwd`, `timestamp`, `uuid`, `isSidechain` (sub-agents) and `message` (with `stop_reason` on assistant records).
+- A transcript does **not** record permission prompts; the prompt appears only in the UI.
+- Claude Code **hooks are documented and supported**. A command configured in `~/.claude/settings.json` receives JSON on stdin for events such as `UserPromptSubmit`, `Stop`, `Notification` (with `notification_type`, e.g. `permission_prompt`, `idle_prompt`, `elicitation_dialog`) and `SessionEnd`. Common fields are `session_id`, `transcript_path`, `cwd` and `hook_event_name`. `UserPromptSubmit` also carries the prompt text, which must never be stored.
+- Whether sessions started from the desktop Code tab use the same transcript folder and run user hooks is to be confirmed on Steve's PC (A-K1, A-K4).
+
 ### 2.5 Windows notification listener
 
 `Windows.UI.Notifications.Management.UserNotificationListener` requires **package identity** and the `userNotificationListener` capability. For an unpackaged WPF app, identity can be obtained with a *sparse package* (MSIX "packaging with external location"), which must be signed with a certificate trusted on the machine. The project would also need a Windows-specific TFM (for example `net10.0-windows10.0.19041.0`) for the WinRT projections. The user must grant access once. Some community reports indicate that the `NotificationChanged` event is unreliable for non-UWP apps, in which case `GetNotificationsAsync` must be polled. This is a significant packaging cost for evidence that is incomplete by design (Claude does not toast when its window is in focus). See design change D5 and spike S5.
@@ -139,6 +148,7 @@ Steve asked for suggestions before implementation. The following changes are **a
 | **D13** | "Aborted by user" (`turn_aborted`, reason `interrupted`) maps to `Complete` with detail "Stopped", not `Failed`. | The brief reserves `Failed` for reliable error states, and Codex does not persist errors. |
 | **D14** | Add a small `StatusDetail` string to `AgentTask` (e.g. "Stopped", "Waiting for approval"), shown only in the pane tooltip. | Gives the pane useful context without adding enum states. |
 | **D15** | **Decided by Steve 2026-09-28.** A completed turn whose final assistant message ends with a question is shown as `NeedsAttention / Inferred`, reason "Asked you a question". The check reads only the final message on the turn's terminal record (Codex `task_complete.last_agent_message`, Cowork `result.result`), computes one boolean in memory, and discards the text. | Both apps normally ask questions in plain text at the end of a turn rather than through structured prompts (recon follow-up), so structured-prompt rules alone would miss most real questions. |
+| **D16** | **Decided with Steve 2026-09-28: Claude Code, not Cowork, is Steve's main Claude surface** (desktop Code tab and terminal). The Claude task provider is rebuilt around Claude Code: its session transcripts under `~/.claude/projects` give discovery, titles and turn state, and Claude Code's **documented hooks** (opt-in) give confirmed "needs permission / needs input / finished" events. Cowork moves to an optional Phase 4. | Steve's live Cowork test showed no local activity, and Claude Code hooks are the supported mechanism for external status tools that the brief referred to. |
 
 ---
 
@@ -204,7 +214,9 @@ core/StatusBar.Core/
                  NotificationGate, DismissalStore, DemoTaskProvider
   Codex/         CodexPaths, CodexRolloutParser, CodexSessionState, CodexTitleResolver,
                  CodexSessionReader, CodexTaskProvider
-  Claude/        CoworkRootLocator, CoworkTaskStoreReader, CoworkTaskMetadata,
+  Claude/        ClaudeCodePaths, ClaudeCodeTranscriptParser, ClaudeCodeSessionState,
+                 ClaudeHookEventParser, ClaudeSettingsHookMerger, ClaudeCodeTaskProvider,
+                 CoworkRootLocator, CoworkTaskStoreReader, CoworkTaskMetadata,
                  CoworkAuditParser, CoworkAuditState, ClaudeStateResolver,
                  IClaudeAttentionEvidenceSource, ClaudeCoworkTaskProvider
   Docking/       DockGeometry, DockAnchor
@@ -423,7 +435,34 @@ Duplicate user prompts (Windows writes them twice) do not matter for state becau
 3. Steve can dismiss a Claude alert from the pane. `DismissalStore` records `(taskId, evidenceKey)`; the same evidence never re-raises, a new trigger does. Dismissals are kept in memory and in the small state file for 24 h.
 4. Unresolved alerts expire: Inferred after `ClaudeInferredAttentionExpiry`, Confirmed after `ClaudeConfirmedAttentionExpiry`, to `Unknown / Stale` with `StatusDetail = "No recent activity"`. Never to `Complete`.
 
-### 5.3 Notification de-duplication (`NotificationGate`)
+### 5.3 Claude Code (per session) ⚠️ A-K1…A-K4
+
+**Transcript records** (`ClaudeCodeTranscriptParser`, incremental like Codex):
+
+| Record | Effect |
+| --- | --- |
+| `user` with text content that is not a `tool_result`, not `isMeta`, and not a slash-command wrapper | `Turn = Running`, clear question flag and pending; first one is a title candidate (sanitised, never stored in full). |
+| `user` whose text starts with `[Request interrupted by user` | `Turn = Aborted` (`StatusDetail = "Stopped"`). ⚠️ A-K3 |
+| `user` with `tool_result` blocks | Resolve pending tool ids. |
+| `assistant` | `Turn = Running`; add pending for each `tool_use`. If `message.stop_reason == "end_turn"` → `Turn = Completed`, `EndedWithQuestion = QuestionDetector.EndsWithQuestion(last text block)` (D15). |
+| `ai-title` (`aiTitle`) | Title (preferred over the first prompt). |
+| any record with `isSidechain: true` | Activity for the parent session only (sub-agent; D12 analogue). |
+| everything else (`system`, `summary`, `file-history-snapshot`, …) | Activity only. |
+
+**Hook events** (`ClaudeHookEventParser`, reading the app's own `claude-hooks.jsonl`, see P3.2). These are documented and therefore `Confirmed`:
+
+| Hook event | Effect |
+| --- | --- |
+| `UserPromptSubmit` | `Working / Confirmed`; clears attention. |
+| `Notification` with `notification_type == "permission_prompt"` | `NeedsAttention / Confirmed`, reason "Permission requested", evidence key = session id + event timestamp. |
+| `Notification` with `notification_type == "elicitation_dialog"` | `NeedsAttention / Confirmed`, reason "Waiting for your input". |
+| `Notification` with `idle_prompt` | Ignored (it fires after every finished turn that is left idle; D15 covers real questions). |
+| `Stop` | `Complete / Confirmed` (question flag still comes from the transcript). |
+| `SessionEnd` | `Complete`; the session drops out after `RecentlyCompletedFor`. |
+
+**Combining.** The newest evidence wins. A permission alert from a hook is cleared by any later transcript record for that session (the tool ran, or Claude continued) or by the next hook event. Without hooks the provider uses transcripts only: permission waits then show as `Working` (documented limitation), and everything else still works.
+
+### 5.4 Notification de-duplication (`NotificationGate`)
 
 A notification fires only when a task **enters** `NeedsAttention` with an `evidenceKey` (Codex: `call_id`; Claude: pending `tool_use` ID or external evidence key) that has not been notified before. Notified keys are persisted with a timestamp in `%APPDATA%\WindowsAIStatusBar\state.json` and pruned after 24 h, so restarting the app does not repeat alerts. The first evaluation after start-up **seeds** the gate without notifying (existing attention is shown in the strip but not toasted).
 
@@ -442,7 +481,7 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 | **P0.3** 🧑 | Steve runs `Collect-Recon.ps1 -WatchSeconds 1500` while following the scenario script in [`recon/README.md`](recon/README.md), and writes `notes.md` with the times of each action. |
 | **P0.4** | Agent writes `docs/recon/FINDINGS.md`: confirm or refute every assumption in Section 8, record paths, history mode, record shapes, AUMIDs and timings; convert redacted samples into fixtures under `tests/StatusBar.Core.Tests/Fixtures/`; update this plan's rules where evidence differs (note each change in `PROGRESS.md`). |
 
-**Gate.** Phases 1 and the parsing parts of 2–3 may start before recon arrives, using fixtures derived from Section 2 (mark them `provisional-` in the file name). Replace or confirm them in P0.4. Phase 4 must not start before P0.4.
+**Gate.** Phases 1 and the parsing parts of 2–3 may start before recon arrives, using fixtures derived from Section 2 (mark them `provisional-` in the file name). Replace or confirm them in P0.4. Phase 4 (Cowork, optional) must not start before P0.3/P0.4 locate Cowork's current storage.
 
 ### Phase 1 — Reshape the widget (fake task data)
 
@@ -515,50 +554,79 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 - Register `CodexTaskProvider` in `App`; diagnostics report: sessions tracked, files watched, last event age, parse errors, drift counts by record signature (names only), watcher overflow count.
 - Phase 2 acceptance 🧑: two simultaneous Codex tasks appear as Working; one that asks for approval shows ⚠ within about 5 s and returns to Working after approval; finished tasks move to Recently completed and vanish after the configured time; quitting and restarting the app mid-task restores the same state.
 
-### Phase 3 — Claude Cowork discovery
+### Phase 3 — Claude Code tasks (D16)
 
-**P3.1 Roots and task store ⚠️ A-C1, A-C2**
+**P3.1 Claude Code transcript parser ⚠️ A-K1…A-K3**
+- `Claude/ClaudeCodePaths.cs` (`CLAUDE_CONFIG_DIR` → `%USERPROFILE%\.claude`; `projects/` folder; override from settings), `Claude/ClaudeCodeSessionState.cs`, `Claude/ClaudeCodeTranscriptParser.cs` (rules in §5.3), `Claude/ClaudeCodeTaskMapper.cs` (timing rules as for Codex: stale after 20 min without records, unknown after 2 h, question flag expiry).
+- Reuse `IncrementalJsonlReader`, `TailReader`, `QuestionDetector` and `TextSanitizer` from Phase 2. Transcript lines can be large (tool results, images); never copy content beyond the fields needed.
+- Fixtures `Fixtures/claude-code/`: `turn-running.jsonl`, `turn-complete.jsonl`, `turn-complete-with-question.jsonl`, `interrupted.jsonl`, `tool-pending.jsonl`, `ai-title.jsonl`, `sidechain.jsonl`, `malformed.jsonl`. Use `provisional-` names until Steve's recon confirms the shapes.
+- Tests: one per fixture; incremental reading; duplicate lines idempotent; `Contract/ClaudeCodeFormatContractTests.cs`.
+
+**P3.2 Hook event sink (documented hooks)**
+- `AIStatusBar.exe --claude-hook` mode, handled at the very start of `App.OnStartup` **before** the single-instance check and any UI. It reads the hook JSON from stdin (cap 1 MB), appends **one line** to `%APPDATA%\WindowsAIStatusBar\claude-hooks.jsonl` containing only `ts`, `event` (`hook_event_name`), `session_id` and, for `Notification`, `notification_type`, and exits with code 0. It must never write `prompt`, `message`, `tool_input`, paths or any other text, must never block Claude Code (finish within 1 s; on any error exit 0 silently), and keeps the file small (when over 256 KB, rewrite it with the last 200 lines).
+- Core `Claude/ClaudeHookEventParser.cs` reads that file incrementally. The line format is ours, so it is a stable contract.
+- Tests: the sink's pure part (`ClaudeHookLine.FromHookJson(string json)`) keeps only the allowed fields; prompt text never appears in the output; malformed input yields null.
+
+**P3.3 Opt-in hook installer**
+- Settings toggle "Use Claude Code hooks for exact status" (default **off**), with a short explanation and a preview of the exact change. On enable: read `~/.claude/settings.json` (create if missing), back it up once to `settings.json.windows-ai-status-bar.bak`, add hook entries for `UserPromptSubmit`, `Notification`, `Stop` and `SessionEnd` whose command is the quoted full path of `AIStatusBar.exe` plus `--claude-hook`, preserve every existing hook and setting, and write atomically (temp file, then replace). On disable: remove only entries containing `--claude-hook`. On start-up, if enabled and the exe path has changed (e.g. a new download folder), update the command path.
+- Core `Claude/ClaudeSettingsHookMerger.cs` does the JSON transform with `System.Text.Json.Nodes`: `string Add(string json, string command)`, `string Remove(string json)`, `bool IsInstalled(string json, string command)`.
+- Tests: empty/missing file; existing hooks for the same events preserved; idempotent add; remove leaves others intact; malformed JSON is refused (never overwritten); unknown top-level keys preserved.
+- Only the high-level, low-frequency events are used, so the hook adds no cost to individual tool calls.
+
+**P3.4 `ClaudeCodeTaskProvider`**
+- Watches `projects/**/*.jsonl` (sessions modified in the last 24 h; `DirectoryWatcher` with `IncludeSubdirectories`), plus `claude-hooks.jsonl`; reconciles every 20 s; recovers state from transcript tails on start-up; combines evidence per §5.3. Titles: `ai-title` → first prompt (sanitised, 48 characters) → `"Claude · " + working-folder leaf`. `SessionReference` = session id.
+- Tests (temp folders + FakeTimeProvider): discovery of two sessions; hook permission event raises Confirmed attention and a later transcript record clears it; no hook file → transcript-only behaviour; sidechain records do not create tasks; restart recovery.
+
+**P3.5 Dismiss control** (moved from the old Phase 4)
+- Pane rows with `NeedsAttention` and confidence not `Confirmed` (e.g. "Asked you a question"), and all `Unknown` rows, show a small "Dismiss" button on hover. It calls `AgentStateService.Dismiss`; `DismissalStore` keys on `(taskId, evidenceKey)` and persists to `state.json` for 24 h, so the same evidence does not come back but a new question does.
+
+**P3.6 Documentation** — write `docs/KNOWN_LIMITATIONS.md` from Section 9 plus anything recon adds.
+
+- Phase 3 acceptance 🧑: in both a terminal and the desktop Code tab, a new Claude Code task appears as Working within about 3 s with a sensible title; finishing it moves it to Recently completed; a turn ending with a question shows ⚠ "Asked you a question"; with hooks enabled, a permission prompt shows ⚠ "Permission requested" within about 2 s and clears after answering; disabling hooks restores the original `~/.claude/settings.json` hooks exactly.
+
+### Phase 4 — Claude Cowork (optional; only if Steve uses Cowork for real work and P0.3 finds where it now stores tasks)
+
+This phase keeps the original Cowork design. Do not start it until `docs/PROGRESS.md` marks it as wanted.
+
+#### 4a — Discovery
+
+**P4.1 Roots and task store ⚠️ A-C1, A-C2**
 - `Claude/CoworkRootLocator.cs` (inputs: `APPDATA`, `LOCALAPPDATA`, override; enumerates `Packages\Claude_*`; returns existing roots), `Claude/CoworkTaskMetadata.cs` (tolerant parse of the keys in 2.4 using `JsonDocument` and reading only the needed properties, because files are ~200 KB; unknown keys ignored; `initialMessage` only passed to `TextSanitizer` for a fallback title, never stored; `accountName`/`emailAddress` never read; recency from `lastActivityAt`, never from the file's write time, which can change in bulk), `Claude/CoworkTaskStoreReader.cs` (enumerate `<root>/<acct>/<ws>/local_*.json`, merge by task ID across roots preferring the record with `audit.jsonl`, then larger audit, then newer metadata).
 - Fixtures: `Fixtures/cowork/two-roots/...` directory tree with a duplicated task.
 - Tests: discovery, merge preference, archived excluded, malformed metadata skipped and counted, title fallback "Claude task".
 
-**P3.2 Audit parser ⚠️ A-C3…A-C6**
+**P4.2 Audit parser ⚠️ A-C3…A-C6**
 - `Claude/CoworkAuditState.cs`, `Claude/CoworkAuditParser.cs` per Section 5.2.
 - Fixtures: `turn-running.jsonl`, `turn-complete.jsonl`, `turn-error.jsonl`, `ask-user-question-pending.jsonl`, `ask-user-question-answered.jsonl`, `duplicate-user-prompts.jsonl`, `malformed.jsonl`.
 - Fixtures also include `turn-complete-with-question.jsonl` (D15).
 - Tests: one per fixture; plus `Contract/CoworkFormatContractTests.cs` for recon-derived fixtures.
 
-**P3.3 `ClaudeCoworkTaskProvider`**
+**P4.3 `ClaudeCoworkTaskProvider`**
 - Watches every root with `DirectoryWatcher` (`IncludeSubdirectories`, filter `*.json*`, ignore paths under `uploads`/`outputs`), reconciles every 20 s, rediscovers roots every 60 s; incremental audit reads with `IncrementalJsonlReader`; tail read on first sight; tracks only tasks with activity in the last 24 h. Until P4.1 the resolver uses metadata + audit turn state only; attention rules are added in Phase 4.
 - Tests: new task appears; metadata `lastActivityAt` recency → `Working/Inferred`; audit result → Complete; root missing → `Unavailable`; MSIX duplicate counted once.
-- Phase 3 acceptance 🧑: starting a Cowork task shows it within a few seconds with the right title; finishing it moves it to Recently completed (or, if audit is unavailable, it drops to "active recently" and then disappears).
+- Phase 4a acceptance 🧑: starting a Cowork task shows it within a few seconds with the right title; finishing it moves it to Recently completed (or, if audit is unavailable, it drops to "active recently" and then disappears).
 
-### Phase 4 — Claude attention
+#### 4b — Attention
 
-**P4.1 `ClaudeStateResolver` and clearing rules ⚠️**
+**P4.4 `ClaudeStateResolver` and clearing rules ⚠️**
 - Implement Section 5.2 fully: attention from pending `AskUserQuestion`/`ExitPlanMode`, confidence per recon, expiry, clearing on later records and results, external-evidence hook (interface only).
 - Tests (table-driven): each clearing rule; expiry to `Unknown` never `Complete`; dismissal suppresses the same evidence but not a new one; external evidence matched by ID, title, then most recent.
 
-**P4.2 Dismiss control**
-- Pane row shows a small "Dismiss" button on hover for Claude `NeedsAttention` rows whose confidence is not `Confirmed`, and for all `Unknown` rows. Calls `AgentStateService.Dismiss`. `DismissalStore` persists to `state.json`.
-
-**P4.3 🧪 Spike S5 — notification listener** — *not planned for v1 (recon confirmed audit permission records, see D5). Keep only as a fallback if a Claude update removes them.*
+**P4.5 🧪 Spike S5 — notification listener** — *not planned for v1 (recon confirmed audit permission records, see D5). Keep only as a fallback if a Claude update removes them.*
 - Only if recon shows that permission prompts (not only `AskUserQuestion`) leave no trace in `audit.jsonl` **and** Steve wants them detected. Prototype in `spikes/NotificationListenerSpike/` (not in the solution): sparse package manifest with `userNotificationListener`, self-signed certificate script, `RequestAccessAsync`, list current toasts filtered by Claude's AUMID from recon, test `NotificationChanged` vs polling. Write `docs/spikes/S5-notification-listener.md` with a go/no-go and the maintenance cost.
-- If go: **P4.4** implement `ClaudeNotificationMonitor : IClaudeAttentionEvidenceSource` in the WPF project, behind `Settings.UseNotificationListener` (default false), with evidence keys from the toast ID.
+- If go: **P4.6** implement `ClaudeNotificationMonitor : IClaudeAttentionEvidenceSource` in the WPF project, behind `Settings.UseNotificationListener` (default false), with evidence keys from the toast ID.
 
-**P4.5 🧪 Spike — desktop logs** (only if both audit and notifications are insufficient). Same pattern: `ClaudeLogMonitor : IClaudeAttentionEvidenceSource`, parsing rules isolated in one class with its own fixtures.
+**P4.7 🧪 Spike — desktop logs** (only if both audit and notifications are insufficient). Same pattern: `ClaudeLogMonitor : IClaudeAttentionEvidenceSource`, parsing rules isolated in one class with its own fixtures.
 
-**P4.6 Documentation** — write `docs/KNOWN_LIMITATIONS.md` from Section 9 plus anything recon adds.
-
-- Phase 4 acceptance 🧑: asking Claude in Cowork to "ask me a multiple-choice question before continuing" shows ⚠ within a few seconds and clears after answering; an unanswered inferred alert becomes Unknown after 30 min; Dismiss works and does not come back for the same prompt.
+- Phase 4b acceptance 🧑: asking Claude in Cowork to "ask me a multiple-choice question before continuing" shows ⚠ within a few seconds and clears after answering; an unanswered inferred alert becomes Unknown after 30 min; Dismiss works and does not come back for the same prompt.
 
 ### Phase 5 — Interaction polish
 
 **P5.1 Click a task to focus the app**
-- `AppActivator.cs`: both desktop apps are MSIX packages (recon): Codex `OpenAI.Codex_2p2nqsd0c76g0!App`, Claude `Claude_pzs8sxrjxfjjc!Claude`. Activate with `IApplicationActivationManager.ActivateApplication(aumid, null, AO_NONE)`, which brings an existing window forward or launches the app. Resolve the package family name at runtime (enumerate `%LOCALAPPDATA%\Packages\OpenAI.Codex_*` / `Claude_*`, or `PackageManager`) instead of hard-coding the publisher suffix. Fallback: find the top-level window of process `Codex`/`codex` or `claude` via `EnumWindows`, restore it and `SetForegroundWindow`. Exact-session deep links only if spike S6 finds a supported URL scheme.
+- `AppActivator.cs`: both desktop apps are MSIX packages (recon): Codex `OpenAI.Codex_2p2nqsd0c76g0!App`, Claude `Claude_pzs8sxrjxfjjc!Claude`. Activate with `IApplicationActivationManager.ActivateApplication(aumid, null, AO_NONE)`, which brings an existing window forward or launches the app. Resolve the package family name at runtime (enumerate `%LOCALAPPDATA%\Packages\OpenAI.Codex_*` / `Claude_*`, or `PackageManager`) instead of hard-coding the publisher suffix. Fallback: find the top-level window of process `Codex`/`codex` or `claude` via `EnumWindows`, restore it and `SetForegroundWindow`. Exact-session deep links only if spike S6 finds a supported URL scheme. Claude Code tasks focus the Claude desktop app; a session started in a terminal cannot be mapped to its terminal window, so v1 focuses the Claude app for those too (documented limitation).
 
 **P5.2 Attention notifications (D11)**
-- `NotificationGate` in Core (Section 5.3) with tests (restart does not repeat; new evidence key notifies; seeding on start). `AttentionNotifier.cs` shows `"<Provider> needs you — <title>"` via the tray balloon when `NotificationsEnabled`; clicking the balloon opens the pane.
+- `NotificationGate` in Core (Section 5.4) with tests (restart does not repeat; new evidence key notifies; seeding on start). `AttentionNotifier.cs` shows `"<Provider> needs you — <title>"` via the tray balloon when `NotificationsEnabled`; clicking the balloon opens the pane.
 
 **P5.3 Visual polish**
 - Restrained transition: when `AttentionCount` increases, fade the pill background from transparent to amber over 400 ms once (skip if `SystemParameters.ClientAreaAnimation` is false). No looping animations. Tray icon shows a small amber dot when attention > 0.
@@ -590,10 +658,11 @@ Each commit lists: **Goal**, **Files**, **Tests**, and **Accept** (how to know i
 | S1 | Where does the ChatGPT Windows app's Codex write sessions (`~/.codex` or elsewhere)? | Recon static report | P2.4 |
 | S2 | Legacy (`response_item`) or paginated (`item_completed`) rollouts, and what a pending tool call looks like in each | Recon samples + timeline | P2.2 final fixtures |
 | S3 | Does a Codex desktop approval produce a `require_escalated` call before approval, and how long until the output appears? | Recon scenario C3 | Tuning `CodexApprovalDebounce` |
-| S4 | Does Cowork write `audit.jsonl` live, with `system/init` and `result` per turn? What appears for `AskUserQuestion` and for a permission prompt? | Recon scenarios K1–K4 | P3.2, P4.1 |
-| S5 | Is `UserNotificationListener` usable from this WPF app with a sparse package, and is it worth it? | Prototype (P4.3) | P4.4 |
+| S4 | Does Cowork write `audit.jsonl` live, with `system/init` and `result` per turn? What appears for `AskUserQuestion` and for a permission prompt? | Recon scenarios K1–K4 | P4.2, P4.4 (optional Cowork phase) |
+| S5 | Is `UserNotificationListener` usable from this WPF app with a sparse package, and is it worth it? | Prototype (P4.5) — not planned for v1 | P4.6 |
 | S6 | Are there supported deep links to a specific ChatGPT/Codex thread or Claude Cowork task? | Check registered URL protocols (`HKCR\chatgpt`, `HKCR\codex`, `HKCR\claude`) and app documentation | P5.1 enhancement only |
 | S7 | Is `thread/list` via the existing app-server a better title source than `session_index.jsonl`? | Call it from the smoke-test harness against Steve's Codex | Optional |
+| S9 | Where does the desktop Code tab write Claude Code transcripts, and does it run user hooks? | `Find-ClaudeWrites.ps1` during a Code-tab task; a test hook after P3.3 | P3.1 final fixtures, P3.4 |
 | S8 | Does .NET 10 WPF default to per-monitor-v2 DPI awareness without a manifest? | Test at mixed DPI | P1.6 |
 
 ---
@@ -612,6 +681,10 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 | A-X6 | Sub-agent sessions are identifiable from `session_meta.source` and name their parent | D12 | Count separately | Unverified |
 | A-X8 | `task_complete` carries `last_agent_message` and, on failure, an `error` object | D15, Codex Failed state | Question flag and Failed state not shown | Confirmed |
 | A-X7 | Rollouts compress only after 7 days | Discovery | Tail reader would skip `.zst`; acceptable | Not observed |
+| A-K1 | Claude Code transcripts (terminal and desktop Code tab) are in `~/.claude/projects/<folder>/<session>.jsonl` | Claude Code discovery | Settings override; recon path | Unverified for the desktop Code tab |
+| A-K2 | Transcript records: `type`, `message.stop_reason`, `isSidechain`, `ai-title` | Claude Code turn state and titles | Recency fallback (`Working/Inferred`) | Unverified on Steve's PC |
+| A-K3 | Interruptions are recorded as a user message starting `[Request interrupted by user` | Stopped state | Shows Complete instead of Stopped | Unverified |
+| A-K4 | Sessions started from the desktop Code tab run user hooks from `~/.claude/settings.json` | Confirmed Claude attention | Transcript-only (permission waits show as Working) | Unverified |
 | A-C1 | Cowork roots are `%APPDATA%\Claude\local-agent-mode-sessions` and MSIX `LocalCache` equivalents | Cowork discovery | Setting override | Confirmed (MSIX root only) |
 | A-C2 | Metadata `local_<id>.json` contains `title`, `lastActivityAt`, `isArchived`, `error` | Titles, recency | Titles "Claude task"; recency from file time | Confirmed (no `error` seen) |
 | A-C3 | `audit.jsonl` is written live during a turn | Claude Working state | Recency fallback only | Unverified |
@@ -626,12 +699,13 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 
 ## 9. Known limitations to document
 
-These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P4.6, updated with recon results:
+These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P3.6, updated with recon results:
 
 - Codex approval waits are inferred from pending tool calls, because Codex does not record approval requests on disk. Approvals for file edits outside the workspace (`apply_patch`) may not be detected.
 - Codex records a failed turn as `task_complete` with an `error` object, which maps to `Failed`. A Codex process that crashes mid-turn writes nothing, so that turn appears as Working, then Stale, then Unknown.
 - "Asked you a question" (D15) is a heuristic on the final character of the last message. It misses questions that are followed by further text and flags rhetorical questions. The flag is marked Inferred, can be dismissed, and expires after 4 hours.
 - Cloud Codex tasks started on chatgpt.com are not visible; only local desktop/CLI sessions are.
 - Claude Cowork state is inferred from undocumented local files. A Claude update may change them; the contract tests and the diagnostics drift counters are designed to make this obvious.
-- Claude attention relies on undocumented `system/permission_request` records in `audit.jsonl`. If a Claude update removes them, alerts fall back to pending `AskUserQuestion` tool calls (inferred) and the notification-listener seam.
+- Without the optional Claude Code hooks, a Claude Code permission prompt is not visible in the transcript, so the task shows as Working until Steve answers. With hooks enabled it shows as Needs you.
+- Cowork attention (optional Phase 4) relies on undocumented `system/permission_request` records in `audit.jsonl`. If a Claude update removes them, alerts fall back to pending `AskUserQuestion` tool calls (inferred) and the notification-listener seam.
 - Allowance percentages come from undocumented (Claude) and app-server (Codex) sources and may lag by one refresh interval.

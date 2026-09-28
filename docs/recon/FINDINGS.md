@@ -73,13 +73,16 @@ Additional Cowork observations:
 
 ## Still needed from Steve
 
+Steve clarified (2026-09-28) that most of his Claude work is in **Claude Code** (desktop Code tab and terminal), not Cowork. The plan now tracks Claude Code (D16). To confirm where the desktop Code tab writes its sessions (spike S9):
+
 1. Pull this branch, then run:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\tools\recon\Find-ClaudeWrites.ps1
    ```
 
-   During the five-minute countdown, start a short Cowork task and let it finish (a permission prompt as well, if one comes up naturally). The script lists every file under Claude's folders that changed during that window, with names redacted and only record types shown. Review the Desktop report and commit or paste it.
+2. During the five-minute countdown, give Claude Code in the desktop **Code** tab a short task and let it finish. If convenient, also run a short task with `claude` in a terminal.
+3. Review the report on the Desktop and commit or paste it. Only folder structure, file sizes and record types are shown.
 
 ## Design decision (formerly open)
 

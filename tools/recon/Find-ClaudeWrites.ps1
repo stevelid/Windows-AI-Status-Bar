@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    Finds where Claude Desktop writes files while a Cowork task runs.
+    Finds where Claude Desktop and Claude Code write files while a task runs.
 
 .DESCRIPTION
-    The first recon found no live Cowork activity in local-agent-mode-sessions, so Cowork may now
-    store tasks elsewhere. This script notes the start time, waits while you use Cowork, then
-    lists every file under Claude's folders that changed in that window.
+    Confirms where Claude Code (desktop Code tab or terminal) and Cowork write their session files.
+    The script notes the start time, waits while you use Claude, then lists every file under
+    Claude's folders (including ~/.claude) that changed in that window.
 
     Privacy: folder and file names are shown only when they look like identifiers (letters,
     digits, dot, dash, underscore, no spaces). Anything else becomes <name>, GUIDs become <uuid>,
@@ -14,7 +14,7 @@
     Nothing is uploaded. Please review the output before sharing it.
 
 .PARAMETER Seconds
-    How long to wait while you use Cowork (default 300).
+    How long to wait while you use Claude (default 300).
 
 .PARAMETER Roots
     Override the folders to scan (for testing).
@@ -126,7 +126,7 @@ function Get-TailLines([string]$path, [int]$count) {
 
 $start = Get-Date
 Write-Host ('Watching ' + $Roots.Count + ' Claude folder(s) for ' + $Seconds + ' s.')
-Write-Host 'Now use Cowork: start a short task and let it finish. If you can, also trigger a permission prompt.'
+Write-Host 'Now use Claude: give Claude Code in the desktop Code tab a short task and let it finish (a terminal session too, if convenient).'
 for ($left = $Seconds; $left -gt 0; $left -= 10) {
     Write-Host ('  ' + $left + ' s remaining...')
     Start-Sleep -Seconds ([Math]::Min(10, $left))

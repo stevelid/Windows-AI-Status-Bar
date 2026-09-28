@@ -41,21 +41,25 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [ ] P2.5 Wiring and diagnostics
 - [ ] Phase 2 acceptance 🧑
 
-## Phase 3 — Claude Cowork discovery
+## Phase 3 — Claude Code tasks (D16)
 
-- [ ] P3.1 Roots and task store ⚠️
-- [ ] P3.2 Audit parser ⚠️
-- [ ] P3.3 ClaudeCoworkTaskProvider
+- [ ] P3.1 Claude Code transcript parser ⚠️
+- [ ] P3.2 Hook event sink (`--claude-hook`)
+- [ ] P3.3 Opt-in hook installer
+- [ ] P3.4 ClaudeCodeTaskProvider
+- [ ] P3.5 Dismiss control
+- [ ] P3.6 KNOWN_LIMITATIONS.md
 - [ ] Phase 3 acceptance 🧑
 
-## Phase 4 — Claude attention (requires P0.4)
+## Phase 4 — Claude Cowork (optional; not wanted yet)
 
-- [ ] P4.1 ClaudeStateResolver and clearing rules ⚠️
-- [ ] P4.2 Dismiss control
-- [x] P4.3 🧪 Spike S5 notification listener — decision: not needed for v1 (audit `permission_request` records confirmed)
-- [ ] P4.4 ClaudeNotificationMonitor (only if S5 is go)
-- [ ] P4.5 🧪 Desktop log spike (only if needed)
-- [ ] P4.6 KNOWN_LIMITATIONS.md
+- [ ] P4.1 Roots and task store ⚠️
+- [ ] P4.2 Audit parser ⚠️
+- [ ] P4.3 ClaudeCoworkTaskProvider
+- [ ] P4.4 ClaudeStateResolver and clearing rules ⚠️
+- [x] P4.5 🧪 Spike S5 notification listener — decision: not needed (see D5)
+- [ ] P4.6 ClaudeNotificationMonitor (only if S5 is go)
+- [ ] P4.7 🧪 Desktop log spike (only if needed)
 - [ ] Phase 4 acceptance 🧑
 
 ## Phase 5 — Interaction polish
@@ -78,7 +82,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(The agent lists here, in plain steps, anything that needs Steve's Windows machine.)_
 
-- P0.3: run `tools/recon/Find-ClaudeWrites.ps1` while using Cowork, to find where current Cowork tasks are stored (steps in `docs/recon/FINDINGS.md`). **Phases 3 and 4 are blocked on this;** Phases 1 and 2 are not.
+- P0.3 / spike S9: run `tools/recon/Find-ClaudeWrites.ps1` while using **Claude Code in the desktop Code tab** (and, if convenient, briefly in a terminal), to confirm where its transcripts are written. Phase 3 can start with provisional fixtures; its final fixtures wait on this. Cowork (Phase 4) is optional and not wanted yet.
 - Phase 1 acceptance: download the latest `status-bar-win-x64` artifact from the branch's Windows workflow and launch `AIStatusBar.exe --demo`. Confirm the strip and tray tooltip show both providers' session allowances; click the strip to open the pane, check demo tasks move between sections and counts update, then click the strip again to confirm the pane stays closed. Use the tray menu to hide/show the strip, expand/collapse the pane, refresh, open Settings, inspect Sign in, Copy diagnostics, Check for updates and Quit. In Settings, change and restart-check language, theme, refresh interval, opacity, Codex/Cowork paths, notifications, recently-completed retention, pane timeout, attention label, monitor, quota thresholds and Demo tasks. Toggle Start with Windows on and off, then leave the app idle for a minute in Task Manager and check CPU use is approximately 0%.
 
 ## Decisions and deviations
@@ -94,3 +98,4 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - 2026-09-28 — D7 revised (Steve) — The strip and tray show each provider's session (5-hour) window instead of the tightest window. `UsageWindow` gained an optional `Length`; the Claude and Codex adapters set it, and `UsageSummary.Compact` picks the shortest window. The weekly figures remain in the details pane.
 - 2026-09-28 — P1.8 — Extracted tray ownership into `TrayController`, added the planned settings controls and monitor selection, and removed runtime use of legacy provider/window-placement settings while retaining those JSON properties as obsolete. `NotificationsEnabled` is saved for P5.2 alert delivery; the Codex and Cowork root overrides are saved for their planned collectors.
 - 2026-09-28 — D15 (Steve) — A completed turn whose final message ends with a question shows as "needs you" (Inferred). Implemented in P2.2 (Codex, plus `QuestionDetector`) and P3.2/P4.1 (Claude). Recon also showed Codex `task_complete` can carry an `error` object, so Codex `Failed` is now a confirmed state.
+- 2026-09-28 — D16 (Steve) — Steve works mainly in Claude Code and Codex, not Cowork. Phase 3 is now Claude Code tasks (transcripts plus opt-in documented hooks); the Cowork design moves to an optional Phase 4 (IDs renumbered P4.1–P4.7). Dismiss control and KNOWN_LIMITATIONS.md moved to P3.5/P3.6.
