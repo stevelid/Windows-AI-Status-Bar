@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>AIStatusBar</AssemblyName>
+    <RootNamespace>ClaudeUsageWidget</RootNamespace>
+    <Product>Windows AI Status Bar</Product>
+    <Version>3.0.0-alpha.1</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>
+    <!-- Allows compile-only builds on Linux/macOS (CI and cloud agents). The app still runs only on Windows. -->
+    <EnableWindowsTargeting Condition="'$(OS)' != 'Windows_NT'">true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="core\**\*.cs" />
+    <Compile Remove="tools\**\*.cs" />
+    <InternalsVisibleTo Include="ClaudeUsageWidget.SmokeTests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="core\StatusBar.Core\StatusBar.Core.csproj" />
+  </ItemGroup>
+
+</Project>

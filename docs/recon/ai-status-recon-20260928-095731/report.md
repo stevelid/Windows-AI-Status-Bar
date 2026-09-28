@@ -1,0 +1,745 @@
+﻿# Windows AI Status Bar - Phase 0 recon report
+
+Generated: 2026-09-28 09:57:31 +01:00
+Script privacy: free text redacted to <str:N>; review before sharing.
+
+## 1. Environment
+
+- OS: Microsoft Windows NT 10.0.26200.0
+- PowerShell: 5.1.26100.9444
+- Developer mode: unknown (key not found)
+- MSIX package: Claude 2.9939.2.0 (family Claude_pzs8sxrjxfjjc)
+- MSIX package: OpenAI.Codex 26.924.2738.0 (family OpenAI.Codex_2p2nqsd0c76g0)
+- Running processes: ChatGPT x13, claude x14, ClaudeUsageWidget x1, codex x4, codex-code-mode-host x2, codex-computer-use-swift x1, codex-windows-sandbox-service x1
+- Notification AUMID: `Claude_pzs8sxrjxfjjc!Claude`
+- Notification AUMID: `OpenAI.Codex_2p2nqsd0c76g0!App`
+
+## 2. Codex
+
+- Codex home: `~\.codex` exists=True
+- ChatGPT-bundled Codex bin: exists=True
+
+Top-level entries (names only):
+
+- `.chatgpt-projects/`
+- `.sandbox/`
+- `.sandbox-bin/`
+- `.sandbox-secrets/`
+- `.tmp/`
+- `archived_sessions/`
+- `attachments/`
+- `automations/`
+- `browser/`
+- `cache/`
+- `computer-use/`
+- `dictation-history/`
+- `log/`
+- `memories/`
+- `node_repl/`
+- `pets/`
+- `plugins/`
+- `process_manager/`
+- `rollout-migrations/`
+- `rules/`
+- `sessions/`
+- `sites/`
+- `skills/`
+- `skill_backups/`
+- `sqlite/`
+- `thread-writer-locks/`
+- `tmp/`
+- `vendor_imports/`
+- `visualizations/`
+- `worktrees/`
+- `..codex-global-state.json.bak.tmp-1788296016976-f98048d3-ca34-47f2-8564-60b67e076bd3` (1244282 bytes, modified 2026-09-01T21:53:36)
+- `..codex-global-state.json.bak.tmp-1788502224228-01609a25-619c-493e-ae4a-96a461081805` (0 bytes, modified 2026-09-04T07:10:24)
+- `..codex-global-state.json.bak.tmp-1789937321814-7d8bfd08-c19e-434c-a958-de667e9d6bea` (936131 bytes, modified 2026-09-20T21:48:41)
+- `..codex-global-state.json.bak.tmp-1790283395584-09e3071a-0556-4e4d-b959-59ee88181046` (524288 bytes, modified 2026-09-24T21:56:35)
+- `..codex-global-state.json.tmp-1777116422473-e36fce42-7319-430f-9c2a-fb4017f05587` (54129 bytes, modified 2026-04-25T12:27:02)
+- `..codex-global-state.json.tmp-1778595923538-c9262064-9e36-4ab3-8190-ab6cc9a4e789` (9651 bytes, modified 2026-05-12T15:25:23)
+- `..codex-global-state.json.tmp-1779371908724-d7dc5140-97c0-4e8e-8a7d-31a995c26112` (28919 bytes, modified 2026-05-21T14:58:28)
+- `..codex-global-state.json.tmp-1779460847687-6b7bde3c-debf-4cab-b20a-27b401b0541b` (58919 bytes, modified 2026-05-22T15:40:47)
+- `..codex-global-state.json.tmp-1779532385681-0ac6e2e3-8080-4454-b6e5-6675c2140f66` (59463 bytes, modified 2026-05-23T11:33:05)
+- `..codex-global-state.json.tmp-1786085446576-9f913a3e-03eb-4f14-a282-80814e6b23ce` (0 bytes, modified 2026-08-07T07:50:46)
+- `..codex-global-state.json.tmp-1788199187179-e9ecfa85-f3db-4d0b-9285-94c8e4dcec54` (1208985 bytes, modified 2026-08-31T18:59:47)
+- `..codex-global-state.json.tmp-1788333106749-26b6a901-2e07-4eea-8640-43276fddb197` (1248862 bytes, modified 2026-09-02T08:11:46)
+- `..codex-global-state.json.tmp-1788702768451-a0f339e4-6839-43dd-ae54-959ddde8ddd5` (1619852 bytes, modified 2026-09-06T14:52:48)
+- `..codex-global-state.json.tmp-1789554873626-0899b690-0357-4346-9ff1-aec7264f0bb7` (524288 bytes, modified 2026-09-16T11:34:33)
+- `..codex-global-state.json.tmp-1789657192442-30bb2fc9-d957-439a-adec-ce73eb5d58f1` (1028009 bytes, modified 2026-09-17T15:59:52)
+- `.app-server-state-reconciled-v1` (0 bytes, modified 2026-06-19T10:19:14)
+- `.codex-global-state.json` (269436 bytes, modified 2026-09-28T09:55:53)
+- `.codex-global-state.json.bak` (269436 bytes, modified 2026-09-28T09:55:53)
+- `.codex-provisioning-ce7d402e58c97e58.guard` (0 bytes, modified 2026-09-28T08:39:21)
+- `.personality_migration` (3 bytes, modified 2026-02-03T10:30:32)
+- `.sandbox_migration` (3 bytes, modified 2026-07-27T17:45:53)
+- `AGENTS.md` (239 bytes, modified 2026-07-23T20:18:04)
+- `AGENTS.md.duplicate-symlink.bak-20260723` (0 bytes, modified 2026-03-10T09:03:11)
+- `cap_sid` (17620 bytes, modified 2026-07-03T16:33:23)
+- `chrome-native-hosts-v2.json` (57700 bytes, modified 2026-09-28T08:45:38)
+- `config.toml` (5819 bytes, modified 2026-09-28T09:43:07)
+- `external_agent_session_imports.json` (2188 bytes, modified 2026-09-28T08:44:41)
+- `goals_1.sqlite` (32768 bytes, modified 2026-09-28T09:47:01)
+- `goals_1.sqlite-shm` (32768 bytes, modified 2026-09-28T09:48:51)
+- `goals_1.sqlite-wal` (24752 bytes, modified 2026-09-28T09:54:11)
+- `history.jsonl` (215629 bytes, modified 2026-06-02T22:46:21)
+- `installation_id` (36 bytes, modified 2026-04-16T19:05:41)
+- `internal_storage.json` (43 bytes, modified 2025-09-17T23:28:40)
+- `logs_2.sqlite` (94793728 bytes, modified 2026-09-28T09:54:11)
+- `logs_2.sqlite-shm` (32768 bytes, modified 2026-09-28T09:45:13)
+- `logs_2.sqlite-wal` (4132392 bytes, modified 2026-09-28T09:54:21)
+- `memories_1.sqlite` (45056 bytes, modified 2026-09-28T09:04:33)
+- `memories_1.sqlite-shm` (32768 bytes, modified 2026-09-28T09:51:42)
+- `memories_1.sqlite-wal` (12392 bytes, modified 2026-09-28T09:54:11)
+- `models_cache.json` (353579 bytes, modified 2026-09-28T09:56:48)
+- `queue_1.sqlite` (4096 bytes, modified 2026-08-27T08:44:45)
+- `queue_1.sqlite-shm` (32768 bytes, modified 2026-09-28T08:44:33)
+- `queue_1.sqlite-wal` (1091832 bytes, modified 2026-09-28T09:54:11)
+- `sandbox.log` (669 bytes, modified 2026-06-02T22:44:41)
+- `session_index.jsonl` (65032 bytes, modified 2026-09-28T09:52:09)
+- `state_5.sqlite` (9945088 bytes, modified 2026-09-28T09:47:56)
+- `state_5.sqlite-shm` (32768 bytes, modified 2026-09-28T08:44:33)
+- `state_5.sqlite-wal` (4181832 bytes, modified 2026-09-28T09:54:11)
+- `thread_history_1.sqlite` (461209600 bytes, modified 2026-09-28T09:52:37)
+- `thread_history_1.sqlite-shm` (32768 bytes, modified 2026-09-28T09:15:03)
+- `thread_history_1.sqlite-wal` (4152992 bytes, modified 2026-09-28T09:52:37)
+- `transcription-history.jsonl` (9093 bytes, modified 2026-09-23T17:02:32)
+- `version.json` (105 bytes, modified 2026-07-09T09:43:11)
+
+Session files: 834 total
+- .jsonl: 834
+- Path pattern: `sessions/YYYY\NN\NN\rollout-YYYY-NN-NNTNN-NN-NN-NNeNNeNN-4ac1-YYYY-bNNc-9aYYYYNNcd6f.jsonl`
+
+Newest 5 rollout files:
+
+### Codex rollout `576aa349`
+- size 590770 bytes, modified 2026-09-28T09:52:04 (5 min ago)
+- redacted samples: `samples/codex-576aa349-head.jsonl`, `samples/codex-576aa349-tail.jsonl`
+- record histogram (tail):
+  - `event_msg/item_completed` x11
+  - `response_item/message` x7
+  - `event_msg/token_count` x6
+  - `token_usage_record` x5
+  - `response_item/function_call_output` x4
+  - `response_item/function_call:js` x4
+  - `response_item/reasoning` x4
+  - `turn_context` x1
+  - `response_item/custom_tool_call_output` x1
+  - `world_state` x1
+  - `response_item/custom_tool_call:exec` x1
+  - `session_meta` x1
+  - `event_msg/task_started` x1
+  - `event_msg/turn_aborted` x1
+- last 40 record signatures (oldest first):
+  - `response_item/message`
+  - `event_msg/item_completed`
+  - `event_msg/item_completed`
+  - `response_item/message`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/function_call:js`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/function_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/function_call:js`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/function_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/function_call:js`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/function_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/function_call:js`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/function_call_output`
+  - `event_msg/token_count`
+  - `event_msg/token_count`
+  - `response_item/message`
+  - `event_msg/turn_aborted`
+
+### Codex rollout `bd42a76b`
+- size 475680 bytes, modified 2026-09-28T09:44:41 (13 min ago)
+- redacted samples: `samples/codex-bd42a76b-head.jsonl`, `samples/codex-bd42a76b-tail.jsonl`
+- record histogram (tail):
+  - `event_msg/item_completed` x41
+  - `response_item/reasoning` x19
+  - `token_usage_record` x18
+  - `event_msg/token_count` x18
+  - `response_item/custom_tool_call_output` x16
+  - `response_item/custom_tool_call:exec` x16
+  - `response_item/message` x12
+  - `turn_context` x2
+  - `event_msg/task_complete` x2
+  - `event_msg/task_started` x2
+  - `session_meta` x1
+  - `world_state` x1
+  - `event_msg/thread_settings_applied` x1
+- last 40 record signatures (oldest first):
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `event_msg/item_completed`
+  - `token_usage_record`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `event_msg/item_completed`
+  - `response_item/message`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `event_msg/item_completed`
+  - `response_item/message`
+  - `token_usage_record`
+  - `event_msg/token_count`
+  - `event_msg/task_complete`
+
+### Codex rollout `ef32c6b4`
+- size 2596884 bytes, modified 2026-09-28T09:42:35 (15 min ago)
+- redacted samples: `samples/codex-ef32c6b4-head.jsonl`, `samples/codex-ef32c6b4-tail.jsonl`
+- record histogram (tail):
+  - `event_msg/item_completed` x73
+  - `response_item/reasoning` x34
+  - `event_msg/token_count` x33
+  - `token_usage_record` x32
+  - `response_item/custom_tool_call:exec` x30
+  - `response_item/custom_tool_call_output` x30
+  - `response_item/message` x11
+  - `event_msg/task_complete` x2
+  - `event_msg/thread_settings_applied` x2
+  - `world_state` x1
+  - `event_msg/task_started` x1
+  - `turn_context` x1
+- last 40 record signatures (oldest first):
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `event_msg/item_completed`
+  - `token_usage_record`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `event_msg/item_completed`
+  - `response_item/message`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `event_msg/item_completed`
+  - `response_item/message`
+  - `token_usage_record`
+  - `event_msg/token_count`
+  - `event_msg/task_complete`
+
+### Codex rollout `8bd3cc74`
+- size 1441609 bytes, modified 2026-09-28T09:35:11 (22 min ago)
+- redacted samples: `samples/codex-8bd3cc74-head.jsonl`, `samples/codex-8bd3cc74-tail.jsonl`
+- record histogram (tail):
+  - `event_msg/item_completed` x70
+  - `event_msg/token_count` x36
+  - `response_item/reasoning` x36
+  - `token_usage_record` x35
+  - `response_item/custom_tool_call_output` x34
+  - `response_item/custom_tool_call:exec` x34
+  - `response_item/message` x3
+  - `event_msg/thread_settings_applied` x1
+  - `event_msg/task_complete` x1
+- last 40 record signatures (oldest first):
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `event_msg/item_completed`
+  - `token_usage_record`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `event_msg/item_completed`
+  - `token_usage_record`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `event_msg/item_completed`
+  - `response_item/message`
+  - `token_usage_record`
+  - `event_msg/token_count`
+  - `event_msg/task_complete`
+  - `event_msg/thread_settings_applied`
+
+### Codex rollout `36c386db`
+- size 24185645 bytes, modified 2026-09-28T09:29:48 (28 min ago)
+- redacted samples: `samples/codex-36c386db-head.jsonl`, `samples/codex-36c386db-tail.jsonl`
+- record histogram (tail):
+  - `event_msg/item_completed` x6
+  - `event_msg/token_count` x6
+  - `response_item/custom_tool_call_output` x5
+  - `token_usage_record` x4
+  - `response_item/custom_tool_call:exec` x4
+  - `response_item/reasoning` x2
+  - `event_msg/task_complete` x1
+  - `event_msg/thread_settings_applied` x1
+- last 40 record signatures (oldest first):
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/item_completed`
+  - `response_item/reasoning`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `response_item/custom_tool_call:exec`
+  - `token_usage_record`
+  - `event_msg/item_completed`
+  - `response_item/custom_tool_call_output`
+  - `event_msg/token_count`
+  - `event_msg/token_count`
+  - `event_msg/task_complete`
+  - `event_msg/thread_settings_applied`
+
+session_index.jsonl present; last entries (redacted): 
+- `{"id":"\u003cstr:36\u003e","thread_name":"\u003cstr:25\u003e","updated_at":"2026-09-28T08:16:40.6177932Z"}`
+- `{"id":"\u003cstr:36\u003e","thread_name":"\u003cstr:27\u003e","updated_at":"2026-09-28T08:44:46.630904Z"}`
+- `{"id":"\u003cstr:36\u003e","thread_name":"\u003cstr:28\u003e","updated_at":"2026-09-28T08:52:09.0715146Z"}`
+
+## 3. Claude Cowork (local-agent-mode-sessions)
+
+- Root `~\AppData\Roaming\Claude\local-agent-mode-sessions` exists=False
+- Root `~\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\local-agent-mode-sessions` exists=True
+  - account dirs: 2; task metadata files: 14
+
+### Cowork task `7e3e183f`
+- metadata modified 2026-09-28T09:30:28 (27 min ago), 218880 bytes
+- metadata keys: `sessionId`, `processName`, `cliSessionId`, `cwd`, `userSelectedFolders`, `resolvedFolderKinds`, `createdAt`, `lastActivityAt`, `model`, `isArchived`, `title`, `vmProcessName`, `hostLoopMode`, `globalMemoryBaselineHash`, `initialMessage`, `slashCommands`, `remoteMcpServersConfig`, `folderMountNames`, `chromePermissionMode`, `egressAllowedDomains`, `orgCliExecPolicies`, `memoryEnabled`, `skillsEnabled`, `pluginsEnabled`, `documentFunnelEnabled`, `pluginInstallPaths`, `sessionType`, `parentSessionId`, `dispatchParentOrigin`, `outboundCCRRemoteId`, `systemPrompt`, `systemPromptRendererAppends`, `accountName`, `emailAddress`, `memoryGuidelinesTemplate`, `coworkSyspromptMap`
+- redacted metadata: `samples/cowork-7e3e183f-meta.json`
+- task dir entries: `.claude/`, `outputs/`, `.audit-key`, `audit.jsonl`
+- .claude/projects transcripts: 1
+- audit.jsonl: 427461 bytes, modified 2026-08-05T06:30:46
+- redacted audit tail: `samples/cowork-7e3e183f-audit-tail.jsonl`
+- audit histogram (tail):
+  - `system/thinking_tokens` x16
+  - `system/status` x8
+  - `user/{tool_result}` x7
+  - `assistant/{thinking}` x6
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__search_threads}` x2
+  - `assistant/{tool_use:mcp__workspace__bash}` x2
+  - `user` x2
+  - `command_lifecycle` x2
+  - `rate_limit_event` x1
+  - `result/success/is_error=False` x1
+  - `assistant/{tool_use:ToolSearch}` x1
+  - `assistant/{text}` x1
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__get_message}` x1
+  - `system/init` x1
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__get_thread}` x1
+- last 40 audit signatures (oldest first):
+  - `system/status`
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__search_threads}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__search_threads}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__get_thread}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__get_message}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{text}`
+  - `result/success/is_error=False`
+
+### Cowork task `d9fc63c6`
+- metadata modified 2026-09-28T09:30:26 (27 min ago), 218210 bytes
+- metadata keys: `sessionId`, `processName`, `cliSessionId`, `cwd`, `userSelectedFolders`, `resolvedFolderKinds`, `createdAt`, `lastActivityAt`, `model`, `isArchived`, `title`, `vmProcessName`, `hostLoopMode`, `globalMemoryBaselineHash`, `initialMessage`, `slashCommands`, `remoteMcpServersConfig`, `folderMountNames`, `chromePermissionMode`, `egressAllowedDomains`, `orgCliExecPolicies`, `memoryEnabled`, `skillsEnabled`, `pluginsEnabled`, `documentFunnelEnabled`, `pluginInstallPaths`, `sessionType`, `parentSessionId`, `dispatchParentOrigin`, `outboundCCRRemoteId`, `systemPrompt`, `systemPromptRendererAppends`, `accountName`, `emailAddress`, `memoryGuidelinesTemplate`, `coworkSyspromptMap`
+- redacted metadata: `samples/cowork-d9fc63c6-meta.json`
+- task dir entries: `.claude/`, `outputs/`, `.audit-key`, `audit.jsonl`
+- .claude/projects transcripts: 1
+- audit.jsonl: 338845 bytes, modified 2026-08-05T07:46:14
+- redacted audit tail: `samples/cowork-d9fc63c6-audit-tail.jsonl`
+- audit histogram (tail):
+  - `system/thinking_tokens` x31
+  - `user/{tool_result}` x16
+  - `system/status` x9
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__get_file_metadata}` x9
+  - `assistant/{thinking}` x8
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__search_files}` x6
+  - `user` x2
+  - `rate_limit_event` x2
+  - `command_lifecycle` x2
+  - `assistant/{text}` x1
+  - `result/success/is_error=False` x1
+  - `assistant/{tool_use:ToolSearch}` x1
+  - `system/init` x1
+- last 40 audit signatures (oldest first):
+  - `user/{tool_result}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__get_file_metadata}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__get_file_metadata}`
+  - `user/{tool_result}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__get_file_metadata}`
+  - `rate_limit_event`
+  - `user/{tool_result}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__get_file_metadata}`
+  - `user/{tool_result}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__search_files}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__search_files}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__get_file_metadata}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{text}`
+  - `result/success/is_error=False`
+
+### Cowork task `7d90b428`
+- metadata modified 2026-08-04T07:11:06 (79366 min ago), 222145 bytes
+- metadata keys: `sessionId`, `processName`, `cliSessionId`, `cwd`, `userSelectedFolders`, `resolvedFolderKinds`, `createdAt`, `lastActivityAt`, `model`, `permissionMode`, `isArchived`, `title`, `vmProcessName`, `hostLoopMode`, `globalMemoryBaselineHash`, `initialMessage`, `slashCommands`, `enabledMcpTools`, `remoteMcpServersConfig`, `chromePermsBeforeUnsupervised`, `approvedToolNames`, `effortOverride`, `egressAllowedDomains`, `orgCliExecPolicies`, `memoryEnabled`, `skillsEnabled`, `pluginsEnabled`, `documentFunnelEnabled`, `pluginInstallPaths`, `systemPrompt`, `systemPromptRendererAppends`, `accountName`, `emailAddress`, `memoryGuidelinesTemplate`, `coworkSyspromptMap`
+- redacted metadata: `samples/cowork-7d90b428-meta.json`
+- task dir entries: `.claude/`, `outputs/`, `uploads/`, `uploads-tmp/`, `.audit-key`, `audit.jsonl`
+- .claude/projects transcripts: 1
+- audit.jsonl: 1025101 bytes, modified 2026-08-04T07:11:04
+- redacted audit tail: `samples/cowork-7d90b428-audit-tail.jsonl`
+- audit histogram (tail):
+  - `system/thinking_tokens` x106
+  - `user/{tool_result}` x28
+  - `system/status` x23
+  - `assistant/{thinking}` x21
+  - `user` x8
+  - `command_lifecycle` x8
+  - `assistant/{tool_use:TaskUpdate}` x7
+  - `assistant/{text}` x6
+  - `system/permission_request` x5
+  - `system/permission_response` x5
+  - `result/success/is_error=False` x4
+  - `assistant/{tool_use:Read}` x4
+  - `system/init` x4
+  - `assistant/{tool_use:mcp__workspace__bash}` x3
+  - `rate_limit_event` x3
+  - `assistant/{tool_use:mcp__mcp-registry__search_mcp_registry}` x3
+  - `assistant/{tool_use:mcp__skills__list_skills}` x2
+  - `assistant/{tool_use:ToolSearch}` x2
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__list_labels}` x1
+  - `assistant/{tool_use:mcp__69442c64-10f7-43d1-8022-141a43f3e0d8__search_threads}` x1
+  - `assistant/{tool_use:mcp__mcp-registry__list_connectors}` x1
+  - `assistant/{tool_use:AskUserQuestion}` x1
+  - `assistant/{tool_use:mcp__plugins__search_plugins}` x1
+  - `assistant/{text}/stop=stop_sequence` x1
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__search_files}` x1
+  - `assistant/{tool_use:mcp__782d66fc-ce1e-43e4-89be-7a573e35a571__list_recent_files}` x1
+- last 40 audit signatures (oldest first):
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:Read}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__mcp-registry__search_mcp_registry}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{text}`
+  - `assistant/{tool_use:AskUserQuestion}`
+  - `system/permission_request`
+  - `system/permission_response`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+
+### Cowork task `a1fa463e`
+- metadata modified 2026-07-06T23:13:31 (120164 min ago), 208695 bytes
+- metadata keys: `sessionId`, `processName`, `cliSessionId`, `cwd`, `userSelectedFolders`, `createdAt`, `lastActivityAt`, `model`, `isArchived`, `title`, `vmProcessName`, `hostLoopMode`, `initialMessage`, `slashCommands`, `enabledMcpTools`, `remoteMcpServersConfig`, `fsDetectedFiles`, `chromePermissionMode`, `egressAllowedDomains`, `orgCliExecPolicies`, `memoryEnabled`, `skillsEnabled`, `pluginsEnabled`, `systemPrompt`, `systemPromptRendererAppends`, `accountName`, `emailAddress`, `memoryGuidelinesTemplate`, `spVariantPrompts`
+- redacted metadata: `samples/cowork-a1fa463e-meta.json`
+- task dir entries: `.claude/`, `outputs/`, `uploads/`, `.audit-key`, `audit.jsonl`
+- .claude/projects transcripts: 1
+- audit.jsonl: 351976 bytes, modified 2026-07-06T23:13:30
+- redacted audit tail: `samples/cowork-a1fa463e-audit-tail.jsonl`
+- audit histogram (tail):
+  - `system/thinking_tokens` x99
+  - `user/{tool_result}` x30
+  - `system/status` x25
+  - `assistant/{tool_use:mcp__workspace__bash}` x20
+  - `assistant/{thinking}` x18
+  - `assistant/{tool_use:Edit}` x8
+  - `assistant/{text}` x6
+  - `user` x4
+  - `rate_limit_event` x2
+  - `result/success/is_error=False` x2
+  - `system/init` x2
+  - `assistant/{tool_use:Read}` x1
+  - `assistant/{tool_use:mcp__cowork__present_files}` x1
+- last 40 audit signatures (oldest first):
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{text}`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{text}`
+  - `assistant/{tool_use:mcp__cowork__present_files}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{text}`
+  - `result/success/is_error=False`
+
+### Cowork task `4479c1a7`
+- metadata modified 2026-06-22T15:46:45 (140771 min ago), 173110 bytes
+- metadata keys: `sessionId`, `processName`, `cliSessionId`, `cwd`, `userSelectedFolders`, `createdAt`, `lastActivityAt`, `model`, `permissionMode`, `isArchived`, `title`, `vmProcessName`, `hostLoopMode`, `webFetchAllowedUrls`, `initialMessage`, `slashCommands`, `enabledMcpTools`, `remoteMcpServersConfig`, `fsDetectedFiles`, `chromePermissionMode`, `chromeAllowedDomains`, `chromeTabGroupId`, `chromePermsBeforeUnsupervised`, `approvedToolNames`, `egressAllowedDomains`, `orgCliExecPolicies`, `memoryEnabled`, `skillsEnabled`, `pluginsEnabled`, `systemPrompt`, `systemPromptRendererAppends`, `accountName`, `emailAddress`, `memoryGuidelinesTemplate`
+- redacted metadata: `samples/cowork-4479c1a7-meta.json`
+- task dir entries: `.claude/`, `outputs/`, `uploads/`, `.audit-key`, `audit.jsonl`
+- .claude/projects transcripts: 1
+- audit.jsonl: 3503687 bytes, modified 2026-06-22T15:46:44
+- redacted audit tail: `samples/cowork-4479c1a7-audit-tail.jsonl`
+- audit histogram (tail):
+  - `system/thinking_tokens` x170
+  - `system/status` x23
+  - `user/{tool_result}` x23
+  - `assistant/{tool_use:mcp__workspace__bash}` x20
+  - `assistant/{thinking}` x7
+  - `assistant/{text}` x3
+  - `assistant/{tool_use:mcp__cowork__present_files}` x1
+  - `assistant/{tool_use:TaskUpdate}` x1
+  - `result/success/is_error=False` x1
+  - `assistant/{tool_use:ToolSearch}` x1
+- last 40 audit signatures (oldest first):
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `system/thinking_tokens`
+  - `assistant/{thinking}`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__workspace__bash}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:TaskUpdate}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:ToolSearch}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{tool_use:mcp__cowork__present_files}`
+  - `user/{tool_result}`
+  - `system/status`
+  - `assistant/{text}`
+  - `result/success/is_error=False`
+
+## 4. Claude desktop logs
+
+- `~\AppData\Roaming\Claude\logs` exists=False
+- `~\AppData\Local\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\logs` exists=True
+  - `main.log` 3867384 bytes, modified 2026-08-28T13:47:39, keyword lines: 564
+  - `claude.ai-web.log` 987150 bytes, modified 2026-08-28T13:33:37, keyword lines: 5
+  - `cowork_vm_node.log` 119585 bytes, modified 2026-08-28T13:28:22, keyword lines: 15
+  - `unknown-window.log` 86911 bytes, modified 2026-08-28T13:27:11, keyword lines: 1
+  - `ssh.log` 16433 bytes, modified 2026-08-28T13:25:32, keyword lines: 0
+  - `main1.log` 11324987 bytes, modified 2026-07-31T14:36:28, keyword lines: 68
+  - `main2.log` 13263972 bytes, modified 2026-07-23T10:53:54, keyword lines: 159
+  - `main3.log` 11233791 bytes, modified 2026-07-11T12:11:23, keyword lines: 531
+  - `main4.log` 10486634 bytes, modified 2026-05-25T13:38:47, keyword lines: 2176
+- ~/.claude/settings.json keys: `env`, `permissions`, `model`, `enableWorkflows`, `enabledPlugins`, `effortLevel`, `tui`, `skipDangerousModePermissionPrompt`, `inputNeededNotifEnabled`, `agentPushNotifEnabled`, `voiceEnabled`

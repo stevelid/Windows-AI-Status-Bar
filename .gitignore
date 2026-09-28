@@ -1,0 +1,26 @@
+bin/
+obj/
+dist/
+*.user
+*.suo
+.vs/
+.sandbox-build/
+dist-release*/
+tests/mock-out/
+*.old
+*.pfx
+*.snk
+.env
+.env.*
+tokens.dat
+auth.json
+settings.json
+
+# Claude Code project settings must be tracked (the rule above ignores every settings.json)
+!.claude/settings.json
+
+# Recon output may contain machine details; commit only reviewed files under docs/recon/
+/ai-status-recon-*/
+
+# Codex loop transcripts (final messages per iteration)
+.codex-loop/

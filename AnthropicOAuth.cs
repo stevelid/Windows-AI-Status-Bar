@@ -1,0 +1,273 @@
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
+namespace ClaudeUsageWidget;
+
+/// <summary>Thrown on HTTP 429 from the usage endpoint — transient, retry later.</summary>
+public class RateLimitedException(TimeSpan? retryAfter) : Exception("usage API 頻率受限 (429)")
+{
+    public TimeSpan? RetryAfter { get; } = retryAfter;
+}
+
+/// <summary>A sanitized OAuth token-endpoint failure safe to surface in logs or UI.</summary>
+public sealed class OAuthTokenRequestException : Exception
+{
+    public HttpStatusCode StatusCode { get; }
+    public string? ErrorCode { get; }
+    public bool IsInvalidGrant =>
+        string.Equals(ErrorCode, "invalid_grant", StringComparison.OrdinalIgnoreCase);
+
+    OAuthTokenRequestException(HttpStatusCode statusCode, string? errorCode)
+        : base(errorCode is null
+            ? $"OAuth token request failed ({(int)statusCode})."
+            : $"OAuth token request failed ({(int)statusCode}: {errorCode}).")
+    {
+        StatusCode = statusCode;
+        ErrorCode = errorCode;
+    }
+
+    internal static OAuthTokenRequestException FromResponse(HttpStatusCode statusCode, string body)
+    {
+        string? errorCode = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
+            {
+                var candidate = error.GetString();
+                if (!string.IsNullOrWhiteSpace(candidate) && candidate.All(IsSafeErrorCodeCharacter))
+                    errorCode = candidate;
+            }
+        }
+        catch (JsonException)
+        {
+            // Provider error bodies are untrusted. Do not copy them into the exception message.
+        }
+
+        return new OAuthTokenRequestException(statusCode, errorCode);
+    }
+
+    static bool IsSafeErrorCodeCharacter(char value) =>
+        char.IsAsciiLetterOrDigit(value) || value is '_' or '-' or '.';
+}
+
+/// <summary>
+/// OAuth PKCE client against Anthropic's Claude-account OAuth (the same flow Claude Code's
+/// /login uses), plus the usage endpoint that backs the /usage screen.
+/// </summary>
+public class AnthropicOAuth
+{
+    public const string ClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+    public const string Scopes = "org:create_api_key user:profile user:inference";
+    const string AuthorizeUrl = "https://claude.ai/oauth/authorize";
+    const string TokenUrl = "https://console.anthropic.com/v1/oauth/token";
+    const string UsageUrl = "https://api.anthropic.com/api/oauth/usage";
+    const string ManualRedirectUri = "https://console.anthropic.com/oauth/code/callback";
+    const int CallbackPort = 54545;
+    static string LocalRedirectUri => $"http://localhost:{CallbackPort}/callback";
+
+    static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+
+    string _verifier = "";
+    string _state = "";
+
+    // ---------- PKCE helpers ----------
+
+    static string RandomUrlSafe(int bytes)
+    {
+        var buf = RandomNumberGenerator.GetBytes(bytes);
+        return Base64Url(buf);
+    }
+
+    static string Base64Url(byte[] data) =>
+        Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    void NewPkce()
+    {
+        _verifier = RandomUrlSafe(32);
+        _state = RandomUrlSafe(32);
+    }
+
+    string Challenge() => Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(_verifier)));
+
+    string BuildAuthorizeUrl(string redirectUri) =>
+        $"{AuthorizeUrl}?code=true&client_id={ClientId}&response_type=code" +
+        $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+        $"&scope={Uri.EscapeDataString(Scopes)}" +
+        $"&code_challenge={Challenge()}&code_challenge_method=S256" +
+        $"&state={_state}";
+
+    // ---------- Browser login with localhost callback ----------
+
+    /// <summary>
+    /// Starts a localhost listener, opens the browser, waits for the redirect and exchanges
+    /// the code. Returns tokens on success; throws on failure/cancellation.
+    /// </summary>
+    public async Task<StoredTokens> LoginViaBrowserAsync(CancellationToken ct)
+    {
+        NewPkce();
+        var listener = new TcpListener(IPAddress.Loopback, CallbackPort);
+        listener.Start();
+        try
+        {
+            OpenBrowser(BuildAuthorizeUrl(LocalRedirectUri));
+            var (code, state) = await WaitForCallbackAsync(listener, ct);
+            if (state != _state) throw new InvalidOperationException(L10n.T("oauth_state_mismatch"));
+            return await ExchangeCodeAsync(code, _state, LocalRedirectUri, ct);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    /// <summary>Opens the manual-copy authorize page (code is displayed for copy-paste).</summary>
+    public void OpenManualLoginPage()
+    {
+        if (string.IsNullOrEmpty(_verifier)) NewPkce();
+        OpenBrowser(BuildAuthorizeUrl(ManualRedirectUri));
+    }
+
+    /// <summary>Completes login from a manually pasted "code#state" string.</summary>
+    public async Task<StoredTokens> LoginViaPastedCodeAsync(string pasted)
+    {
+        if (string.IsNullOrEmpty(_verifier))
+            throw new InvalidOperationException(L10n.T("oauth_click_open_first"));
+        var parts = pasted.Trim().Split('#');
+        var code = parts[0].Trim();
+        var state = parts.Length > 1 ? parts[1].Trim() : _state;
+        return await ExchangeCodeAsync(code, state, ManualRedirectUri);
+    }
+
+    static void OpenBrowser(string url) =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+
+    static async Task<(string code, string state)> WaitForCallbackAsync(TcpListener listener, CancellationToken ct)
+    {
+        while (true)
+        {
+            using var client = await listener.AcceptTcpClientAsync(ct);
+            var stream = client.GetStream();
+            var buffer = new byte[8192];
+            var read = await stream.ReadAsync(buffer, ct);
+            var request = Encoding.ASCII.GetString(buffer, 0, read);
+            var firstLine = request.Split('\r', '\n')[0]; // e.g. GET /callback?code=..&state=.. HTTP/1.1
+
+            var pathStart = firstLine.IndexOf(' ') + 1;
+            var pathEnd = firstLine.LastIndexOf(' ');
+            if (pathStart <= 0 || pathEnd <= pathStart) continue;
+            var path = firstLine[pathStart..pathEnd];
+
+            var qIndex = path.IndexOf('?');
+            var query = qIndex >= 0
+                ? System.Web.HttpUtility.ParseQueryString(path[(qIndex + 1)..])
+                : System.Web.HttpUtility.ParseQueryString("");
+            var code = query["code"];
+            var state = query["state"];
+
+            var ok = !string.IsNullOrEmpty(code);
+            var html = ok
+                ? $"<html><body style='font-family:sans-serif;text-align:center;padding-top:80px'><h2>✅ {L10n.T("browser_success")}</h2><p>{L10n.T("browser_success_body")}</p></body></html>"
+                : $"<html><body style='font-family:sans-serif;text-align:center;padding-top:80px'><h2>❌ {L10n.T("browser_no_code")}</h2><p>{L10n.T("browser_no_code_body")}</p></body></html>";
+            var body = Encoding.UTF8.GetBytes(html);
+            var header = Encoding.ASCII.GetBytes(
+                $"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(header, ct);
+            await stream.WriteAsync(body, ct);
+
+            if (ok) return (code!, state ?? "");
+        }
+    }
+
+    // ---------- Token endpoints ----------
+
+    async Task<StoredTokens> ExchangeCodeAsync(
+        string code,
+        string state,
+        string redirectUri,
+        CancellationToken cancellationToken = default)
+    {
+        var payload = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["code"] = code,
+            ["state"] = state,
+            ["client_id"] = ClientId,
+            ["redirect_uri"] = redirectUri,
+            ["code_verifier"] = _verifier,
+        });
+        return await PostTokenAsync(payload, cancellationToken);
+    }
+
+    public static async Task<StoredTokens> RefreshAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
+    {
+        var payload = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["refresh_token"] = refreshToken,
+            ["client_id"] = ClientId,
+        });
+        return await PostTokenAsync(payload, cancellationToken);
+    }
+
+    static async Task<StoredTokens> PostTokenAsync(string jsonPayload, CancellationToken cancellationToken)
+    {
+        using var resp = await Http.PostAsync(TokenUrl,
+            new StringContent(jsonPayload, Encoding.UTF8, "application/json"),
+            cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+        if (!resp.IsSuccessStatusCode)
+            throw OAuthTokenRequestException.FromResponse(resp.StatusCode, body);
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var access = root.GetProperty("access_token").GetString() ?? "";
+        var refresh = root.TryGetProperty("refresh_token", out var r) ? r.GetString() ?? "" : "";
+        var expiresIn = root.TryGetProperty("expires_in", out var e) ? e.GetInt64() : 3600;
+        return new StoredTokens
+        {
+            AccessToken = access,
+            RefreshToken = refresh,
+            ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresIn),
+        };
+    }
+
+    // ---------- Usage ----------
+
+    public static async Task<List<UsageBucket>> FetchUsageAsync(
+        string accessToken,
+        CancellationToken cancellationToken = default)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, UsageUrl);
+        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {accessToken}");
+        req.Headers.TryAddWithoutValidation("anthropic-beta", "oauth-2025-04-20");
+        using var resp = await Http.SendAsync(req, cancellationToken);
+        var body = await resp.Content.ReadAsStringAsync(cancellationToken);
+        if (resp.StatusCode == HttpStatusCode.Unauthorized || resp.StatusCode == HttpStatusCode.Forbidden)
+            throw new UnauthorizedAccessException($"usage API 授權失敗 ({(int)resp.StatusCode})");
+        if ((int)resp.StatusCode == 429)
+            throw new RateLimitedException(resp.Headers.RetryAfter?.Delta
+                ?? (resp.Headers.RetryAfter?.Date is DateTimeOffset d ? d - DateTimeOffset.UtcNow : null));
+        if (!resp.IsSuccessStatusCode)
+            throw new InvalidOperationException($"usage API 失敗 ({(int)resp.StatusCode}): {Truncate(body)}");
+
+        var buckets = UsageParser.Parse(body);
+        if (buckets.Count == 0)
+        {
+            // HTTP 200 but nothing we recognize — the API schema probably changed.
+            // Log the raw payload so a bug report / next debugging session has evidence.
+            Log.Write($"usage 回應解析不到任何額度資料，原始內容: {Truncate(body)}");
+            throw new InvalidOperationException(L10n.T("err_schema_changed"));
+        }
+        return buckets;
+    }
+
+    static string Truncate(string s) => s.Length > 300 ? s[..300] + "…" : s;
+}
