@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using CoreRect = StatusBar.Core.Docking.Rect;
 using CoreSize = StatusBar.Core.Docking.Size;
+using RelativePosition = StatusBar.Core.Docking.RelativePosition;
 using WinForms = System.Windows.Forms;
 
 namespace ClaudeUsageWidget;
@@ -24,6 +25,7 @@ public sealed class DockController : IDisposable
     readonly Settings _settings;
     HwndSource? _source;
     bool _docking;
+    bool _dragging;
     bool _disposed;
 
     /// <summary>Creates a dock controller and subscribes to the window lifecycle.</summary>
@@ -36,6 +38,8 @@ public sealed class DockController : IDisposable
         _window.SourceInitialized += OnSourceInitialized;
         _window.Loaded += OnLoaded;
         _window.SizeChanged += OnSizeChanged;
+        _window.DragStarted += OnDragStarted;
+        _window.DragCompleted += OnDragCompleted;
         _window.Closed += OnClosed;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
     }
@@ -51,6 +55,8 @@ public sealed class DockController : IDisposable
         _window.SourceInitialized -= OnSourceInitialized;
         _window.Loaded -= OnLoaded;
         _window.SizeChanged -= OnSizeChanged;
+        _window.DragStarted -= OnDragStarted;
+        _window.DragCompleted -= OnDragCompleted;
         _window.Closed -= OnClosed;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _source?.RemoveHook(WindowMessageHook);
@@ -69,7 +75,27 @@ public sealed class DockController : IDisposable
 
     void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (!_docking) QueueDock(PreferredScreen());
+        if (!_docking && !_dragging) QueueDock(PreferredScreen());
+    }
+
+    void OnDragStarted() => _dragging = true;
+
+    void OnDragCompleted()
+    {
+        _dragging = false;
+        if (_disposed) return;
+        var handle = new WindowInteropHelper(_window).Handle;
+        if (handle == IntPtr.Zero) return;
+        var screen = WinForms.Screen.FromHandle(handle);
+        var workArea = WorkAreaDip(screen);
+        var size = StripSizeDip();
+        var relative = StatusBar.Core.Docking.DockGeometry.CaptureRelative(
+            workArea, size, _window.Left, _window.Top);
+        _settings.MonitorDeviceName = screen.DeviceName;
+        _settings.StripRelativeX = relative.X;
+        _settings.StripRelativeY = relative.Y;
+        _settings.Save();
+        QueueDock(screen);
     }
 
     void OnClosed(object? sender, EventArgs e) => Dispose();
@@ -122,27 +148,20 @@ public sealed class DockController : IDisposable
 
     void DockToScreen(WinForms.Screen? targetScreen)
     {
-        if (_disposed || _docking || !_window.IsLoaded) return;
+        if (_disposed || _docking || _dragging || !_window.IsLoaded) return;
         var handle = new WindowInteropHelper(_window).Handle;
         if (handle == IntPtr.Zero) return;
 
         _window.UpdateLayout();
         var screen = targetScreen ?? WinForms.Screen.FromHandle(handle);
-        var physicalWorkArea = screen.WorkingArea;
-        var dpi = VisualTreeHelper.GetDpi(_window);
-        var workAreaDip = new CoreRect(
-            physicalWorkArea.Left / dpi.DpiScaleX,
-            physicalWorkArea.Top / dpi.DpiScaleY,
-            physicalWorkArea.Width / dpi.DpiScaleX,
-            physicalWorkArea.Height / dpi.DpiScaleY);
-        var stripDip = new CoreSize(
-            Math.Max(1, _window.ActualWidth),
-            Math.Max(1, _window.ActualHeight));
-        var placed = StatusBar.Core.Docking.DockGeometry.Place(
-            workAreaDip,
-            stripDip,
-            StatusBar.Core.Docking.DockAnchor.BottomRight,
-            MarginDip);
+        var workAreaDip = WorkAreaDip(screen);
+        var stripDip = StripSizeDip();
+        var placed = _settings.StripRelativeX is double x && _settings.StripRelativeY is double y
+            ? StatusBar.Core.Docking.DockGeometry.PlaceRelative(
+                workAreaDip, stripDip, new RelativePosition(x, y))
+            : StatusBar.Core.Docking.DockGeometry.Place(
+                workAreaDip, stripDip,
+                StatusBar.Core.Docking.DockAnchor.BottomRight, MarginDip);
 
         _docking = true;
         try
@@ -155,6 +174,21 @@ public sealed class DockController : IDisposable
             _docking = false;
         }
     }
+
+    CoreRect WorkAreaDip(WinForms.Screen screen)
+    {
+        var physical = screen.WorkingArea;
+        var dpi = VisualTreeHelper.GetDpi(_window);
+        return new CoreRect(
+            physical.Left / dpi.DpiScaleX,
+            physical.Top / dpi.DpiScaleY,
+            physical.Width / dpi.DpiScaleX,
+            physical.Height / dpi.DpiScaleY);
+    }
+
+    CoreSize StripSizeDip() => new(
+        Math.Max(1, _window.ActualWidth),
+        Math.Max(1, _window.ActualHeight));
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     static extern uint RegisterWindowMessage(string message);

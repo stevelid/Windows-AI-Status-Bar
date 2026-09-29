@@ -28,6 +28,9 @@ public readonly record struct Rect(double X, double Y, double Width, double Heig
     public double Bottom => Y + Height;
 }
 
+/// <summary>A strip position relative to the available movement inside a work area.</summary>
+public readonly record struct RelativePosition(double X, double Y);
+
 /// <summary>Calculates strip and pane rectangles without depending on WPF or screen APIs.</summary>
 public static class DockGeometry
 {
@@ -57,6 +60,40 @@ public static class DockGeometry
         left = Math.Clamp(left, workAreaDip.Left, workAreaDip.Right - width);
         top = Math.Clamp(top, workAreaDip.Top, workAreaDip.Bottom - height);
         return new Rect(left, top, width, height);
+    }
+
+    /// <summary>Places a strip at a saved relative position, clamped inside the work area.</summary>
+    public static Rect PlaceRelative(Rect workAreaDip, Size stripDip, RelativePosition position)
+    {
+        ValidateRect(workAreaDip, nameof(workAreaDip));
+        ValidateSize(stripDip, nameof(stripDip));
+        if (!double.IsFinite(position.X) || !double.IsFinite(position.Y))
+            throw new ArgumentOutOfRangeException(nameof(position));
+
+        var width = Math.Min(stripDip.Width, workAreaDip.Width);
+        var height = Math.Min(stripDip.Height, workAreaDip.Height);
+        return new Rect(
+            workAreaDip.Left + Math.Clamp(position.X, 0, 1) * (workAreaDip.Width - width),
+            workAreaDip.Top + Math.Clamp(position.Y, 0, 1) * (workAreaDip.Height - height),
+            width,
+            height);
+    }
+
+    /// <summary>Captures a moved strip's position so a changed work area can restore it.</summary>
+    public static RelativePosition CaptureRelative(Rect workAreaDip, Size stripDip, double left, double top)
+    {
+        ValidateRect(workAreaDip, nameof(workAreaDip));
+        ValidateSize(stripDip, nameof(stripDip));
+        if (!double.IsFinite(left))
+            throw new ArgumentOutOfRangeException(nameof(left));
+        if (!double.IsFinite(top))
+            throw new ArgumentOutOfRangeException(nameof(top));
+
+        var availableX = Math.Max(0, workAreaDip.Width - stripDip.Width);
+        var availableY = Math.Max(0, workAreaDip.Height - stripDip.Height);
+        return new RelativePosition(
+            availableX == 0 ? 0 : Math.Clamp((left - workAreaDip.Left) / availableX, 0, 1),
+            availableY == 0 ? 0 : Math.Clamp((top - workAreaDip.Top) / availableY, 0, 1));
     }
 
     /// <summary>Right-aligns a pane above the strip, falling below when the top edge has no room.</summary>
