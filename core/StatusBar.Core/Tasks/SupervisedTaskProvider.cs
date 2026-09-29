@@ -24,6 +24,7 @@ public sealed class SupervisedTaskProvider : IAgentTaskProvider
     readonly ITimer _restartTimer;
 
     IAgentTaskProvider? _inner;
+    Action<ProviderTaskSnapshot>? _innerHandler;
     ProviderTaskSnapshot _current;
     string? _pendingCreateFailure;
     int _consecutiveFailures;
@@ -143,18 +144,21 @@ public sealed class SupervisedTaskProvider : IAgentTaskProvider
     public async ValueTask DisposeAsync()
     {
         IAgentTaskProvider? inner;
+        Action<ProviderTaskSnapshot>? handler;
         lock (_gate)
         {
             if (_disposed) return;
             _disposed = true;
             inner = _inner;
+            handler = _innerHandler;
             _inner = null;
+            _innerHandler = null;
         }
 
         _restartTimer.Dispose();
         if (inner is not null)
         {
-            inner.Changed -= OnInnerChanged;
+            if (handler is not null) inner.Changed -= handler;
             await DisposeQuietlyAsync(inner).ConfigureAwait(false);
         }
     }
@@ -172,8 +176,13 @@ public sealed class SupervisedTaskProvider : IAgentTaskProvider
 
     void Attach(IAgentTaskProvider inner)
     {
-        lock (_gate) _inner = inner;
-        inner.Changed += OnInnerChanged;
+        Action<ProviderTaskSnapshot> handler = snapshot => OnInnerChanged(inner, snapshot);
+        lock (_gate)
+        {
+            _inner = inner;
+            _innerHandler = handler;
+        }
+        inner.Changed += handler;
     }
 
     void StartInner(IAgentTaskProvider inner)
@@ -188,9 +197,12 @@ public sealed class SupervisedTaskProvider : IAgentTaskProvider
         }
     }
 
-    void OnInnerChanged(ProviderTaskSnapshot snapshot)
+    void OnInnerChanged(IAgentTaskProvider source, ProviderTaskSnapshot snapshot)
     {
         if (snapshot is null) return;
+        // Providers publish on the thread pool, so a replaced provider's last snapshot can arrive late.
+        lock (_gate)
+            if (!ReferenceEquals(source, _inner)) return;
         if (snapshot.Health.State == ProviderHealthState.Degraded &&
             string.Equals(snapshot.Health.Code, ReconcileFailedCode, StringComparison.Ordinal))
         {
@@ -246,12 +258,15 @@ public sealed class SupervisedTaskProvider : IAgentTaskProvider
     void Restart()
     {
         IAgentTaskProvider? old;
+        Action<ProviderTaskSnapshot>? oldHandler;
         lock (_gate)
         {
             if (_disposed || !_restartPending) return;
             _restartPending = false;
             old = _inner;
+            oldHandler = _innerHandler;
             _inner = null;
+            _innerHandler = null;
             _current = _current with
             {
                 Health = new ProviderHealth(ProviderHealthState.Degraded, RestartingCode, _current.Health.LastEvidence),
@@ -260,7 +275,7 @@ public sealed class SupervisedTaskProvider : IAgentTaskProvider
 
         if (old is not null)
         {
-            old.Changed -= OnInnerChanged;
+            if (oldHandler is not null) old.Changed -= oldHandler;
             _ = DisposeQuietlyAsync(old);
         }
 

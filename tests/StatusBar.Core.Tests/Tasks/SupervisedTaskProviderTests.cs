@@ -81,6 +81,28 @@ public sealed class SupervisedTaskProviderTests
     }
 
     [Fact]
+    public async Task Snapshot_queued_by_a_replaced_provider_is_ignored()
+    {
+        var time = new FakeTimeProvider(Now);
+        var created = new List<FakeProvider>();
+        await using var supervised = new SupervisedTaskProvider(
+            AgentProvider.Codex,
+            () => { var p = new FakeProvider(AgentProvider.Codex); created.Add(p); return p; },
+            time);
+        supervised.Start();
+
+        // Captured like a thread-pool publish that is already queued when the restart happens.
+        var queued = created[0].CaptureHandlers();
+        created[0].Publish(Failed());
+        time.Advance(SupervisedTaskProvider.InitialBackoff);
+        created[1].Publish(Ok([CreateTask("codex:new", AgentProvider.Codex)]));
+
+        queued!(Ok([CreateTask("codex:stale", AgentProvider.Codex)]) with { Provider = AgentProvider.Codex });
+
+        Assert.Equal("codex:new", Assert.Single(supervised.Current.Tasks).Id);
+    }
+
+    [Fact]
     public async Task Factory_failure_is_retried_without_throwing()
     {
         var time = new FakeTimeProvider(Now);
@@ -164,6 +186,8 @@ public sealed class SupervisedTaskProviderTests
             WasDisposed = true;
             return ValueTask.CompletedTask;
         }
+
+        public Action<ProviderTaskSnapshot>? CaptureHandlers() => Changed;
 
         public void Publish(ProviderTaskSnapshot snapshot)
         {
