@@ -653,17 +653,20 @@ public partial class App : System.Windows.Application
         }
         else
         {
-            _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
-            _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
-            _codexTaskProvider.Trace += OnCodexTrace;
+            var codexHome = _settings.CodexHomeOverride;
+            var claudeHome = _settings.ClaudeCodeHomeOverride;
             var claudeHookPath = claudeHooksEnabled
                 ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
                 : null;
-            taskProviders =
-            [
-                _codexTaskProvider,
-                new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath),
-            ];
+            // P6.1: each provider is recreated after an unexpected failure without touching the other.
+            var codex = new SupervisedTaskProvider(AgentProvider.Codex, () => CreateCodexTaskProvider(codexHome), TimeProvider.System);
+            var claude = new SupervisedTaskProvider(
+                AgentProvider.Claude,
+                () => new ClaudeCodeTaskProvider(claudeHome, claudeHookPath),
+                TimeProvider.System);
+            codex.Supervision += OnProviderSupervision;
+            claude.Supervision += OnProviderSupervision;
+            taskProviders = [codex, claude];
         }
 
         var stateTime = TimeProvider.System;
@@ -749,6 +752,22 @@ public partial class App : System.Windows.Application
             Log.Write($"Task change logging failed ({ex.GetType().Name})");
         }
     }
+
+    CodexTaskProvider CreateCodexTaskProvider(string? codexHome)
+    {
+        if (_codexTaskProvider is not null)
+        {
+            _codexTaskProvider.WatcherOverflowed -= OnCodexWatcherOverflow;
+            _codexTaskProvider.Trace -= OnCodexTrace;
+        }
+        var provider = new CodexTaskProvider(codexHome);
+        provider.WatcherOverflowed += OnCodexWatcherOverflow;
+        provider.Trace += OnCodexTrace;
+        _codexTaskProvider = provider;
+        return provider;
+    }
+
+    static void OnProviderSupervision(string message) => Log.Write("Supervisor: " + message);
 
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 

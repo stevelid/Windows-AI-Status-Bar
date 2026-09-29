@@ -73,7 +73,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Phase 6 — Hardening
 
-- [ ] P6.1 Collector supervision
+- [x] P6.1 Collector supervision
 - [ ] P6.2 System events
 - [ ] P6.3 🧑 Manual test matrix
 - [ ] P6.4 Release 3.0.0
@@ -96,6 +96,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-29 — P6.1 — Added `SupervisedTaskProvider` (Core). The app builds the Codex and Claude Code providers through factories; when one reports `ReconcileFailed`, or its creation, `Start` or `ReconcileAsync` throws, the supervisor keeps its last tasks visible with `Degraded` health, logs a content-free `Supervisor:` line, and recreates only that provider after 5 s, doubling to 5 min, resetting on the next healthy snapshot. Expected conditions (`WatcherUnavailable`, missing folders) do not trigger restarts. Build clean; 184 Core tests pass.
 - 2026-09-28 — P5.4 — Monitor settings now show the device name and resolution for every display, and docking preserves a disconnected monitor selection for automatic fallback and restoration; 152 Core tests pass.
 - 2026-09-28 — P5.5 — Added a Core redacted report builder and ZIP writer with fixed `report.txt`, `log-tail.txt`, and `format-drift.txt` entries; task titles, IDs and session references are excluded by construction, and app-owned logs are sanitized before inclusion. Build clean; 154 Core tests pass.
 - 2026-09-28 — P5.3 — Added a one-shot 400 ms attention-pill fade that respects Windows animation settings, plus an amber tray-icon attention dot; 152 Core tests pass.
