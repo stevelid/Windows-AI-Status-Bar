@@ -26,6 +26,9 @@ public sealed class AgentStateService : IAsyncDisposable
     /// <summary>Raised when a new attention evidence key is ready for notification.</summary>
     public event Action<AgentTask>? EnteredNeedsAttention;
 
+    /// <summary>Raised when a previously observed task finishes.</summary>
+    public event Action<AgentTask>? TaskFinished;
+
     /// <summary>The latest merged immutable state.</summary>
     public StatusBarState Current
     {
@@ -189,6 +192,7 @@ public sealed class AgentStateService : IAsyncDisposable
         if (snapshot is null) return;
         StatusBarState? changed;
         AgentTask[] entered;
+        AgentTask[] finished;
         lock (_gate)
         {
             if (_disposed || !_providers.ContainsKey(expectedProvider)) return;
@@ -220,10 +224,19 @@ public sealed class AgentStateService : IAsyncDisposable
                                 StringComparison.Ordinal)))
                     .Where(_notifications.ShouldNotify)
                     .ToArray();
+            finished = isInitialUpdate || changed is null
+                ? Array.Empty<AgentTask>()
+                : _current.Tasks
+                    .Where(task => (task.Status is AgentTaskStatus.Complete or AgentTaskStatus.Failed) &&
+                        !string.Equals(task.StatusDetail, "Stopped", StringComparison.Ordinal) &&
+                        previous.Tasks.Any(old => old.Id == task.Id && old.Status == AgentTaskStatus.Working))
+                    .Where(_notifications.ShouldNotifyCompletion)
+                    .ToArray();
         }
 
         if (changed is not null) RaiseStateChanged(changed);
         foreach (var task in entered) RaiseEnteredNeedsAttention(task);
+        foreach (var task in finished) RaiseTaskFinished(task);
     }
 
     void OnExpiryTimer(object? state)
@@ -399,6 +412,17 @@ public sealed class AgentStateService : IAsyncDisposable
             {
                 // One notification subscriber must not interrupt the others.
             }
+        }
+    }
+
+    void RaiseTaskFinished(AgentTask task)
+    {
+        var handlers = TaskFinished;
+        if (handlers is null) return;
+        foreach (var subscriber in handlers.GetInvocationList())
+        {
+            try { ((Action<AgentTask>)subscriber)(task); }
+            catch (Exception) { /* A notification subscriber must not interrupt collection. */ }
         }
     }
 }

@@ -192,6 +192,15 @@ public sealed class TrayController : IDisposable
         _icon.ShowBalloonTip(8000, title, text, WinForms.ToolTipIcon.Warning);
     }
 
+    /// <summary>Shows a finished-task balloon whose click opens the details pane.</summary>
+    public void ShowCompletion(string title, string text, bool failed)
+    {
+        _updateClickPending = false;
+        _balloonClickAction = _actions.TogglePane;
+        _icon.ShowBalloonTip(8000, title, text,
+            failed ? WinForms.ToolTipIcon.Error : WinForms.ToolTipIcon.Info);
+    }
+
     /// <summary>Shows an update notice and opens the update flow if the user clicks it.</summary>
     public void ShowUpdateAvailable(string latestVersion)
     {

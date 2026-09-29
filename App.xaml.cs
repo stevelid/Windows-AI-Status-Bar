@@ -573,6 +573,7 @@ public partial class App : System.Windows.Application
         if (_agentStateService is not null)
         {
             _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
+            _agentStateService.TaskFinished -= OnTaskFinished;
             await _agentStateService.DisposeAsync();
         }
         _detailsPane?.Close();
@@ -645,6 +646,7 @@ public partial class App : System.Windows.Application
         {
             _agentStateService.StateChanged -= OnTaskStateChanged;
             _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
+            _agentStateService.TaskFinished -= OnTaskFinished;
             _ = _agentStateService.DisposeAsync();
         }
 
@@ -701,6 +703,7 @@ public partial class App : System.Windows.Application
         // once: an update landing in between was otherwise neither shown nor logged.
         _agentStateService.StateChanged += OnTaskStateChanged;
         _agentStateService.EnteredNeedsAttention += OnEnteredNeedsAttention;
+        _agentStateService.TaskFinished += OnTaskFinished;
         var initialState = _agentStateService.Current;
         LogTaskChanges(StatusBarState.Empty, initialState);
         _taskState = initialState;
@@ -753,6 +756,15 @@ public partial class App : System.Windows.Application
         {
             if (_exitStarted) return;
             _attentionNotifier?.Notify(task);
+        });
+    }
+
+    void OnTaskFinished(AgentTask task)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_exitStarted) return;
+            _attentionNotifier?.NotifyFinished(task);
         });
     }
 
