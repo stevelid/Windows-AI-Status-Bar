@@ -201,9 +201,13 @@ public partial class DetailsPaneWindow : Window
                     window.RemainingPercent,
                     _settings.ApproachingBelowPercent,
                     _settings.LowBelowPercent)));
-            row.Root.ToolTip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
-                ? L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm"))
-                : null;
+            var runway = snapshot.RunwayFor(window);
+            RenderPaceBar(row, window, runway, snapshot.Health is UsageHealth.Stale or UsageHealth.Unavailable);
+            var tooltipLines = new List<string>();
+            if (snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess)
+                tooltipLines.Add(L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm")));
+            if (RunwayText(runway) is string projection) tooltipLines.Add(projection);
+            row.Root.ToolTip = tooltipLines.Count > 0 ? string.Join(Environment.NewLine, tooltipLines) : null;
             rows.Children.Add(row.Root);
         }
 
@@ -214,6 +218,55 @@ public partial class DetailsPaneWindow : Window
             healthText.Text = L10n.T("updating");
         else if (snapshot.Health == UsageHealth.Unavailable)
             healthText.Text = L10n.T("err_usage_unavailable");
+    }
+
+    // Bar colour: the more severe of the absolute level and the rate-based projection (the strip's
+    // rule), so the pane explains why the strip changed colour. The tick still marks time left.
+    void RenderPaceBar(UsageRow row, UsageWindow window, UsageRunway runway, bool dimmed)
+    {
+        var now = DateTimeOffset.Now;
+        var absolute = UsageSummary.Level(
+            window.RemainingPercent, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
+        var level = runway.Level > absolute ? runway.Level : absolute;
+        var brush = ThemeManager.Brush(dimmed
+            ? ThemeManager.SubtleText
+            : ThemeManager.ColorForAllowance(level));
+        var remaining = Math.Clamp(window.RemainingPercent, 0, 100);
+        row.FillColumn.Width = new GridLength(remaining, GridUnitType.Star);
+        row.GapColumn.Width = new GridLength(100 - remaining, GridUnitType.Star);
+        row.Fill.Background = brush;
+        row.Track.Background = brush;
+        row.Bar.Visibility = Visibility.Visible;
+
+        if (UsagePaceCalculator.Evaluate(window, now) is UsagePace pace)
+        {
+            row.BeforeTick.Width = new GridLength(pace.TimeRemainingPercent, GridUnitType.Star);
+            row.AfterTick.Width = new GridLength(100 - pace.TimeRemainingPercent, GridUnitType.Star);
+            row.Tick.Background = ThemeManager.Brush(ThemeManager.LabelText);
+            row.TickGrid.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            row.TickGrid.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    // "At the current rate: lasts until reset" or "runs out in ~2h 10m (resets in 3h 12m)".
+    static string? RunwayText(UsageRunway runway)
+    {
+        if (runway.TimeToReset is not TimeSpan reset) return null;
+        if (runway.TimeToEmpty is not TimeSpan empty)
+            return runway.Level == AllowanceLevel.Normal ? null : L10n.T("pane_runway_unknown");
+        return empty < reset
+            ? L10n.F("pane_runway_runs_out", FormatSpan(empty), FormatSpan(reset))
+            : L10n.T("pane_runway_lasts");
+    }
+
+    static string FormatSpan(TimeSpan span)
+    {
+        if (span < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))}m";
+        if (span < TimeSpan.FromDays(1)) return $"{(int)span.TotalHours}h {span.Minutes:00}m";
+        return $"{(int)span.TotalDays}d {span.Hours}h";
     }
 
     static UsageRow CreateUsageRow()
@@ -236,9 +289,39 @@ public partial class DetailsPaneWindow : Window
         Grid.SetColumn(value, 1);
         grid.Children.Add(label);
         grid.Children.Add(value);
+
+        // Allowance bar with a tick at the share of the window's time still to run: fill past the
+        // tick means ahead of pace, fill short of it means burning faster than the calendar.
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var barGrid = new Grid { Height = 3, Margin = new Thickness(0, 3, 0, 0), Visibility = Visibility.Collapsed };
+        var fillColumn = new ColumnDefinition { Width = new GridLength(0, GridUnitType.Star) };
+        var gapColumn = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
+        barGrid.ColumnDefinitions.Add(fillColumn);
+        barGrid.ColumnDefinitions.Add(gapColumn);
+        var track = new Border { CornerRadius = new CornerRadius(1.5), Opacity = 0.25 };
+        Grid.SetColumnSpan(track, 2);
+        var fill = new Border { CornerRadius = new CornerRadius(1.5) };
+        var tickGrid = new Grid { Height = 3, Margin = new Thickness(0, 3, 0, 0), Visibility = Visibility.Collapsed, IsHitTestVisible = false };
+        var beforeTick = new ColumnDefinition { Width = new GridLength(0, GridUnitType.Star) };
+        var afterTick = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
+        tickGrid.ColumnDefinitions.Add(beforeTick);
+        tickGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        tickGrid.ColumnDefinitions.Add(afterTick);
+        var tick = new Border { Width = 1.5, Margin = new Thickness(-0.75, -2, -0.75, -2) };
+        Grid.SetColumn(tick, 1);
+        barGrid.Children.Add(track);
+        barGrid.Children.Add(fill);
+        tickGrid.Children.Add(tick);
+        Grid.SetRow(barGrid, 1);
+        Grid.SetRow(tickGrid, 1);
+        Grid.SetColumnSpan(barGrid, 2);
+        Grid.SetColumnSpan(tickGrid, 2);
+        grid.Children.Add(barGrid);
+        grid.Children.Add(tickGrid);
         var root = new Border { Padding = new Thickness(5, 4, 5, 4), CornerRadius = new CornerRadius(4) };
         root.Child = grid;
-        return new UsageRow(root, label, value);
+        return new UsageRow(root, label, value, barGrid, fillColumn, gapColumn, track, fill, tickGrid, beforeTick, afterTick, tick);
     }
 
     void RemoveUnusedUsageRows(UsageSource source, HashSet<string> usedKeys)
@@ -397,5 +480,8 @@ public partial class DetailsPaneWindow : Window
         ThemeManager.Changed -= ApplyAppearance;
     }
 
-    sealed record UsageRow(Border Root, TextBlock Label, TextBlock Value);
+    sealed record UsageRow(
+        Border Root, TextBlock Label, TextBlock Value,
+        Grid Bar, ColumnDefinition FillColumn, ColumnDefinition GapColumn, Border Track, Border Fill,
+        Grid TickGrid, ColumnDefinition BeforeTick, ColumnDefinition AfterTick, Border Tick);
 }

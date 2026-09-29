@@ -11,6 +11,7 @@ public sealed class UsageMonitor : IAsyncDisposable
     readonly object _snapshotGate = new();
     readonly Dictionary<UsageSource, ProviderRuntime> _runtimes = new();
     readonly TimeProvider _time;
+    readonly UsageBurnTracker _burn = new();
     readonly Func<TimeSpan> _baseInterval;
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _current;
     bool _started;
@@ -164,12 +165,15 @@ public sealed class UsageMonitor : IAsyncDisposable
                 var windows = await runtime.Provider.FetchAsync(cancellationToken).ConfigureAwait(false);
                 ArgumentNullException.ThrowIfNull(windows);
 
+                var fetchedAt = _time.GetUtcNow();
+                var fetched = Array.AsReadOnly(windows.ToArray());
                 Publish(new UsageSnapshot(
                     runtime.Provider.Source,
-                    Array.AsReadOnly(windows.ToArray()),
+                    fetched,
                     UsageHealth.Ok,
-                    _time.GetUtcNow(),
-                    "Ready"));
+                    fetchedAt,
+                    "Ready",
+                    Runways: ProjectRunways(runtime.Provider.Source, fetched, fetchedAt)));
 
                 runtime.QuickRetriesLeft = 0;
 
@@ -259,6 +263,24 @@ public sealed class UsageMonitor : IAsyncDisposable
     UsageSnapshot ReadSnapshot(UsageSource source)
     {
         lock (_snapshotGate) return _current[source];
+    }
+
+    // Records this refresh and projects each window at the recent rate of use (the low-percentage
+    // rule is left to the view, which knows the user's threshold).
+    IReadOnlyDictionary<string, UsageRunway> ProjectRunways(
+        UsageSource source,
+        IReadOnlyList<UsageWindow> windows,
+        DateTimeOffset now)
+    {
+        _burn.Record(source, windows, now);
+        var runways = new Dictionary<string, UsageRunway>(StringComparer.Ordinal);
+        foreach (var window in windows)
+        {
+            if (window is null || string.IsNullOrEmpty(window.Key)) continue;
+            runways[window.Key] = _burn.Assess(source, window, now, lowBelowPercent: 0);
+        }
+
+        return runways;
     }
 
     void Publish(UsageSnapshot snapshot)

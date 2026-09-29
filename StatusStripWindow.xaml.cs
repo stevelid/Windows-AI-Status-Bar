@@ -258,16 +258,56 @@ public partial class StatusStripWindow : Window
 
         var remaining = Math.Round(principal.RemainingPercent);
         target.Text = $"{prefix} {remaining}%";
+        var (concern, level) = WorstConcern(snapshot);
         target.Foreground = ThemeManager.Brush(snapshot.Health == UsageHealth.Stale
             ? ThemeManager.SubtleText
-            : ThemeManager.ColorForAllowance(UsageSummary.Level(
-                principal.RemainingPercent,
-                _settings.ApproachingBelowPercent,
-                _settings.LowBelowPercent)));
+            : ThemeManager.SoftColorForAllowance(level));
         var value = L10n.F("tray_usage_remaining", remaining);
-        target.ToolTip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
+        var tooltip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
             ? $"{prefix}: {value} · {L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm"))}"
             : $"{prefix}: {value}";
+        if (concern is not null) tooltip += Environment.NewLine + concern;
+        target.ToolTip = tooltip;
+    }
+
+    // Colour by whether any window will run out before it resets at the recent rate of use, or is
+    // already below the low threshold. Calm blue otherwise, even when usage is simply high.
+    (string? Concern, AllowanceLevel Level) WorstConcern(UsageSnapshot snapshot)
+    {
+        string? concern = null;
+        var worst = AllowanceLevel.Normal;
+        foreach (var window in snapshot.Windows)
+        {
+            var runway = snapshot.RunwayFor(window);
+            var level = runway.Level;
+            string? reason = null;
+            if (window.RemainingPercent < _settings.LowBelowPercent)
+            {
+                level = AllowanceLevel.Low;
+                reason = L10n.F("strip_runway_low_left", window.Label, Math.Round(window.RemainingPercent));
+            }
+            else if (runway.RunsOutBeforeReset)
+            {
+                reason = L10n.F("strip_runway_runs_out", window.Label,
+                    FormatSpan(runway.TimeToEmpty!.Value), FormatSpan(runway.TimeToReset!.Value));
+            }
+
+            if (level > worst)
+            {
+                worst = level;
+                concern = reason;
+            }
+        }
+
+        return (concern, worst);
+    }
+
+    // "45m", "3h 12m", "2d 4h": short enough for a tooltip line.
+    static string FormatSpan(TimeSpan span)
+    {
+        if (span < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))}m";
+        if (span < TimeSpan.FromDays(1)) return $"{(int)span.TotalHours}h {span.Minutes:00}m";
+        return $"{(int)span.TotalDays}d {span.Hours}h";
     }
 
     void SetUnavailable(TextBlock target, string prefix, string explanation)
