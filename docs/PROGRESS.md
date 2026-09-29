@@ -99,7 +99,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
-- 2026-09-29 — UI text fix (found installing `main` build `449782b`) — The signed-out messages told users to choose "Connect / sign in again", a menu item that no longer exists. They now name the real path, "Sign in › Claude" or "Sign in › ChatGPT / Codex".
+- 2026-09-29 — UI text fix (found installing `main` build `449782b`) — The signed-out messages told users to choose "Connect / sign in again", a menu item that no longer exists. They now name the real path, "Sign in › Claude" or "Sign in › ChatGPT / Codex". The smoke test now builds the expected path from the menu's own labels, so a renamed menu item fails CI instead of leaving a stale hint.
 - 2026-09-29 — P5.2 follow-up — Added tray pop-ups only for Working → Complete/Failed transitions, excluding stopped tasks. A separate setting controls finished-task pop-ups independently of attention pop-ups. Completion claims use the existing hashed notification state, and recovered terminal tasks are seeded without a pop-up. Windows acceptance still needs a manual check. Local build and tests could not run because this machine has only the .NET runtime, not the SDK.
 
 - 2026-09-29 — P6.3 (run by Claude at Steve's request) — 12 of 14 scenarios pass, including simulated resume, taskbar work-area change and monitor disconnect, plus a real DPI change and Explorer restart. Cowork is N/A. Network-off was not run because it would disconnect the session. The run also found the demo provider's age bug (the phase start ignored completed cycles, so demo rows showed hours-old ages), now fixed.

@@ -37,13 +37,19 @@ Require(
     !expiredRefreshTokenError.Message.Contains("Refresh token expired") &&
     !expiredRefreshTokenError.Message.Contains("error_description"),
     "OAuth token endpoint response details should not be exposed in exception messages.");
+// The sign-in hints must name the real menu path (built from the menu's own labels), so a
+// renamed menu item cannot leave the hint pointing at something that no longer exists.
+static string SignInPath(string providerKey) => $"{L10n.T("menu_sign_in")} › {L10n.T(providerKey)}";
 Require(
-    L10n.T("err_token_expired").Contains("Connect / sign in again") &&
+    L10n.T("err_token_expired").Contains(SignInPath("provider_claude")) &&
     L10n.T("err_token_expired").Contains("tray icon"),
     "The expired Claude sign-in message should tell users where to sign in again.");
+Require(
+    L10n.T("err_chatgpt_not_signed_in").Contains(SignInPath("menu_sign_in_codex")),
+    "The ChatGPT sign-in message should name the Sign in › ChatGPT / Codex menu item.");
 L10n.Init(UiLanguage.ZhHant);
 Require(
-    L10n.T("err_token_expired").Contains("連結 / 重新登入") &&
+    L10n.T("err_token_expired").Contains(SignInPath("provider_claude")) &&
     L10n.T("err_token_expired").Contains("系統匣圖示"),
     "The Traditional Chinese expired Claude sign-in message should include re-login steps.");
 L10n.Init(UiLanguage.En);
