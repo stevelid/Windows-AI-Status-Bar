@@ -17,8 +17,8 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 - [x] P0.1 🧑 Unchanged widget shows Codex and Claude quotas (confirmed by Steve, 2026-09-28)
 - [x] P0.2 🧑 Static recon report committed (`docs/recon/ai-status-recon-20260928-095731/`)
-- [ ] P0.3 🧑 Live timeline with scenario notes — partial: Codex turns and desktop Claude Code session writes observed; detailed record fields and question/interruption scenarios remain
-- [ ] P0.4 FINDINGS.md, assumption statuses, recon-derived fixtures — FINDINGS.md and plan rules updated; fixtures and A-C3/A-X4 wait on the P0.3 re-run
+- [ ] P0.3 🧑 Live timeline with scenario notes — latest recorder run recorded 86 Codex rows, no Cowork records, and no scenario notes; Cowork's current storage remains unknown
+- [ ] P0.4 FINDINGS.md, assumption statuses, recon-derived fixtures — FINDINGS.md and plan rules updated; capture Cowork's current storage and live record shapes/scenarios before Phase 4
 
 ## Phase 1 — Reshape the widget
 
@@ -51,7 +51,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P3.6 KNOWN_LIMITATIONS.md
 - [ ] Phase 3 acceptance 🧑
 
-## Phase 4 — Claude Cowork (optional; not wanted yet)
+## Phase 4 — Claude Cowork (requested; gated on P0.3/P0.4 current-storage recon)
 
 - [ ] P4.1 Roots and task store ⚠️
 - [ ] P4.2 Audit parser ⚠️
@@ -80,6 +80,17 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Waiting on Steve
 
+### Phase 4 prerequisite — locate current Cowork storage
+
+PLAN §0 and §4 gate Phase 4 until P0.3/P0.4 locate where Cowork currently writes. The latest recorder output contained Codex activity only (86 rows); it had no Cowork records or scenario notes.
+
+1. From the repository root, start `powershell -ExecutionPolicy Bypass -File .\tools\recon\Find-ClaudeWrites.ps1` in one PowerShell window.
+2. Immediately start `powershell -ExecutionPolicy Bypass -File .\tools\recon\Collect-Recon.ps1 -WatchSeconds 1500` in a second window.
+3. During the first five minutes, run a Cowork task so `Find-ClaudeWrites.ps1` can identify changed files. Continue through the Cowork K1–K6 scenarios in `docs/recon/README.md` during the 25-minute timeline; wait about 60 seconds before answering K3/K4 prompts and record action times in `notes.md`.
+4. Review the Desktop outputs and note the changed Cowork storage location and file categories. Remove real paths, identifiers, and content before sharing or committing the reports.
+
+### Existing Windows acceptance and release checks
+
 1. Download the latest Windows build artifact from draft PR #5 and record the build label shown by Copy diagnostics.
 2. Run a task in both Claude Code’s desktop Code tab and a terminal. Check that each appears with a useful title, updates while it runs, and moves to Recently completed when its turn ends.
 3. Have Claude finish a turn with a question and check for the inferred “Asked you a question” alert.
@@ -99,6 +110,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-29 — Phase 4 kickoff — User requested Phase 4; implementation remains gated by PLAN §0/§4 because the latest recorder run returned 86 Codex rows and no Cowork records or scenario notes, leaving current Cowork storage unverified.
 - 2026-09-29 — UI text fix (found installing `main` build `449782b`) — The signed-out messages told users to choose "Connect / sign in again", a menu item that no longer exists. They now name the real path, "Sign in › Claude" or "Sign in › ChatGPT / Codex". The smoke test now builds the expected path from the menu's own labels, so a renamed menu item fails CI instead of leaving a stale hint.
 - 2026-09-29 — P1.6 follow-up (D9 revised by Steve) — The strip can be dragged after the normal Windows drag threshold. Its monitor and position relative to that monitor's work area are saved, so docking, restart and display changes preserve the chosen placement. Clicking still toggles the pane. Windows drag behavior needs manual acceptance.
 
