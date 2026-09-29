@@ -117,6 +117,7 @@ public sealed class DismissalStore
     {
         if (_filePath is null || !_canWrite) return;
 
+        RefreshDocument();
         var entries = new JsonArray();
         foreach (var pair in _expiresAt.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
@@ -151,6 +152,20 @@ public sealed class DismissalStore
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
+    }
+
+    void RefreshDocument()
+    {
+        if (_filePath is null || !File.Exists(_filePath)) return;
+        try
+        {
+            if (new FileInfo(_filePath).Length <= MaximumStateFileBytes &&
+                JsonNode.Parse(File.ReadAllText(_filePath)) is JsonObject document)
+                _document = document;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (JsonException) { }
     }
 
     static string ComputeKey(string taskId, string evidenceKey)

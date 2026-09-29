@@ -12,12 +12,14 @@ internal sealed class TaskRowView : Border
 {
     readonly TextBlock _icon;
     readonly TextBlock _title;
+    readonly TextBlock _reason;
     readonly TextBlock _provider;
     readonly System.Windows.Controls.Button _dismissButton;
-    string? _taskId;
+    AgentTask? _task;
     bool _canDismiss;
 
     internal event Action<string>? DismissRequested;
+    internal event Action<AgentTask>? FocusRequested;
 
     /// <summary>Creates a reusable row for one in-memory agent task.</summary>
     public TaskRowView()
@@ -38,6 +40,14 @@ internal sealed class TaskRowView : Border
             FontSize = 11,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        // The app's fixed reason text ("Asked you a question"), never provider content.
+        _reason = new TextBlock
+        {
+            FontSize = 10,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 1, 0, 0),
+            Visibility = Visibility.Collapsed,
         };
         _provider = new TextBlock
         {
@@ -60,10 +70,12 @@ internal sealed class TaskRowView : Border
         };
         _dismissButton.Click += (_, _) =>
         {
-            if (_taskId is { } taskId) DismissRequested?.Invoke(taskId);
+            if (_task is { } task) DismissRequested?.Invoke(task.Id);
         };
+        PreviewMouseLeftButtonUp += OnPreviewMouseLeftButtonUp;
         MouseEnter += (_, _) => UpdateDismissVisibility();
         MouseLeave += (_, _) => UpdateDismissVisibility();
+        Cursor = System.Windows.Input.Cursors.Hand;
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -71,11 +83,14 @@ internal sealed class TaskRowView : Border
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         Grid.SetColumn(_icon, 0);
-        Grid.SetColumn(_title, 1);
+        var titleStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        titleStack.Children.Add(_title);
+        titleStack.Children.Add(_reason);
+        Grid.SetColumn(titleStack, 1);
         Grid.SetColumn(_provider, 2);
         Grid.SetColumn(_dismissButton, 3);
         grid.Children.Add(_icon);
-        grid.Children.Add(_title);
+        grid.Children.Add(titleStack);
         grid.Children.Add(_provider);
         grid.Children.Add(_dismissButton);
         Child = grid;
@@ -85,7 +100,7 @@ internal sealed class TaskRowView : Border
     public void Update(AgentTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
-        _taskId = task.Id;
+        _task = task;
         _canDismiss = task.Status == AgentTaskStatus.Unknown ||
             task.Status == AgentTaskStatus.NeedsAttention && task.Confidence != StateConfidence.Confirmed;
         _dismissButton.Content = L10n.T("pane_dismiss");
@@ -120,9 +135,21 @@ internal sealed class TaskRowView : Border
             : ThemeManager.IsLight
                 ? Color.FromRgb(0x2B, 0x2C, 0x35)
                 : Color.FromRgb(0xE0, 0xE0, 0xE7));
-        _provider.Text = L10n.T(task.Provider == AgentProvider.Codex
+        var reason = task.Status switch
+        {
+            AgentTaskStatus.NeedsAttention => task.AttentionReason,
+            AgentTaskStatus.Failed => task.StatusDetail,
+            _ => null,
+        };
+        _reason.Text = reason ?? "";
+        _reason.Foreground = ThemeManager.Brush(task.Status == AgentTaskStatus.NeedsAttention
+            ? iconColor
+            : ThemeManager.SubtleText);
+        _reason.Visibility = string.IsNullOrWhiteSpace(reason) ? Visibility.Collapsed : Visibility.Visible;
+        var providerName = L10n.T(task.Provider == AgentProvider.Codex
             ? "pane_provider_codex"
             : "pane_provider_claude");
+        _provider.Text = $"{providerName} · {FormatAge(task.LastActivity)}";
         _provider.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
 
         var tooltip = new List<string>();
@@ -135,6 +162,25 @@ internal sealed class TaskRowView : Border
         ToolTip = string.Join(Environment.NewLine, tooltip);
     }
 
+    void OnPreviewMouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (IsWithin(e.OriginalSource as DependencyObject, _dismissButton)) return;
+        if (_task is not { } task) return;
+        FocusRequested?.Invoke(task);
+        e.Handled = true;
+    }
+
+    static bool IsWithin(DependencyObject? source, DependencyObject ancestor)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, ancestor)) return true;
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
+    }
+
     void UpdateDismissVisibility() =>
         _dismissButton.Visibility = _canDismiss && IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
 
@@ -144,6 +190,16 @@ internal sealed class TaskRowView : Border
         StateConfidence.Inferred => L10n.T("pane_confidence_inferred"),
         _ => L10n.T("pane_confidence_stale"),
     };
+
+    // Compact age beside the provider; the tooltip keeps the full wording.
+    static string FormatAge(DateTimeOffset lastActivity)
+    {
+        var age = DateTimeOffset.Now - lastActivity;
+        if (age < TimeSpan.FromMinutes(1)) return L10n.T("pane_age_now");
+        if (age < TimeSpan.FromHours(1)) return L10n.F("pane_age_minutes", (int)age.TotalMinutes);
+        if (age < TimeSpan.FromDays(1)) return L10n.F("pane_age_hours", (int)age.TotalHours);
+        return L10n.F("pane_age_days", (int)age.TotalDays);
+    }
 
     static string FormatActivity(DateTimeOffset lastActivity)
     {

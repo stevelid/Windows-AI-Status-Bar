@@ -4,6 +4,7 @@ using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
 using StatusBar.Core.Claude;
 using StatusBar.Core.Codex;
+using StatusBar.Core.Diagnostics;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
@@ -21,6 +22,8 @@ public partial class App : System.Windows.Application
     CodexTaskProvider? _codexTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
+    AttentionNotifier? _attentionNotifier;
+    SystemEventsAdapter? _systemEvents;
     long? _detailsPaneClosedAtMs;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
@@ -70,7 +73,7 @@ public partial class App : System.Windows.Application
         if (AppPaths.ResolutionNote.Length > 0)
             Log.Write($"資料路徑備援: {AppPaths.ResolutionNote} -> {AppPaths.DataDir}");
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            Log.Write($"UnhandledException (terminating={args.IsTerminating}): {args.ExceptionObject}");
+            Log.Write($"UnhandledException (terminating={args.IsTerminating}): {args.ExceptionObject?.GetType().Name ?? "Unknown"}");
         DispatcherUnhandledException += (_, args) =>
         {
             Log.Error("DispatcherUnhandledException", args.Exception);
@@ -189,7 +192,12 @@ public partial class App : System.Windows.Application
         });
         ThemeManager.Init(_settings.Theme == "light");
 
-        if (!_settings.FirstRunDone)
+        if (AppPaths.LaunchableExecutable is null)
+        {
+            // Development run through the dotnet host: leave the installed copy's shortcut alone.
+            Log.Write("Running under the dotnet host; auto-start shortcut left unchanged.");
+        }
+        else if (!_settings.FirstRunDone)
         {
             var result = AutoStart.TryEnable();
             if (!result.Succeeded || result.Detail is not null)
@@ -214,6 +222,7 @@ public partial class App : System.Windows.Application
         UpdateService.CleanupOldBinary();
         UpdateService.CleanupStaleTemporaryDirectories();
         SetupTray();
+        _attentionNotifier = new AttentionNotifier(_settings, _trayController);
         if (autoStartNotice is not null)
         {
             _trayController.ShowBalloonTip(
@@ -238,6 +247,9 @@ public partial class App : System.Windows.Application
         _usageMonitor.Start();
 
         ConfigureAgentTaskService();
+        _systemEvents = new SystemEventsAdapter(
+            () => _ = ReconcileTasksQuietlyAsync(),
+            () => _usageMonitor?.RefreshNow());
 
         _ = AutoCheckUpdatesAsync();
     }
@@ -378,6 +390,7 @@ public partial class App : System.Windows.Application
                 SignInProvider,
                 ShowSettings,
                 CopyDiagnostics,
+                SaveDiagnosticBundle,
                 () => _ = CheckForUpdatesAsync(interactive: true),
                 CancelPendingUpdate,
                 ExitApp));
@@ -425,6 +438,62 @@ public partial class App : System.Windows.Application
             MessageBox.Show(
                 L10n.F("diagnostics_copy_failed", ex.GetType().Name),
                 "AI Usage Widget",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    void SaveDiagnosticBundle()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                AddExtension = true,
+                DefaultExt = ".zip",
+                FileName = $"WindowsAIStatusBar-diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.zip",
+                Filter = L10n.T("diagnostics_zip_filter"),
+                InitialDirectory = AppPaths.DataDir,
+                OverwritePrompt = true,
+                Title = L10n.T("diagnostics_save_title"),
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            var codexDiagnostics = _codexTaskProvider?.Diagnostics;
+            var codex = DiagnosticsService.InspectCodex(_settings.CodexExecutablePath);
+            var providers = _usageMonitor?.Current.Values
+                .Select(snapshot => new DiagnosticUsageProvider(
+                    snapshot.Source == UsageSource.Claude ? "Claude" : "ChatGPT",
+                    snapshot.Health.ToString(),
+                    snapshot.LastSuccess,
+                    snapshot.StatusCode))
+                ?? Enumerable.Empty<DiagnosticUsageProvider>();
+            var report = DiagnosticReportBuilder.Build(
+                (typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0)).ToString(3),
+                AppBuild.Label,
+                providers,
+                _agentStateService?.Current ?? _taskState,
+                codexDiagnostics,
+                codex.Source,
+                codex.ExecutableName,
+                codex.Version);
+            DiagnosticBundleWriter.Write(
+                dialog.FileName,
+                report,
+                Log.ReadDiagnosticTail(),
+                DiagnosticReportBuilder.BuildFormatDrift(codexDiagnostics));
+            _trayController.ShowBalloonTip(
+                3500,
+                "Windows AI Status Bar",
+                L10n.T("diagnostics_saved"),
+                WinForms.ToolTipIcon.Info);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Save diagnostic bundle failed", ex);
+            MessageBox.Show(
+                L10n.F("diagnostics_save_failed", ex.GetType().Name),
+                L10n.T("diagnostics_save_title"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }
@@ -496,10 +565,15 @@ public partial class App : System.Windows.Application
         if (_exitStarted) return;
         _exitStarted = true;
         Log.Write("使用者選擇結束");
+        _systemEvents?.Dispose();
+        _systemEvents = null;
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
         if (_agentStateService is not null)
+        {
+            _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
             await _agentStateService.DisposeAsync();
+        }
         _detailsPane?.Close();
         DisposeChatGptService();
         _trayController.Dispose();
@@ -569,6 +643,7 @@ public partial class App : System.Windows.Application
         if (_agentStateService is not null)
         {
             _agentStateService.StateChanged -= OnTaskStateChanged;
+            _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
             _ = _agentStateService.DisposeAsync();
         }
 
@@ -589,17 +664,20 @@ public partial class App : System.Windows.Application
         }
         else
         {
-            _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
-            _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
-            _codexTaskProvider.Trace += OnCodexTrace;
+            var codexHome = _settings.CodexHomeOverride;
+            var claudeHome = _settings.ClaudeCodeHomeOverride;
             var claudeHookPath = claudeHooksEnabled
                 ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
                 : null;
-            taskProviders =
-            [
-                _codexTaskProvider,
-                new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath),
-            ];
+            // P6.1: each provider is recreated after an unexpected failure without touching the other.
+            var codex = new SupervisedTaskProvider(AgentProvider.Codex, () => CreateCodexTaskProvider(codexHome), TimeProvider.System);
+            var claude = new SupervisedTaskProvider(
+                AgentProvider.Claude,
+                () => new ClaudeCodeTaskProvider(claudeHome, claudeHookPath),
+                TimeProvider.System);
+            codex.Supervision += OnProviderSupervision;
+            claude.Supervision += OnProviderSupervision;
+            taskProviders = [codex, claude];
         }
 
         var stateTime = TimeProvider.System;
@@ -609,15 +687,20 @@ public partial class App : System.Windows.Application
             new StateServiceOptions(
                 TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
                 TaskTimings.Default.UnknownVisibleFor),
-            new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
+            new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")),
+            new NotificationGate(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
         _agentStateClaudeHomeOverride = claudeHomeOverride;
         _agentStateClaudeHooksEnabled = claudeHooksEnabled;
-        LogTaskChanges(StatusBarState.Empty, _agentStateService.Current);
-        _taskState = _agentStateService.Current;
+        // Providers start inside the constructor, so subscribe before reading the state and read it
+        // once: an update landing in between was otherwise neither shown nor logged.
         _agentStateService.StateChanged += OnTaskStateChanged;
+        _agentStateService.EnteredNeedsAttention += OnEnteredNeedsAttention;
+        var initialState = _agentStateService.Current;
+        LogTaskChanges(StatusBarState.Empty, initialState);
+        _taskState = initialState;
         UpdateStrip();
     }
 
@@ -661,6 +744,15 @@ public partial class App : System.Windows.Application
         });
     }
 
+    void OnEnteredNeedsAttention(AgentTask task)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_exitStarted) return;
+            _attentionNotifier?.Notify(task);
+        });
+    }
+
     // Content-free task transitions (short ids, states, counts); titles are never logged.
     static void LogTaskChanges(StatusBarState previous, StatusBarState next)
     {
@@ -675,17 +767,54 @@ public partial class App : System.Windows.Application
         }
     }
 
+    CodexTaskProvider CreateCodexTaskProvider(string? codexHome)
+    {
+        if (_codexTaskProvider is not null)
+        {
+            _codexTaskProvider.WatcherOverflowed -= OnCodexWatcherOverflow;
+            _codexTaskProvider.Trace -= OnCodexTrace;
+        }
+        var provider = new CodexTaskProvider(codexHome);
+        provider.WatcherOverflowed += OnCodexWatcherOverflow;
+        provider.Trace += OnCodexTrace;
+        _codexTaskProvider = provider;
+        return provider;
+    }
+
+    async Task ReconcileTasksQuietlyAsync()
+    {
+        var service = _agentStateService;
+        if (service is null) return;
+        try
+        {
+            await service.ReconcileAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Task reconcile after system event failed", ex);
+        }
+    }
+
+    static void OnProviderSupervision(string message) => Log.Write("Supervisor: " + message);
+
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 
     static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 
+    void OnFocusTaskRequested(AgentTask task)
+    {
+        if (AppActivator.TryFocus(task))
+            _detailsPane?.Close();
+    }
+
     void UpdateStrip()
     {
         if (_usageMonitor is null) return;
         var usage = _usageMonitor.Current;
         _widget.UpdateState(usage, _taskState);
+        _trayController.UpdateTaskState(_taskState);
         if (_detailsPane?.IsVisible == true)
             _detailsPane.UpdateState(usage, _taskState);
     }
@@ -711,13 +840,16 @@ public partial class App : System.Windows.Application
         if (!_widget.IsVisible || _usageMonitor is null) return;
         _detailsPane = new DetailsPaneWindow(_settings);
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
+        _detailsPane.FocusTaskRequested += OnFocusTaskRequested;
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;
+            _widget.SetPaneOpen(false);
             _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
         };
         _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
         _detailsPane.ShowAbove(_widget);
+        _widget.SetPaneOpen(true);
         _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: true);
     }
 

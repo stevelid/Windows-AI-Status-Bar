@@ -1,4 +1,5 @@
 using WinForms = System.Windows.Forms;
+using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 
 namespace ClaudeUsageWidget;
@@ -11,6 +12,7 @@ public sealed record TrayActions(
     Action<UsageProviderKind> SignIn,
     Action ShowSettings,
     Action CopyDiagnostics,
+    Action SaveDiagnostics,
     Action CheckForUpdates,
     Action CancelUpdate,
     Action Quit);
@@ -31,16 +33,19 @@ public sealed class TrayController : IDisposable
     readonly WinForms.ToolStripMenuItem _settingsItem;
     readonly WinForms.ToolStripMenuItem _autoStart;
     readonly WinForms.ToolStripMenuItem _diagnostics;
+    readonly WinForms.ToolStripMenuItem _saveDiagnostics;
     readonly WinForms.ToolStripMenuItem _updates;
     readonly WinForms.ToolStripMenuItem _cancelUpdate;
     readonly WinForms.ToolStripMenuItem _quit;
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _usage =
         new Dictionary<UsageSource, UsageSnapshot>();
-    (double? Utilization, int ApproachingBelow, int LowBelow)? _iconKey;
+    (double? Utilization, int ApproachingBelow, int LowBelow, bool Attention)? _iconKey;
+    bool _hasAttention;
     bool _syncingAutoStart;
     bool _stripVisible = true;
     bool _paneVisible;
     bool _updateClickPending;
+    Action? _balloonClickAction;
     bool _disposed;
 
     /// <summary>Creates the tray icon and connects menu actions to the application.</summary>
@@ -73,6 +78,7 @@ public sealed class TrayController : IDisposable
         _autoStart = new WinForms.ToolStripMenuItem("", null, (_, _) => { }) { CheckOnClick = true };
         _autoStart.CheckedChanged += OnAutoStartCheckedChanged;
         _diagnostics = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.CopyDiagnostics());
+        _saveDiagnostics = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.SaveDiagnostics());
         _updates = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.CheckForUpdates());
         _cancelUpdate = new WinForms.ToolStripMenuItem("", null, (_, _) => _actions.CancelUpdate())
         {
@@ -91,6 +97,7 @@ public sealed class TrayController : IDisposable
             _settingsItem,
             _autoStart,
             _diagnostics,
+            _saveDiagnostics,
             _updates,
             _cancelUpdate,
             new WinForms.ToolStripSeparator(),
@@ -107,13 +114,36 @@ public sealed class TrayController : IDisposable
     {
         ArgumentNullException.ThrowIfNull(usage);
         _usage = usage;
+        RenderIcon();
+
+        var lines = new[] { UsageSource.Claude, UsageSource.Codex }
+            .Select(source => FormatUsageLine(source, usage.GetValueOrDefault(source)));
+        var tip = string.Join("\n", lines);
+        var trimmed = tip.Length > 127 ? tip[..127] : tip;
+        if (_icon.Text != trimmed) _icon.Text = trimmed;
+    }
+
+    /// <summary>Updates the tray attention marker independently of quota refreshes.</summary>
+    public void UpdateTaskState(StatusBarState tasks)
+    {
+        ArgumentNullException.ThrowIfNull(tasks);
+        _hasAttention = tasks.AttentionCount > 0;
+        RenderIcon();
+    }
+
+    void RenderIcon()
+    {
         // Keep the tray summary aligned with the compact strip's session window.
-        var allWindows = usage.Values
+        var allWindows = _usage.Values
             .Select(snapshot => UsageSummary.Compact(snapshot.Windows))
             .OfType<UsageWindow>()
             .ToArray();
         var principal = UsageSummary.Principal(allWindows);
-        var iconKey = (principal?.UsedPercent, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
+        var iconKey = (
+            principal?.UsedPercent,
+            _settings.ApproachingBelowPercent,
+            _settings.LowBelowPercent,
+            _hasAttention);
         if (_iconKey != iconKey)
         {
             _iconKey = iconKey;
@@ -121,15 +151,10 @@ public sealed class TrayController : IDisposable
             _icon.Icon = TrayIconRenderer.Render(
                 principal?.UsedPercent,
                 _settings.ApproachingBelowPercent,
-                _settings.LowBelowPercent);
+                _settings.LowBelowPercent,
+                _hasAttention);
             oldIcon?.Dispose();
         }
-
-        var lines = new[] { UsageSource.Claude, UsageSource.Codex }
-            .Select(source => FormatUsageLine(source, usage.GetValueOrDefault(source)));
-        var tip = string.Join("\n", lines);
-        var trimmed = tip.Length > 127 ? tip[..127] : tip;
-        if (_icon.Text != trimmed) _icon.Text = trimmed;
     }
 
     /// <summary>Updates Show/Hide and Expand/Collapse menu text to match current window state.</summary>
@@ -155,13 +180,23 @@ public sealed class TrayController : IDisposable
     public void ShowBalloonTip(int timeout, string title, string text, WinForms.ToolTipIcon icon)
     {
         _updateClickPending = false;
+        _balloonClickAction = null;
         _icon.ShowBalloonTip(timeout, title, text, icon);
+    }
+
+    /// <summary>Shows an attention balloon whose click opens the details pane.</summary>
+    public void ShowAttention(string title, string text)
+    {
+        _updateClickPending = false;
+        _balloonClickAction = _actions.TogglePane;
+        _icon.ShowBalloonTip(8000, title, text, WinForms.ToolTipIcon.Warning);
     }
 
     /// <summary>Shows an update notice and opens the update flow if the user clicks it.</summary>
     public void ShowUpdateAvailable(string latestVersion)
     {
         _updateClickPending = true;
+        _balloonClickAction = null;
         _icon.ShowBalloonTip(
             8000,
             "Windows AI Status Bar",
@@ -177,6 +212,7 @@ public sealed class TrayController : IDisposable
         L10n.Changed -= ApplyLanguage;
         _icon.MouseClick -= OnIconMouseClick;
         _icon.BalloonTipClicked -= OnBalloonTipClicked;
+        _balloonClickAction = null;
         _autoStart.CheckedChanged -= OnAutoStartCheckedChanged;
         _icon.Visible = false;
         var icon = _icon.Icon;
@@ -208,6 +244,7 @@ public sealed class TrayController : IDisposable
         _settingsItem.Text = L10n.T("menu_settings");
         _autoStart.Text = L10n.T("menu_autostart");
         _diagnostics.Text = L10n.T("menu_copy_diagnostics");
+        _saveDiagnostics.Text = L10n.T("menu_save_diagnostic_bundle");
         _updates.Text = L10n.T("menu_check_update");
         _cancelUpdate.Text = L10n.T("update_cancel");
         _quit.Text = L10n.T("menu_exit");
@@ -245,6 +282,13 @@ public sealed class TrayController : IDisposable
 
     void OnBalloonTipClicked(object? sender, EventArgs e)
     {
+        if (_balloonClickAction is { } action)
+        {
+            _balloonClickAction = null;
+            action();
+            return;
+        }
+
         if (!_updateClickPending) return;
         _updateClickPending = false;
         _actions.CheckForUpdates();

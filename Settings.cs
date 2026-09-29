@@ -120,7 +120,7 @@ public static class AutoStart
 
     public static AutoStartResult TryEnable()
     {
-        var exe = Environment.ProcessPath;
+        var exe = AppPaths.LaunchableExecutable;
         if (exe is null) return new AutoStartResult(false, "ProcessPathUnavailable");
         try
         {

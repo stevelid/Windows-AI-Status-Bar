@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -7,7 +8,13 @@ namespace StatusBar.Core.Claude;
 public static class ClaudeSettingsHookMerger
 {
     static readonly string[] HookEvents = ["UserPromptSubmit", "Notification", "Stop", "SessionEnd"];
-    static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
+    // Relaxed escaping keeps quotes and non-ASCII text readable in the user's own settings file
+    // (the default encoder writes " as "); the file is never embedded in HTML.
+    static readonly JsonSerializerOptions PrettyJson = new()
+    {
+        WriteIndented = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     /// <summary>Adds or updates this app's four hooks while preserving other hooks and top-level settings.</summary>
     public static string Add(string json, string command)
