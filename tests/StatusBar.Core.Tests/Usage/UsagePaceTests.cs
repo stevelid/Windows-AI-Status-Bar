@@ -48,12 +48,4 @@ public class UsagePaceTests
 
         Assert.Equal(0, UsagePaceCalculator.Evaluate(window, Now)?.TimeRemainingPercent);
     }
-
-    [Fact]
-    public void Worst_keeps_the_absolute_level_when_pace_is_fine()
-    {
-        var window = new UsageWindow("session", "Session", 95, Now.AddMinutes(10), TimeSpan.FromHours(5));
-
-        Assert.Equal(AllowanceLevel.Low, UsagePaceCalculator.Worst(window, Now));
-    }
 }

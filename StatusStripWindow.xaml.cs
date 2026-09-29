@@ -125,10 +125,8 @@ public partial class StatusStripWindow : Window
     void RenderState()
     {
         if (CodexText is null) return;
-        RenderProvider(UsageSource.Codex, CodexText,
-            new PaceBar(CodexBar, CodexBarFillColumn, CodexBarGapColumn, CodexBarTrack, CodexBarFill));
-        RenderProvider(UsageSource.Claude, ClaudeText,
-            new PaceBar(ClaudeBar, ClaudeBarFillColumn, ClaudeBarGapColumn, ClaudeBarTrack, ClaudeBarFill));
+        RenderProvider(UsageSource.Codex, CodexText);
+        RenderProvider(UsageSource.Claude, ClaudeText);
 
         WorkingText.Text = $"● {_tasks.WorkingCount}";
         WorkingText.Foreground = ThemeManager.Brush(ThemeManager.LabelText);
@@ -225,9 +223,8 @@ public partial class StatusStripWindow : Window
             HandoffBehavior.SnapshotAndReplace);
     }
 
-    void RenderProvider(UsageSource source, TextBlock target, PaceBar bar)
+    void RenderProvider(UsageSource source, TextBlock target)
     {
-        bar.Root.Visibility = Visibility.Collapsed;
         var prefix = L10n.T(source == UsageSource.Codex ? "strip_provider_codex" : "strip_provider_claude");
         if (!_usage.TryGetValue(source, out var snapshot))
         {
@@ -261,37 +258,56 @@ public partial class StatusStripWindow : Window
 
         var remaining = Math.Round(principal.RemainingPercent);
         target.Text = $"{prefix} {remaining}%";
+        var (concern, level) = WorstConcern(snapshot);
         target.Foreground = ThemeManager.Brush(snapshot.Health == UsageHealth.Stale
             ? ThemeManager.SubtleText
-            : ThemeManager.ColorForAllowance(UsageSummary.Level(
-                principal.RemainingPercent,
-                _settings.ApproachingBelowPercent,
-                _settings.LowBelowPercent)));
+            : ThemeManager.SoftColorForAllowance(level));
         var value = L10n.F("tray_usage_remaining", remaining);
-        RenderPaceBar(snapshot, principal, bar);
-        target.ToolTip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
+        var tooltip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
             ? $"{prefix}: {value} · {L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm"))}"
             : $"{prefix}: {value}";
+        if (concern is not null) tooltip += Environment.NewLine + concern;
+        target.ToolTip = tooltip;
     }
 
-    /// <summary>Fills the hairline with the session allowance left, coloured by the worst pace of any window.</summary>
-    void RenderPaceBar(UsageSnapshot snapshot, UsageWindow shown, PaceBar bar)
+    // Colour by whether any window will run out before it resets at the recent rate of use, or is
+    // already below the low threshold. Calm blue otherwise, even when usage is simply high.
+    (string? Concern, AllowanceLevel Level) WorstConcern(UsageSnapshot snapshot)
     {
-        var now = DateTimeOffset.Now;
-        var level = snapshot.Windows
-            .Select(window => UsagePaceCalculator.Worst(
-                window, now, _settings.ApproachingBelowPercent, _settings.LowBelowPercent))
-            .DefaultIfEmpty(AllowanceLevel.Normal)
-            .Max();
-        var brush = ThemeManager.Brush(snapshot.Health == UsageHealth.Stale
-            ? ThemeManager.SubtleText
-            : ThemeManager.ColorForAllowance(level));
-        var remaining = Math.Clamp(shown.RemainingPercent, 0, 100);
-        bar.FillColumn.Width = new GridLength(remaining, GridUnitType.Star);
-        bar.GapColumn.Width = new GridLength(100 - remaining, GridUnitType.Star);
-        bar.Fill.Background = brush;
-        bar.Track.Background = brush;
-        bar.Root.Visibility = Visibility.Visible;
+        string? concern = null;
+        var worst = AllowanceLevel.Normal;
+        foreach (var window in snapshot.Windows)
+        {
+            var runway = snapshot.RunwayFor(window);
+            var level = runway.Level;
+            string? reason = null;
+            if (window.RemainingPercent < _settings.LowBelowPercent)
+            {
+                level = AllowanceLevel.Low;
+                reason = L10n.F("strip_runway_low_left", window.Label, Math.Round(window.RemainingPercent));
+            }
+            else if (runway.RunsOutBeforeReset)
+            {
+                reason = L10n.F("strip_runway_runs_out", window.Label,
+                    FormatSpan(runway.TimeToEmpty!.Value), FormatSpan(runway.TimeToReset!.Value));
+            }
+
+            if (level > worst)
+            {
+                worst = level;
+                concern = reason;
+            }
+        }
+
+        return (concern, worst);
+    }
+
+    // "45m", "3h 12m", "2d 4h": short enough for a tooltip line.
+    static string FormatSpan(TimeSpan span)
+    {
+        if (span < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))}m";
+        if (span < TimeSpan.FromDays(1)) return $"{(int)span.TotalHours}h {span.Minutes:00}m";
+        return $"{(int)span.TotalDays}d {span.Hours}h";
     }
 
     void SetUnavailable(TextBlock target, string prefix, string explanation)
@@ -344,8 +360,6 @@ public partial class StatusStripWindow : Window
         ContextMenuRequested?.Invoke();
         e.Handled = true;
     }
-
-    sealed record PaceBar(Grid Root, ColumnDefinition FillColumn, ColumnDefinition GapColumn, Border Track, Border Fill);
 
     void OnClosed(object? sender, EventArgs e)
     {

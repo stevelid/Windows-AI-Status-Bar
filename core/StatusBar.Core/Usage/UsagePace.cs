@@ -31,16 +31,4 @@ public static class UsagePaceCalculator
             : AllowanceLevel.Normal;
         return new UsagePace(timeRemaining, level);
     }
-
-    /// <summary>The more severe of the absolute level (few percent left) and the pace level.</summary>
-    public static AllowanceLevel Worst(
-        UsageWindow window,
-        DateTimeOffset now,
-        double approachingBelow = 30,
-        double lowBelow = 10)
-    {
-        var absolute = UsageSummary.Level(window.RemainingPercent, approachingBelow, lowBelow);
-        var pace = Evaluate(window, now)?.Level ?? AllowanceLevel.Normal;
-        return (AllowanceLevel)Math.Max((int)absolute, (int)pace);
-    }
 }

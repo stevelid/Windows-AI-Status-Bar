@@ -42,6 +42,17 @@ public static class ThemeManager
         _ => IsLight ? C(0x1F, 0x6F, 0xD4) : C(0x4C, 0x9F, 0xF0),
     };
 
+    /// <summary>
+    /// Softer amber and red for the strip's percentage text, so a warning is noticeable without
+    /// drawing the eye; the normal colour is unchanged.
+    /// </summary>
+    public static Color SoftColorForAllowance(AllowanceLevel level) => level switch
+    {
+        AllowanceLevel.Low => IsLight ? C(0xC0, 0x5A, 0x55) : C(0xEE, 0x96, 0x92),
+        AllowanceLevel.Approaching => IsLight ? C(0xB9, 0x7F, 0x2E) : C(0xE9, 0xBD, 0x82),
+        _ => ColorForAllowance(level),
+    };
+
     // Frozen brushes are immutable, shareable and skip per-element change tracking.
     static readonly Dictionary<Color, SolidColorBrush> BrushCache = new();
 

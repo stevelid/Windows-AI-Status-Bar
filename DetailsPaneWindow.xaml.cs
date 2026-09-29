@@ -201,10 +201,13 @@ public partial class DetailsPaneWindow : Window
                     window.RemainingPercent,
                     _settings.ApproachingBelowPercent,
                     _settings.LowBelowPercent)));
-            RenderPaceBar(row, window, snapshot.Health is UsageHealth.Stale or UsageHealth.Unavailable);
-            row.Root.ToolTip = snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess
-                ? L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm"))
-                : null;
+            var runway = snapshot.RunwayFor(window);
+            RenderPaceBar(row, window, runway, snapshot.Health is UsageHealth.Stale or UsageHealth.Unavailable);
+            var tooltipLines = new List<string>();
+            if (snapshot.Health == UsageHealth.Stale && snapshot.LastSuccess is DateTimeOffset lastSuccess)
+                tooltipLines.Add(L10n.F("data_stale", lastSuccess.ToLocalTime().ToString("HH:mm")));
+            if (RunwayText(runway) is string projection) tooltipLines.Add(projection);
+            row.Root.ToolTip = tooltipLines.Count > 0 ? string.Join(Environment.NewLine, tooltipLines) : null;
             rows.Children.Add(row.Root);
         }
 
@@ -217,11 +220,14 @@ public partial class DetailsPaneWindow : Window
             healthText.Text = L10n.T("err_usage_unavailable");
     }
 
-    void RenderPaceBar(UsageRow row, UsageWindow window, bool dimmed)
+    // Bar colour: the more severe of the absolute level and the rate-based projection (the strip's
+    // rule), so the pane explains why the strip changed colour. The tick still marks time left.
+    void RenderPaceBar(UsageRow row, UsageWindow window, UsageRunway runway, bool dimmed)
     {
         var now = DateTimeOffset.Now;
-        var level = UsagePaceCalculator.Worst(
-            window, now, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
+        var absolute = UsageSummary.Level(
+            window.RemainingPercent, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
+        var level = runway.Level > absolute ? runway.Level : absolute;
         var brush = ThemeManager.Brush(dimmed
             ? ThemeManager.SubtleText
             : ThemeManager.ColorForAllowance(level));
@@ -243,6 +249,24 @@ public partial class DetailsPaneWindow : Window
         {
             row.TickGrid.Visibility = Visibility.Collapsed;
         }
+    }
+
+    // "At the current rate: lasts until reset" or "runs out in ~2h 10m (resets in 3h 12m)".
+    static string? RunwayText(UsageRunway runway)
+    {
+        if (runway.TimeToReset is not TimeSpan reset) return null;
+        if (runway.TimeToEmpty is not TimeSpan empty)
+            return runway.Level == AllowanceLevel.Normal ? null : L10n.T("pane_runway_unknown");
+        return empty < reset
+            ? L10n.F("pane_runway_runs_out", FormatSpan(empty), FormatSpan(reset))
+            : L10n.T("pane_runway_lasts");
+    }
+
+    static string FormatSpan(TimeSpan span)
+    {
+        if (span < TimeSpan.FromHours(1)) return $"{Math.Max(1, (int)Math.Round(span.TotalMinutes))}m";
+        if (span < TimeSpan.FromDays(1)) return $"{(int)span.TotalHours}h {span.Minutes:00}m";
+        return $"{(int)span.TotalDays}d {span.Hours}h";
     }
 
     static UsageRow CreateUsageRow()

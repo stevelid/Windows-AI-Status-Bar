@@ -14,35 +14,12 @@
                               ShadowDepth="2" Direction="270" Opacity="0.38"/>
         </Border.Effect>
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-            <Grid VerticalAlignment="Stretch">
-                <TextBlock x:Name="CodexText" FontSize="11" FontWeight="SemiBold"
-                           VerticalAlignment="Center"/>
-                <!-- Hairline: fill = session allowance left; colour = pace (see UsagePaceCalculator). -->
-                <Grid x:Name="CodexBar" Height="2" VerticalAlignment="Bottom" Margin="0,0,0,3"
-                      Visibility="Collapsed" IsHitTestVisible="False">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="CodexBarFillColumn" Width="0*"/>
-                        <ColumnDefinition x:Name="CodexBarGapColumn" Width="1*"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="CodexBarTrack" Grid.ColumnSpan="2" CornerRadius="1" Opacity="0.25"/>
-                    <Border x:Name="CodexBarFill" CornerRadius="1"/>
-                </Grid>
-            </Grid>
+            <TextBlock x:Name="CodexText" FontSize="11" FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
             <TextBlock Text="  ·  " FontSize="11" VerticalAlignment="Center"
                        Foreground="#FF777782" IsHitTestVisible="False"/>
-            <Grid VerticalAlignment="Stretch">
-                <TextBlock x:Name="ClaudeText" FontSize="11" FontWeight="SemiBold"
-                           VerticalAlignment="Center"/>
-                <Grid x:Name="ClaudeBar" Height="2" VerticalAlignment="Bottom" Margin="0,0,0,3"
-                      Visibility="Collapsed" IsHitTestVisible="False">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="ClaudeBarFillColumn" Width="0*"/>
-                        <ColumnDefinition x:Name="ClaudeBarGapColumn" Width="1*"/>
-                    </Grid.ColumnDefinitions>
-                    <Border x:Name="ClaudeBarTrack" Grid.ColumnSpan="2" CornerRadius="1" Opacity="0.25"/>
-                    <Border x:Name="ClaudeBarFill" CornerRadius="1"/>
-                </Grid>
-            </Grid>
+            <TextBlock x:Name="ClaudeText" FontSize="11" FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
             <TextBlock Text="  ·  " FontSize="11" VerticalAlignment="Center"
                        Foreground="#FF777782" IsHitTestVisible="False"/>
             <TextBlock x:Name="WorkingText" FontSize="11" FontWeight="SemiBold"
