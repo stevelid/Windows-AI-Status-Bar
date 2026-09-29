@@ -50,6 +50,7 @@ public static class L10n
         ["pane_recent"] = ("最近完成", "RECENTLY COMPLETED"),
         ["pane_empty_tasks"] = ("目前沒有執行中的 AI 任務", "No AI tasks running"),
         ["pane_dismiss"] = ("隱藏", "Dismiss"),
+        ["pane_dismiss_tooltip"] = ("Hide this update; new activity will appear. This does not stop the task.", "Hide this update; new activity will appear. This does not stop the task."),
         ["pane_provider_codex"] = ("Codex", "Codex"),
         ["pane_provider_claude"] = ("Claude", "Claude"),
         ["pane_status_detail"] = ("狀態：{0}", "Status: {0}"),

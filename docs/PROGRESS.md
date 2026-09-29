@@ -80,6 +80,15 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Waiting on Steve
 
+### Task dismissal and conversation navigation follow-up (P3.5 / P5.1)
+
+1. Install the Windows artifact from the task-dismiss/navigation PR and record the Copy diagnostics build label.
+2. Hover completed, failed, working and action-needed rows (including a confirmed permission alert), then Dismiss. Check the row and its strip count disappear. Dismiss must not open the other app, stop work, answer a question or approve a permission.
+3. Restart: unchanged dismissed updates stay hidden. Start another turn or create a new question in the same session: the new update appears. A dismissed working task should still show and notify when it finishes.
+4. With two Codex threads and two desktop Claude Code sessions visible, click each row while the app shows a different conversation. Check that the exact selected conversation opens, not just the app. Repeat with a recently completed row.
+5. For a terminal Claude Code task, clicking asks Claude Desktop to resume/import that exact transcript; it does not focus its original terminal. Record any running-session, trust or sign-in refusal from Claude. Confirm existing desktop Code tasks open their existing session without importing a duplicate.
+6. Check the log says `session link dispatched` for session links and `app activated (session link unavailable)` only for app-only fallback. No titles, IDs, links, transcript content or paths should appear in these messages.
+
 ### Phase 4 prerequisite — locate current Cowork storage
 
 PLAN §0 and §4 gate Phase 4 until P0.3/P0.4 locate where Cowork currently writes. The latest recorder output contained Codex activity only (86 rows); it had no Cowork records or scenario notes.
@@ -95,7 +104,7 @@ PLAN §0 and §4 gate Phase 4 until P0.3/P0.4 locate where Cowork currently writ
 2. Run a task in both Claude Code’s desktop Code tab and a terminal. Check that each appears with a useful title, updates while it runs, and moves to Recently completed when its turn ends.
 3. Have Claude finish a turn with a question and check for the inferred “Asked you a question” alert.
 4. In Settings, enable Claude Code hooks. Trigger a permission prompt, check for “Permission requested,” answer it, and check that the alert clears. Disable hooks and confirm existing Claude settings hooks remain intact.
-5. Hover an inferred alert and dismiss it. Restart the app and check that the same evidence stays hidden; create a new question and check that it appears. Confirmed hook alerts should not offer Dismiss. If practical, leave a session without new records until it becomes Unknown and check dismissal there too.
+5. Hover an alert and dismiss it. Restart the app and check that the same evidence stays hidden; create a new question and check that it appears. Confirmed hook alerts now also offer Dismiss (see follow-up above). If practical, leave a session without new records until it becomes Unknown and check dismissal there too.
 6. Report pass/fail for each step and the build label. For failures, include which environment (desktop or terminal) failed and whether hooks were enabled.
 7. Click a Codex task row and a Claude Code task row, including one terminal-launched Claude task, and confirm the owning desktop app is focused. Record the expected Claude terminal limitation if it applies.
 8. Trigger a new attention event for each provider. Confirm one tray notification per new evidence key, that clicking the balloon opens the details pane, and that restarting does not repeat the same notification. Create new evidence and confirm it notifies once.
@@ -109,6 +118,8 @@ PLAN §0 and §4 gate Phase 4 until P0.3/P0.4 locate where Cowork currently writ
 ## Decisions and deviations
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
+
+- 2026-09-29 — P3.5 / P5.1 follow-up (Steve) — Every row now offers Dismiss, including finished, failed, working and confirmed action-needed rows. Dismissal acknowledges the current update only; new activity/evidence or a status change reappears and provider collection continues. Completion notifications compare provider snapshots so hiding working rows does not suppress their later finish notification. Codex now carries its thread ID into `SessionReference` and uses the documented exact-thread link. Claude desktop Code metadata maps the CLI transcript ID to its distinct `local_*` desktop ID; clicks use the installed app's existing-session link, with CLI resume/import when no desktop match exists (new A-K7). Links accept validated IDs only and never include titles, paths or prompts. Dispatch and app-only fallback are logged distinctly, without claiming navigation confirmation. Local solution build: zero warnings/errors; 230 Core tests and Windows smoke tests pass. Apphost creation inside the synced workspace hit a mapped-file lock; building with `--artifacts-path` in the local temp folder succeeded without changing project settings. Windows navigation/dismissal acceptance remains above.
 
 - 2026-09-29 — Phase 4 kickoff — User requested Phase 4; implementation remains gated by PLAN §0/§4 because the latest recorder run returned 86 Codex rows and no Cowork records or scenario notes, leaving current Cowork storage unverified.
 - 2026-09-29 — UI text fix (found installing `main` build `449782b`) — The signed-out messages told users to choose "Connect / sign in again", a menu item that no longer exists. They now name the real path, "Sign in › Claude" or "Sign in › ChatGPT / Codex". The smoke test now builds the expected path from the menu's own labels, so a renamed menu item fails CI instead of leaving a stale hint.

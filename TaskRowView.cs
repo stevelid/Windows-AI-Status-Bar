@@ -16,7 +16,6 @@ internal sealed class TaskRowView : Border
     readonly TextBlock _provider;
     readonly System.Windows.Controls.Button _dismissButton;
     AgentTask? _task;
-    bool _canDismiss;
 
     internal event Action<string>? DismissRequested;
     internal event Action<AgentTask>? FocusRequested;
@@ -101,10 +100,8 @@ internal sealed class TaskRowView : Border
     {
         ArgumentNullException.ThrowIfNull(task);
         _task = task;
-        _canDismiss = task.Status == AgentTaskStatus.Unknown ||
-            task.Status == AgentTaskStatus.NeedsAttention && task.Confidence != StateConfidence.Confirmed;
         _dismissButton.Content = L10n.T("pane_dismiss");
-        _dismissButton.ToolTip = L10n.T("pane_dismiss");
+        _dismissButton.ToolTip = L10n.T("pane_dismiss_tooltip");
         _dismissButton.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
         UpdateDismissVisibility();
         var unknown = task.Status == AgentTaskStatus.Unknown;
@@ -182,7 +179,7 @@ internal sealed class TaskRowView : Border
     }
 
     void UpdateDismissVisibility() =>
-        _dismissButton.Visibility = _canDismiss && IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
+        _dismissButton.Visibility = _task is not null && IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
 
     static string ConfidenceLabel(StateConfidence confidence) => confidence switch
     {

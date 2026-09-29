@@ -830,12 +830,17 @@ public partial class App : System.Windows.Application
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 
-    void OnFocusTaskRequested(AgentTask task)
+    async void OnFocusTaskRequested(AgentTask task)
     {
-        var focused = AppActivator.TryFocus(task);
+        var result = await AppActivator.TryFocusAsync(task);
         // Content-free: provider and outcome only, so "clicking did nothing" can be diagnosed.
-        Log.Write($"Focus {task.Provider} ({task.Status}): {(focused ? "app activated" : "activation failed")}");
-        if (focused)
+        Log.Write($"Focus {task.Provider} ({task.Status}): {result switch
+        {
+            AppActivator.FocusResult.SessionLinkDispatched => "session link dispatched",
+            AppActivator.FocusResult.AppFocused => "app activated (session link unavailable)",
+            _ => "activation failed",
+        }}");
+        if (result != AppActivator.FocusResult.Failed)
             _detailsPane?.Close();
     }
 

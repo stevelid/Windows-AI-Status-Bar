@@ -26,6 +26,7 @@ internal static class CodexTaskMapper
             Status = AgentTaskStatus.Unknown,
             Confidence = StateConfidence.Stale,
             LastActivity = state.HasActivity ? state.LastActivity : DateTimeOffset.MinValue,
+            SessionReference = state.ThreadId,
         };
 
         if (!state.HasSeenTurnEvent)

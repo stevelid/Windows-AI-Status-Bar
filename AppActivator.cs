@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using StatusBar.Core.Claude;
 using StatusBar.Core.Tasks;
 
 namespace ClaudeUsageWidget;
@@ -8,6 +9,7 @@ namespace ClaudeUsageWidget;
 /// <summary>Brings the desktop application that owns a task to the foreground.</summary>
 internal static class AppActivator
 {
+    internal enum FocusResult { Failed, AppFocused, SessionLinkDispatched }
     const int SwRestore = 9;
 
     static readonly ActivationTarget Codex = new(
@@ -21,15 +23,59 @@ internal static class AppActivator
         // ⚠️ A-C8: recon confirmed Claude Desktop's top-level process name.
         "claude");
 
-    /// <summary>Activates the owning desktop app, falling back to its existing process window.</summary>
-    public static bool TryFocus(AgentTask task)
+    /// <summary>Opens the selected session, falling back to the owning app if Windows rejects its link.</summary>
+    public static async Task<FocusResult> TryFocusAsync(AgentTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
         var target = task.Provider == AgentProvider.Codex ? Codex : Claude;
 
-        // The session reference is intentionally not passed to the app. Recon found no
-        // supported deep link for an exact Codex or Claude Code session (P5.1/S6).
-        return TryActivatePackage(target) || TryFocusProcessWindow(target);
+        string? desktopSession = null;
+        if (task.Provider == AgentProvider.Claude && task.SessionReference is { } session)
+        {
+            // Reading desktop metadata off the UI thread keeps clicks responsive on synced disks.
+            desktopSession = await Task.Run(() =>
+                ClaudeDesktopSessionReader.FindSession(ClaudeCodeSessionRoots(), session));
+        }
+        var link = TaskNavigation.CreateLink(task, desktopSession);
+        if (link is not null && TryOpenLink(link)) return FocusResult.SessionLinkDispatched;
+        return TryActivatePackage(target) || TryFocusProcessWindow(target)
+            ? FocusResult.AppFocused : FocusResult.Failed;
+    }
+
+    static bool TryOpenLink(Uri link)
+    {
+        try
+        {
+            // Windows hands the fixed provider protocol to its registered desktop app.
+            // Dispatch success is not proof that the app accepted or navigated to the session.
+            using var process = Process.Start(new ProcessStartInfo(link.AbsoluteUri) { UseShellExecute = true });
+            return true;
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    static IEnumerable<string> ClaudeCodeSessionRoots()
+    {
+        // ⚠️ A-K7 Both ordinary installs and MSIX LocalCache can hold desktop Code metadata.
+        var roots = new List<string>
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Claude", "claude-code-sessions"),
+        };
+        var packages = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Packages");
+        try
+        {
+            if (Directory.Exists(packages))
+                roots.AddRange(Directory.EnumerateDirectories(packages, "Claude_*")
+                    .Select(package => Path.Combine(package, "LocalCache", "Roaming", "Claude", "claude-code-sessions")));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // A missing package root leaves ordinary installs and the CLI resume link available.
+        }
+        return roots;
     }
 
     static bool TryActivatePackage(ActivationTarget target)

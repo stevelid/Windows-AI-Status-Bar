@@ -17,15 +17,18 @@ These limits describe the current Codex and Claude Code task collectors. Recon n
 - The `[Request interrupted by user` marker is unverified (A-K3), so an interrupted turn may not be shown as Stopped.
 - Without Claude Code hooks, a permission prompt is not represented in the transcript and will not appear as a confirmed permission alert. Transcript activity can continue to show the task as Working.
 - Hooks are opt-in. Whether Claude Code runs the configured hooks from the desktop Code tab is unverified (A-K4); terminal hook execution is also untested. When hook events arrive, the provider can show permission and input alerts and clear them on later evidence.
-- Clicking a Claude Code task focuses the Claude desktop app. A session started in a terminal cannot be mapped to that terminal window, so the app cannot focus the exact terminal session.
+- Clicking a Claude Code task resolves its transcript ID to the existing desktop session and sends `claude://code/continue?session=…`. The mapping and link are undocumented (A-K7). Without a desktop match, the link uses Claude's CLI resume/import route: it opens the transcript in Desktop rather than focusing the original terminal. Claude may refuse to import a session still owned by a running CLI process, or reject it because of sign-in, workspace trust or an app setting. Custom Claude Code homes may also be unavailable to Desktop.
 - A transcript question is Inferred and expires after four hours. Confirmed hook alerts are downgraded to Unknown after two hours if no later event clears them. Stale work also becomes Unknown after two hours; completed and Unknown rows then use the configured pane retention windows.
 
 ## Dismissal and saved state
 
 - Dismissal applies to one `(taskId, evidenceKey)` pair for 24 hours. A new question or other evidence for the same task can appear immediately.
+- Every task row can be dismissed, including completed, failed, working and confirmed attention rows. This hides the current update and removes it from the strip counts; it does not stop a task, answer a question or approve a permission. New evidence, activity or a changed status can show the task again.
 - Each dismissal entry in `state.json` contains only a SHA-256 digest of that pair and its expiry, not the task title, transcript, path, session ID or evidence ID. If the state file is malformed or unavailable, dismissal works for the current run but cannot be saved for a restart.
 
 ## Other coverage
+
+- Codex task clicks use the documented `codex://threads/<thread-id>` link. Windows dispatching a session link does not prove the app navigated: the app can reject it after dispatch. If the task has no valid session ID or Windows cannot launch the link, the status bar falls back to bringing the owning app forward. Content-free logs distinguish session-link dispatch from app-only focus.
 
 - Claude Cowork task tracking is not included in this build. It remains an optional future phase.
 - Claude and Codex allowance percentages come from their provider data and may lag by one refresh interval.
