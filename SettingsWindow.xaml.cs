@@ -25,6 +25,7 @@ public partial class SettingsWindow : Window
         _onChanged = onChanged;
         _settings.Normalize();
         InitializeComponent();
+        WindowTheming.Apply(this);
 
         LanguageCombo.SelectedIndex = L10n.Lang == UiLanguage.En ? 1 : 0;
         ThemeCombo.SelectedIndex = ThemeManager.IsLight ? 1 : 0;
@@ -200,6 +201,19 @@ public partial class SettingsWindow : Window
         _settings.UseClaudeCodeHooks = enabled;
         SaveAndApply();
     }
+    void OnClaudeHooksPreviewClick(object sender, RoutedEventArgs e)
+    {
+        ClaudeHooksPreview.Visibility = ClaudeHooksPreview.Visibility == Visibility.Visible
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        RefreshHooksPreviewLink();
+    }
+
+    void RefreshHooksPreviewLink() =>
+        ClaudeHooksPreviewLinkText.Text = L10n.T(ClaudeHooksPreview.Visibility == Visibility.Visible
+            ? "settings_claude_hooks_preview_hide"
+            : "settings_claude_hooks_preview_show");
+
     void OnCoworkRootLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CoworkRootBox, value => _settings.CoworkRootOverride = value);
 
@@ -255,6 +269,12 @@ public partial class SettingsWindow : Window
     void ApplyAppearance()
     {
         Title = L10n.T("settings_title");
+        GeneralHeading.Text = L10n.T("settings_section_general");
+        DisplayHeading.Text = L10n.T("settings_section_display");
+        AlertsHeading.Text = L10n.T("settings_section_alerts");
+        SourcesHeading.Text = L10n.T("settings_section_sources");
+        DataFolderHint.Text = L10n.T("settings_data_folder_hint");
+        RefreshHooksPreviewLink();
         LanguageLabel.Text = L10n.T("settings_language");
         ThemeLabel.Text = L10n.T("settings_theme");
         ((ComboBoxItem)ThemeCombo.Items[0]).Content = L10n.T("theme_dark");
@@ -297,17 +317,29 @@ public partial class SettingsWindow : Window
         foreach (var label in new[]
                  {
                      LanguageLabel, ThemeLabel, IntervalLabel, OpacityLabel,
-                     OpacityValue, CodexPathLabel, CodexHomeLabel, ClaudeCodeHomeLabel, ClaudeHooksHint, CoworkRootLabel,
+                     OpacityValue, CodexPathLabel, CodexHomeLabel, ClaudeCodeHomeLabel, CoworkRootLabel,
                      RecentCompletedLabel, PaneAutoCollapseLabel, AttentionLabelText,
                      MonitorLabel, ApproachingLabel, LowLabel,
+                     RecentCompletedValue, ApproachingValue, LowValue,
                  })
         {
             label.Foreground = fg;
         }
         NotificationsCheckBox.Foreground = fg;
         DemoTasksCheckBox.Foreground = fg;
-        OpacityHint.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
-        CodexPathHint.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
+        ClaudeHooksCheckBox.Foreground = fg;
+        var subtle = ThemeManager.Brush(ThemeManager.SubtleText);
+        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint })
+            hint.Foreground = subtle;
+
+        var accent = ThemeManager.Brush(ThemeManager.ColorForAllowance(StatusBar.Core.Usage.AllowanceLevel.Normal));
+        var rule = ThemeManager.Brush(ThemeManager.IsLight ? Color.FromRgb(0xD8, 0xD9, 0xE0) : Color.FromRgb(0x3A, 0x3B, 0x46));
+        foreach (var heading in new[] { GeneralHeading, DisplayHeading, AlertsHeading, SourcesHeading })
+            heading.Foreground = accent;
+        foreach (var line in new[] { GeneralRule, DisplayRule, AlertsRule, SourcesRule })
+            line.Background = rule;
+        ClaudeHooksPreviewLink.Foreground = accent;
+        WindowTheming.ApplyTitleBar(this);
     }
 
     void RefreshAutoCollapseLabels()

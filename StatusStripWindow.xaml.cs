@@ -76,6 +76,14 @@ public partial class StatusStripWindow : Window
         RenderState();
     }
 
+    /// <summary>Hides the strip's summary tooltip while the pane shows the same information.</summary>
+    public void SetPaneOpen(bool open)
+    {
+        // ToolTipService.IsEnabled is not inherited, so each element with its own tooltip is set.
+        foreach (DependencyObject element in new DependencyObject[] { this, CodexText, ClaudeText, WorkingText, DoneText, AttentionPill })
+            ToolTipService.SetIsEnabled(element, !open);
+    }
+
     /// <summary>Shows a short message as the strip's tooltip without replacing quota values.</summary>
     public void ShowLoading(string message) => SetTransientMessage(message);
 

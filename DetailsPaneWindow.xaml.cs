@@ -102,8 +102,9 @@ public partial class DetailsPaneWindow : Window
     public void ApplyAppearance()
     {
         if (RootBorder is null) return;
+        // The pane holds text to read, so it stays nearly opaque even when the strip is see-through.
         var alpha = (byte)Math.Clamp(
-            (int)Math.Round(255 * (100 - _settings.BgTransparency) / 100.0), 2, 255);
+            (int)Math.Round(255 * (100 - _settings.BgTransparency) / 100.0), 248, 255);
         var surface = ThemeManager.IsLight
             ? Color.FromRgb(0xF3, 0xF3, 0xF7)
             : Color.FromRgb(0x1B, 0x1B, 0x24);

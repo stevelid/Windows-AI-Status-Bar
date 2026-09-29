@@ -836,10 +836,12 @@ public partial class App : System.Windows.Application
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;
+            _widget.SetPaneOpen(false);
             _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
         };
         _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
         _detailsPane.ShowAbove(_widget);
+        _widget.SetPaneOpen(true);
         _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: true);
     }
 
