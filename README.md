@@ -10,7 +10,7 @@ A small strip docked above the Windows taskbar that shows, at a glance:
 GPT 62%  Claude 41%  ● 3  ⚠ 1
 ```
 
-Clicking the strip opens a small pane with reset times and the task list. Clicking a task brings the relevant app to the front.
+Clicking the strip opens a small pane with reset times and the task list. Drag the strip to place it elsewhere on a monitor; the position is remembered. Clicking a task brings the relevant app to the front.
 
 ## Install
 
