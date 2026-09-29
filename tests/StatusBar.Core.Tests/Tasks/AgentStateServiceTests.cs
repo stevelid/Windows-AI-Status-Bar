@@ -157,6 +157,22 @@ public sealed class AgentStateServiceTests
         provider.Publish(TaskSnapshot(AgentProvider.Codex,
             [working with { Status = AgentTaskStatus.Complete, LastActivity = Now.AddSeconds(1) }]));
         Assert.Equal([AgentTaskStatus.Complete], finished);
+
+        provider.Publish(TaskSnapshot(AgentProvider.Codex, [working with { LastActivity = Now.AddSeconds(2) }]));
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+            [working with { Status = AgentTaskStatus.Complete, StatusDetail = "Stopped", LastActivity = Now.AddSeconds(3) }]));
+        Assert.Single(finished);
+
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+            [working with { Status = AgentTaskStatus.NeedsAttention, LastActivity = Now.AddSeconds(4) }]));
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+            [working with { Status = AgentTaskStatus.Failed, LastActivity = Now.AddSeconds(5) }]));
+        Assert.Single(finished);
+
+        provider.Publish(TaskSnapshot(AgentProvider.Codex, [working with { LastActivity = Now.AddSeconds(6) }]));
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+            [working with { Status = AgentTaskStatus.Failed, LastActivity = Now.AddSeconds(7) }]));
+        Assert.Equal([AgentTaskStatus.Complete, AgentTaskStatus.Failed], finished);
     }
 
     [Fact]

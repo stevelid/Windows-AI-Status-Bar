@@ -228,8 +228,8 @@ public sealed class AgentStateService : IAsyncDisposable
                 ? Array.Empty<AgentTask>()
                 : _current.Tasks
                     .Where(task => (task.Status is AgentTaskStatus.Complete or AgentTaskStatus.Failed) &&
-                        previous.Tasks.Any(old => old.Id == task.Id &&
-                            (old.Status is AgentTaskStatus.Working or AgentTaskStatus.Unknown or AgentTaskStatus.NeedsAttention)))
+                        !string.Equals(task.StatusDetail, "Stopped", StringComparison.Ordinal) &&
+                        previous.Tasks.Any(old => old.Id == task.Id && old.Status == AgentTaskStatus.Working))
                     .Where(_notifications.ShouldNotifyCompletion)
                     .ToArray();
         }

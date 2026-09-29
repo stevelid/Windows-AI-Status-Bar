@@ -32,7 +32,7 @@ internal sealed class AttentionNotifier
     public void NotifyFinished(AgentTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
-        if (!_settings.NotificationsEnabled) return;
+        if (!_settings.FinishedTaskNotificationsEnabled) return;
         var provider = task.Provider == AgentProvider.Codex
             ? L10n.T("pane_provider_codex")
             : L10n.T("pane_provider_claude");

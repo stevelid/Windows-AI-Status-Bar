@@ -28,6 +28,7 @@ public class Settings
     public bool UseClaudeCodeHooks { get; set; }
     public string? CoworkRootOverride { get; set; }
     public bool NotificationsEnabled { get; set; } = true;
+    public bool FinishedTaskNotificationsEnabled { get; set; } = true;
     public int RecentlyCompletedMinutes { get; set; } = 10;
     public int PaneAutoCollapseSeconds { get; set; } = 0;
     public string AttentionLabel { get; set; } = "STEVE";

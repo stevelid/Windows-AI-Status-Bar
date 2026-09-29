@@ -67,6 +67,8 @@
 
             <CheckBox x:Name="NotificationsCheckBox" Margin="0,16,0,0"
                       Checked="OnNotificationsChanged" Unchecked="OnNotificationsChanged"/>
+            <CheckBox x:Name="FinishedNotificationsCheckBox" Margin="0,8,0,0"
+                      Checked="OnFinishedNotificationsChanged" Unchecked="OnFinishedNotificationsChanged"/>
             <CheckBox x:Name="DemoTasksCheckBox" Margin="0,8,0,0"
                       Checked="OnDemoTasksChanged" Unchecked="OnDemoTasksChanged"/>
 

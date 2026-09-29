@@ -39,6 +39,7 @@ public partial class SettingsWindow : Window
         ClaudeHooksCheckBox.IsChecked = _settings.UseClaudeCodeHooks;
         CoworkRootBox.Text = _settings.CoworkRootOverride ?? "";
         NotificationsCheckBox.IsChecked = _settings.NotificationsEnabled;
+        FinishedNotificationsCheckBox.IsChecked = _settings.FinishedTaskNotificationsEnabled;
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
         RecentCompletedSlider.Value = _settings.RecentlyCompletedMinutes;
         AttentionLabelBox.Text = _settings.AttentionLabel;
@@ -200,6 +201,13 @@ public partial class SettingsWindow : Window
         _settings.UseClaudeCodeHooks = enabled;
         SaveAndApply();
     }
+
+    void OnFinishedNotificationsChanged(object sender, RoutedEventArgs e)
+    {
+        if (_initializing) return;
+        _settings.FinishedTaskNotificationsEnabled = FinishedNotificationsCheckBox.IsChecked == true;
+        SaveAndApply();
+    }
     void OnCoworkRootLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CoworkRootBox, value => _settings.CoworkRootOverride = value);
 
@@ -277,6 +285,7 @@ public partial class SettingsWindow : Window
         ClaudeHooksPreview.Text = ClaudeHookSettingsInstaller.BuildPreview();
         CoworkRootLabel.Text = L10n.T("settings_cowork_root");
         NotificationsCheckBox.Content = L10n.T("settings_notifications");
+        FinishedNotificationsCheckBox.Content = L10n.T("settings_finished_notifications");
         DemoTasksCheckBox.Content = L10n.T("settings_demo_tasks");
         RecentCompletedLabel.Text = L10n.T("settings_recent_completed");
         RecentCompletedValue.Text = ((int)Math.Round(RecentCompletedSlider.Value)).ToString();
@@ -305,6 +314,7 @@ public partial class SettingsWindow : Window
             label.Foreground = fg;
         }
         NotificationsCheckBox.Foreground = fg;
+        FinishedNotificationsCheckBox.Foreground = fg;
         DemoTasksCheckBox.Foreground = fg;
         OpacityHint.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
         CodexPathHint.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
