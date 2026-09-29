@@ -10,8 +10,10 @@ internal static class ClaudeHookSettingsInstaller
     const string SettingsFileName = "settings.json";
     const string BackupSuffix = ".windows-ai-status-bar.bak";
 
+    // A development run has no launchable exe; preview the path a published build would use.
     internal static string BuildPreview() =>
-        ClaudeSettingsHookMerger.Add("{}", BuildCommandLine(Environment.ProcessPath));
+        ClaudeSettingsHookMerger.Add("{}", BuildCommandLine(
+            AppPaths.LaunchableExecutable ?? Path.Combine(AppContext.BaseDirectory, "AIStatusBar.exe")));
 
     internal static void SetInstalled(bool enabled, Settings settings)
     {
@@ -29,7 +31,7 @@ internal static class ClaudeHookSettingsInstaller
         if (enabled && exists) BackupOnce(path);
 
         var updated = enabled
-            ? ClaudeSettingsHookMerger.Add(original, BuildCommandLine(Environment.ProcessPath))
+            ? ClaudeSettingsHookMerger.Add(original, BuildCommandLine(AppPaths.LaunchableExecutable))
             : ClaudeSettingsHookMerger.Remove(original);
         if (string.Equals(updated, original, StringComparison.Ordinal)) return;
 
@@ -38,7 +40,9 @@ internal static class ClaudeHookSettingsInstaller
 
     internal static void EnsureCurrentCommand(Settings settings)
     {
-        if (settings.UseClaudeCodeHooks) SetInstalled(enabled: true, settings: settings);
+        // Never repoint the user's hooks at a development run through the dotnet host.
+        if (settings.UseClaudeCodeHooks && AppPaths.LaunchableExecutable is not null)
+            SetInstalled(enabled: true, settings: settings);
     }
 
     static string BuildCommandLine(string? executablePath)

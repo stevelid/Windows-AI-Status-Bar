@@ -32,6 +32,9 @@ public partial class DetailsPaneWindow : Window
     /// <summary>Raised when the user dismisses an inferred attention or unknown task row.</summary>
     public event Action<string>? DismissTaskRequested;
 
+    /// <summary>Raised when the user clicks a task row to focus its owning desktop app.</summary>
+    public event Action<AgentTask>? FocusTaskRequested;
+
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
     public DetailsPaneWindow(Settings settings)
     {
@@ -99,8 +102,9 @@ public partial class DetailsPaneWindow : Window
     public void ApplyAppearance()
     {
         if (RootBorder is null) return;
+        // The pane holds text to read, so it stays nearly opaque even when the strip is see-through.
         var alpha = (byte)Math.Clamp(
-            (int)Math.Round(255 * (100 - _settings.BgTransparency) / 100.0), 2, 255);
+            (int)Math.Round(255 * (100 - _settings.BgTransparency) / 100.0), 248, 255);
         var surface = ThemeManager.IsLight
             ? Color.FromRgb(0xF3, 0xF3, 0xF7)
             : Color.FromRgb(0x1B, 0x1B, 0x24);
@@ -284,6 +288,7 @@ public partial class DetailsPaneWindow : Window
             {
                 row = new TaskRowView();
                 row.DismissRequested += taskId => DismissTaskRequested?.Invoke(taskId);
+                row.FocusRequested += task => FocusTaskRequested?.Invoke(task);
                 _taskRows.Add(task.Id, row);
             }
             row.Update(task);

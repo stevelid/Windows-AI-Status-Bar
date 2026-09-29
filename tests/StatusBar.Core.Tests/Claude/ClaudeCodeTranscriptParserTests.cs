@@ -24,6 +24,9 @@ public class ClaudeCodeTranscriptParserTests
     [InlineData("provisional-custom-title.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-sidechain.jsonl", AgentTaskStatus.Unknown, StateConfidence.Stale, null, null)]
     [InlineData("provisional-malformed.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-background-agent.jsonl", AgentTaskStatus.Working, StateConfidence.Inferred, null, "Waiting for background agents")]
+    [InlineData("provisional-background-agent-notified.jsonl", AgentTaskStatus.Complete, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-background-agent-absorbed.jsonl", AgentTaskStatus.Complete, StateConfidence.Confirmed, null, null)]
     public void Fixture_maps_to_expected_state_and_limits_titles_to_display_text(
         string fixture,
         AgentTaskStatus expectedStatus,
@@ -181,6 +184,57 @@ public class ClaudeCodeTranscriptParserTests
         ClaudeCodeTranscriptParser.Apply(state, UserLine("Timestamp fallback", includeTimestamp: false), FallbackTime, new FormatDriftCounter());
 
         Assert.Equal(FallbackTime, state.LastActivity);
+    }
+
+    [Fact]
+    public void Running_subagent_transcript_keeps_a_finished_turn_working()
+    {
+        var (parent, _) = ReadFixture("provisional-turn-complete.jsonl");
+        var (subagent, _) = ReadFixture("provisional-subagent-running.jsonl");
+        Assert.True(subagent.IsSidechainOnly);
+        Assert.False(subagent.SidechainEnded);
+
+        var running = ClaudeCodeTaskMapper.Map(parent, EvaluationTime, TaskTimings.Default,
+            new ClaudeSubagentActivity(subagent.LastActivity, Running: true));
+        var finished = ClaudeCodeTaskMapper.Map(parent, EvaluationTime, TaskTimings.Default,
+            new ClaudeSubagentActivity(subagent.LastActivity, Running: false));
+
+        Assert.Equal(AgentTaskStatus.Working, running.Status);
+        Assert.Equal("Waiting for background agents", running.StatusDetail);
+        Assert.Equal(subagent.LastActivity, running.LastActivity);
+        Assert.Equal(AgentTaskStatus.Complete, finished.Status);
+    }
+
+    [Fact]
+    public void Task_notification_is_not_used_as_the_title_and_old_background_work_expires()
+    {
+        var (state, _) = ReadFixture("provisional-background-agent-notified.jsonl");
+        Assert.Equal("Review the sample folder", state.FirstPromptTitleCandidate);
+        Assert.Empty(state.BackgroundTasks);
+
+        var (waiting, _) = ReadFixture("provisional-background-agent.jsonl");
+        var muchLater = EvaluationTime + TaskTimings.Default.ClaudeCodeWorkingUnknownAfter;
+        Assert.Equal(AgentTaskStatus.Complete, ClaudeCodeTaskMapper.Map(waiting, muchLater, TaskTimings.Default).Status);
+    }
+
+    [Fact]
+    public void Background_shell_id_is_tracked_until_its_notification()
+    {
+        const string launched = """
+            {"type":"user","timestamp":"2026-01-01T12:00:01Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"synthetic-shell-call","content":"Placeholder"}]},"toolUseResult":{"backgroundTaskId":"synthetic-shell","stdout":"","stderr":""}}
+            """;
+        const string notified = """
+            {"type":"user","timestamp":"2026-01-01T12:00:02Z","origin":{"kind":"task-notification"},"message":{"role":"user","content":"<task-notification>\n<task-id>synthetic-shell</task-id>\n<status>completed</status>\n</task-notification>"}}
+            """;
+        var state = new ClaudeCodeSessionState();
+        var drift = new FormatDriftCounter();
+        ClaudeCodeTranscriptParser.Apply(state, UserLine("Run the sample checks"), FallbackTime, drift);
+        ClaudeCodeTranscriptParser.Apply(state, launched, FallbackTime, drift);
+        Assert.True(state.BackgroundTasks.ContainsKey("synthetic-shell"));
+
+        ClaudeCodeTranscriptParser.Apply(state, notified, FallbackTime, drift);
+        Assert.Empty(state.BackgroundTasks);
+        Assert.Equal(0, drift.MalformedCount);
     }
 
     static (ClaudeCodeSessionState State, FormatDriftCounter Drift) ReadFixture(string fixture)

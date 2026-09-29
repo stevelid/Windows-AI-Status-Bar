@@ -26,6 +26,9 @@ internal sealed record ClaudePendingTool(
     DateTimeOffset Since,
     ClaudePendingToolKind Kind = ClaudePendingToolKind.Other);
 
+/// <summary>Activity of a session's subagent transcripts (<c>&lt;session&gt;/subagents/agent-*.jsonl</c>).</summary>
+internal sealed record ClaudeSubagentActivity(DateTimeOffset LastActivity, bool Running);
+
 /// <summary>In-memory state accumulated from one Claude Code transcript.</summary>
 internal sealed class ClaudeCodeSessionState
 {
@@ -43,4 +46,10 @@ internal sealed class ClaudeCodeSessionState
     internal bool EndedWithQuestion { get; set; }
     internal ClaudeCodeTurnStatus Turn { get; set; }
     internal Dictionary<string, ClaudePendingTool> PendingTools { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Background agents and shells launched by this session that have not reported back (opaque ids only).</summary>
+    internal Dictionary<string, DateTimeOffset> BackgroundTasks { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>For a subagent transcript: its last assistant record ended its turn.</summary>
+    internal bool SidechainEnded { get; set; }
 }

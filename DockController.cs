@@ -102,6 +102,8 @@ public sealed class DockController : IDisposable
             if (configured is not null) return configured;
         }
 
+        // Keep the configured device name untouched so a disconnected monitor is
+        // selected again automatically when it returns.
         return WinForms.Screen.PrimaryScreen ?? screens.FirstOrDefault();
     }
 

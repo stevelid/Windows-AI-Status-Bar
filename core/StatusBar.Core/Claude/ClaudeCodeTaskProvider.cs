@@ -282,6 +282,10 @@ public sealed class ClaudeCodeTaskProvider : IAgentTaskProvider
             case "SessionEnd":
                 if (transcriptTask is { Status: AgentTaskStatus.NeedsAttention, AttentionReason: "Asked you a question" })
                     return transcriptTask;
+                // ⚠️ A-K6 Stop fires when the turn ends even though background agents are still running.
+                if (hookEvent.Event == "Stop" &&
+                    transcriptTask is { StatusDetail: ClaudeCodeTaskMapper.WaitingForBackgroundDetail })
+                    return transcriptTask;
                 return task with
                 {
                     Status = AgentTaskStatus.Complete,

@@ -99,6 +99,40 @@ public sealed class ClaudeCodeTaskProviderTests
     }
 
     [Fact]
+    public async Task Finished_turn_stays_working_while_its_subagent_transcript_runs()
+    {
+        using var temp = new TempRoot();
+        var time = new FakeTimeProvider(Now);
+        var paths = ClaudeCodePaths.Resolve(overrideHome: temp.Path);
+        var parentPath = SessionPath(paths, "session-parent");
+        WriteTranscript(parentPath, "session-parent", "parent", Now, EndTurnRecord("session-parent", Now, isSidechain: false));
+        var subagentPath = Path.Combine(Path.GetDirectoryName(parentPath)!, "session-parent", "subagents", "agent-synthetic.jsonl");
+        WriteTranscript(subagentPath, "session-parent", "parent", Now,
+            AssistantRecord("session-parent", "parent", Now, isSidechain: true));
+
+        await using var provider = NewProvider(paths, time);
+        await provider.ReconcileAsync();
+        var waiting = Assert.Single(provider.Current.Tasks);
+        Assert.Equal(AgentTaskStatus.Working, waiting.Status);
+        Assert.Equal("Waiting for background agents", waiting.StatusDetail);
+
+        time.Advance(TimeSpan.FromSeconds(30));
+        File.AppendAllText(subagentPath, EndTurnRecord("session-parent", time.GetUtcNow(), isSidechain: true) + "\n");
+        await provider.ReconcileAsync();
+        Assert.Equal(AgentTaskStatus.Complete, Assert.Single(provider.Current.Tasks).Status);
+    }
+
+    static string EndTurnRecord(string sessionId, DateTimeOffset timestamp, bool isSidechain) =>
+        JsonSerializer.Serialize(new
+        {
+            type = "assistant",
+            sessionId,
+            timestamp,
+            isSidechain,
+            message = new { content = new[] { new { type = "text", text = "Placeholder done." } }, stop_reason = "end_turn" },
+        });
+
+    [Fact]
     public async Task Restart_recovers_current_state_from_the_transcript_tail()
     {
         using var temp = new TempRoot();

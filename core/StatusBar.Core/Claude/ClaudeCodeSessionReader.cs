@@ -150,9 +150,24 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
 
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)
     {
+        // Subagent transcripts share their parent's sessionId; fold them into the parent's activity.
+        var subagents = _entries.Values
+            .Where(entry => entry.State.IsSidechainOnly && entry.State.SessionId is not null)
+            .GroupBy(entry => entry.State.SessionId!, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => new ClaudeSubagentActivity(
+                    group.Max(entry => entry.State.LastActivity),
+                    group.Any(entry => !entry.State.SidechainEnded &&
+                        now - entry.State.LastActivity < _timings.ClaudeCodeWorkingStaleAfter)),
+                StringComparer.Ordinal);
         return _entries.Values
             .Where(entry => !entry.State.IsSidechainOnly)
-            .Select(entry => ClaudeCodeTaskMapper.Map(entry.State, now, _timings))
+            .Select(entry => ClaudeCodeTaskMapper.Map(
+                entry.State,
+                now,
+                _timings,
+                entry.State.SessionId is { } id && subagents.TryGetValue(id, out var activity) ? activity : null))
             .GroupBy(task => task.Id, StringComparer.Ordinal)
             .Select(group => group.OrderByDescending(task => task.LastActivity).First())
             .OrderByDescending(task => task.Status == AgentTaskStatus.NeedsAttention)

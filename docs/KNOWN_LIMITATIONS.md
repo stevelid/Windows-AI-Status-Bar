@@ -17,6 +17,7 @@ These limits describe the current Codex and Claude Code task collectors. Recon n
 - The `[Request interrupted by user` marker is unverified (A-K3), so an interrupted turn may not be shown as Stopped.
 - Without Claude Code hooks, a permission prompt is not represented in the transcript and will not appear as a confirmed permission alert. Transcript activity can continue to show the task as Working.
 - Hooks are opt-in. Whether Claude Code runs the configured hooks from the desktop Code tab is unverified (A-K4); terminal hook execution is also untested. When hook events arrive, the provider can show permission and input alerts and clear them on later evidence.
+- Clicking a Claude Code task focuses the Claude desktop app. A session started in a terminal cannot be mapped to that terminal window, so the app cannot focus the exact terminal session.
 - A transcript question is Inferred and expires after four hours. Confirmed hook alerts are downgraded to Unknown after two hours if no later event clears them. Stale work also becomes Unknown after two hours; completed and Unknown rows then use the configured pane retention windows.
 
 ## Dismissal and saved state
@@ -28,3 +29,5 @@ These limits describe the current Codex and Claude Code task collectors. Recon n
 
 - Claude Cowork task tracking is not included in this build. It remains an optional future phase.
 - Claude and Codex allowance percentages come from their provider data and may lag by one refresh interval.
+
+- A Claude Code turn that ends while background agents or shells are still running shows as Working ("Waiting for background agents") until each reports back. This relies on undocumented transcript records (A-K6). Background work that never reports back is ignored after 2 hours.
