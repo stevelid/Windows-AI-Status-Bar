@@ -306,7 +306,18 @@ try {
 if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     $pkgs = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Claude|OpenAI|ChatGPT|Codex|Anthropic' }
     if ($pkgs) {
-        foreach ($p in $pkgs) { Add-Line ('- MSIX package: ' + $p.Name + ' ' + $p.Version + ' (family ' + $p.PackageFamilyName + ')') }
+        foreach ($p in $pkgs) {
+            Add-Line ('- MSIX package: ' + $p.Name + ' ' + $p.Version + ' (family ' + $p.PackageFamilyName + ')')
+            # Spike S6: URL schemes the app registers, which decide whether a click could open one thread.
+            try {
+                $manifest = Join-Path $p.InstallLocation 'AppxManifest.xml'
+                [xml]$xml = Get-Content -LiteralPath $manifest -Raw -ErrorAction Stop
+                $schemes = @($xml.SelectNodes("//*[local-name()='Protocol']") | ForEach-Object { $_.GetAttribute('Name') } |
+                    Where-Object { $_ -match '^[A-Za-z0-9.+\-]{1,40}$' } | Sort-Object -Unique)
+                if ($schemes.Count -gt 0) { Add-Line ('  - URL schemes: ' + (($schemes | ForEach-Object { '`' + $_ + ':`' }) -join ', ')) }
+                else { Add-Line '  - URL schemes: none declared' }
+            } catch { Add-Line '  - URL schemes: manifest not readable' }
+        }
     } else { Add-Line '- MSIX packages: none matching Claude/OpenAI/ChatGPT/Codex' }
 }
 

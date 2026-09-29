@@ -90,6 +90,14 @@ internal static class ClaudeCodeTaskMapper
             };
         }
 
+        // A finished turn is dated by when it ended, so records written later without a new turn
+        // (titles, opening the session) do not re-show it as just finished (see CodexTaskMapper).
+        if (state.TurnEndedAt is { } endedAt)
+        {
+            task = task with { LastActivity = endedAt };
+            inactivity = now >= endedAt ? now - endedAt : TimeSpan.Zero;
+        }
+
         return state.Turn switch
         {
             ClaudeCodeTurnStatus.Completed when state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry => task with

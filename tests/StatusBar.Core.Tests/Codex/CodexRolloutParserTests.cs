@@ -181,6 +181,26 @@ public class CodexRolloutParserTests
         Assert.Equal(AgentTaskStatus.Complete, task.Status);
     }
 
+    [Fact]
+    public void Opening_an_old_thread_does_not_make_it_look_just_finished()
+    {
+        // The turn ended at 10:00:05 with a question; the app wrote housekeeping records at 12:00
+        // when Steve opened the thread. Evaluated at 12:00:05.
+        var (state, _) = ReadFixture("provisional-reopened-completed-thread.jsonl");
+        var endedAt = DateTimeOffset.Parse("2026-01-01T10:00:05Z");
+
+        var task = CodexTaskMapper.Map(state, EvaluationTime, TaskTimings.Default);
+
+        // Dated by the turn end, so it stays out of "recently completed" and keeps its old evidence
+        // key (no second pop-up for the same question).
+        Assert.Equal(endedAt, task.LastActivity);
+        Assert.Equal("question:" + endedAt.UtcTicks, task.EvidenceKey);
+
+        var muchLater = CodexTaskMapper.Map(state, endedAt + TaskTimings.Default.QuestionAttentionExpiry, TaskTimings.Default);
+        Assert.Equal(AgentTaskStatus.Complete, muchLater.Status);
+        Assert.Equal(endedAt, muchLater.LastActivity);
+    }
+
     static (CodexSessionState State, FormatDriftCounter Drift) ReadFixture(string fixture)
     {
         var state = new CodexSessionState();

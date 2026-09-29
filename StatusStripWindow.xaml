@@ -5,6 +5,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
         SizeToContent="Width" Height="30"
+        PreviewMouseLeftButtonDown="OnLeftButtonDown" PreviewMouseMove="OnMouseMove"
         MouseLeftButtonUp="OnLeftButtonUp" MouseRightButtonUp="OnRightButtonUp">
     <Border x:Name="RootBorder" CornerRadius="9" Background="#E6191922"
             BorderThickness="1" Padding="9,0">

@@ -2,9 +2,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Input;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using Color = System.Windows.Media.Color;
+using Point = System.Windows.Point;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace ClaudeUsageWidget;
 
@@ -17,12 +20,18 @@ public partial class StatusStripWindow : Window
     StatusBarState _tasks = StatusBarState.Empty;
     string? _transientMessage;
     int _lastAttentionCount;
+    Point? _pressPoint;
+    bool _dragged;
 
     /// <summary>Raised when the user clicks the strip to toggle the details pane.</summary>
     public event Action? TogglePaneRequested;
 
     /// <summary>Raised when the user right-clicks the strip.</summary>
     public event Action? ContextMenuRequested;
+
+    /// <summary>Raised around a user drag so docking can save the new position.</summary>
+    public event Action? DragStarted;
+    public event Action? DragCompleted;
 
     /// <summary>Creates the strip from current settings and applies its initial appearance.</summary>
     public StatusStripWindow(Settings settings)
@@ -292,9 +301,40 @@ public partial class StatusStripWindow : Window
         target.ToolTip = $"{prefix}: {explanation}";
     }
 
-    void OnLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    void OnLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != System.Windows.Input.MouseButton.Left) return;
+        _pressPoint = e.GetPosition(this);
+        _dragged = false;
+        CaptureMouse();
+    }
+
+    void OnMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_pressPoint is not Point start || _dragged || e.LeftButton != MouseButtonState.Pressed) return;
+        var current = e.GetPosition(this);
+        if (Math.Abs(current.X - start.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(current.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+
+        _dragged = true;
+        _pressPoint = null;
+        ReleaseMouseCapture();
+        DragStarted?.Invoke();
+        try { DragMove(); }
+        catch (InvalidOperationException) { /* The button can be released before WPF starts the move. */ }
+        finally { DragCompleted?.Invoke(); }
+    }
+
+    void OnLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+        _pressPoint = null;
+        ReleaseMouseCapture();
+        if (_dragged)
+        {
+            _dragged = false;
+            e.Handled = true;
+            return;
+        }
         TogglePaneRequested?.Invoke();
         e.Handled = true;
     }

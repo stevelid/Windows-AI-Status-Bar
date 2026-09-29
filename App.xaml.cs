@@ -832,7 +832,10 @@ public partial class App : System.Windows.Application
 
     void OnFocusTaskRequested(AgentTask task)
     {
-        if (AppActivator.TryFocus(task))
+        var focused = AppActivator.TryFocus(task);
+        // Content-free: provider and outcome only, so "clicking did nothing" can be diagnosed.
+        Log.Write($"Focus {task.Provider} ({task.Status}): {(focused ? "app activated" : "activation failed")}");
+        if (focused)
             _detailsPane?.Close();
     }
 
