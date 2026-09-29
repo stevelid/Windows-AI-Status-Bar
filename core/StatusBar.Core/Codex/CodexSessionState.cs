@@ -34,6 +34,13 @@ internal sealed class CodexSessionState
     internal string? ApprovalPolicy { get; set; }
     internal CodexTurnStatus Turn { get; set; }
     internal DateTimeOffset LastActivity { get; set; }
+
+    /// <summary>
+    /// When the last turn completed, failed or was stopped. Finished tasks are dated by this, not by
+    /// <see cref="LastActivity"/>: opening an old thread in the Codex app appends housekeeping records,
+    /// which must not make it look as if it had just finished.
+    /// </summary>
+    internal DateTimeOffset? TurnEndedAt { get; set; }
     internal bool HasActivity { get; set; }
     internal bool EndedWithQuestion { get; set; }
 

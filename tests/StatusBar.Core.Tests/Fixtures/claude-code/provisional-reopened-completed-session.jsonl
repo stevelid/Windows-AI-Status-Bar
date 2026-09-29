@@ -1,0 +1,4 @@
+{"type":"user","sessionId":"synthetic-session","timestamp":"2026-01-01T10:00:00Z","message":{"role":"user","content":[{"type":"text","text":"Summarise the sample document"}]}}
+{"type":"assistant","sessionId":"synthetic-session","timestamp":"2026-01-01T10:00:05Z","message":{"role":"assistant","content":[{"type":"text","text":"Done."}],"stop_reason":"end_turn"}}
+{"type":"custom-title","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:00Z","customTitle":"Sample title"}
+{"type":"last-prompt","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:00Z"}

@@ -156,6 +156,7 @@ internal static class ClaudeCodeTranscriptParser
             state.HasSeenTurnEvent = true;
             state.HasNonSidechainActivity = true;
             state.Turn = ClaudeCodeTurnStatus.Aborted;
+            state.TurnEndedAt = state.LastActivity;
             state.EndedWithQuestion = false;
             state.PendingTools.Clear();
             return;
@@ -166,6 +167,7 @@ internal static class ClaudeCodeTranscriptParser
         state.HasSeenTurnEvent = true;
         state.HasNonSidechainActivity = true;
         state.Turn = ClaudeCodeTurnStatus.Running;
+        state.TurnEndedAt = null;
         state.EndedWithQuestion = false;
         state.PendingTools.Clear();
         // A notification wakes Claude for a new turn, but its wrapper is not something Steve typed.
@@ -245,12 +247,14 @@ internal static class ClaudeCodeTranscriptParser
         state.HasSeenTurnEvent = true;
         state.HasNonSidechainActivity = true;
         state.Turn = ClaudeCodeTurnStatus.Running;
+        state.TurnEndedAt = null;
         state.EndedWithQuestion = false;
         var stopReason = ReadString(message, "stop_reason");
         if (string.Equals(stopReason, "end_turn", StringComparison.Ordinal))
         {
             // ⚠️ A-K2 The nested stop_reason and final text shape are not confirmed on Steve's machine.
             state.Turn = ClaudeCodeTurnStatus.Completed;
+            state.TurnEndedAt = state.LastActivity;
             state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(lastText);
             state.PendingTools.Clear();
         }

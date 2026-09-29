@@ -38,6 +38,9 @@ internal sealed class ClaudeCodeSessionState
     internal string? AiTitleCandidate { get; set; }
     internal string? FirstPromptTitleCandidate { get; set; }
     internal DateTimeOffset LastActivity { get; set; }
+
+    /// <summary>When the last turn completed or was stopped; finished tasks are dated by this (see Codex).</summary>
+    internal DateTimeOffset? TurnEndedAt { get; set; }
     internal bool HasActivity { get; set; }
     internal bool HasSeenTurnEvent { get; set; }
     internal bool HasSidechainActivity { get; set; }
