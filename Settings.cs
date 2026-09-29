@@ -33,6 +33,8 @@ public class Settings
     public int PaneAutoCollapseSeconds { get; set; } = 0;
     public string AttentionLabel { get; set; } = "STEVE";
     public string? MonitorDeviceName { get; set; }
+    public double? StripRelativeX { get; set; }
+    public double? StripRelativeY { get; set; }
     public int ApproachingBelowPercent { get; set; } = 30;
     public int LowBelowPercent { get; set; } = 10;
     public bool DemoTasks { get; set; } = false;
@@ -83,6 +85,8 @@ public class Settings
             ApproachingBelowPercent = LowBelowPercent + 1;
         AttentionLabel = string.IsNullOrWhiteSpace(AttentionLabel) ? "STEVE" : AttentionLabel.Trim();
         MonitorDeviceName = NormalizeOptionalPath(MonitorDeviceName);
+        StripRelativeX = StripRelativeX is double x && double.IsFinite(x) ? Math.Clamp(x, 0, 1) : null;
+        StripRelativeY = StripRelativeY is double y && double.IsFinite(y) ? Math.Clamp(y, 0, 1) : null;
         CodexExecutablePath = NormalizeOptionalPath(CodexExecutablePath);
         CodexHomeOverride = NormalizeOptionalPath(CodexHomeOverride);
         ClaudeCodeHomeOverride = NormalizeOptionalPath(ClaudeCodeHomeOverride);

@@ -65,6 +65,33 @@ public sealed class DockGeometryTests
     }
 
     [Fact]
+    public void Dragged_position_round_trips_and_stays_in_work_area_after_resize()
+    {
+        var work = new DockingRect(-1600, 0, 1600, 860);
+        var size = new DockingSize(250, 30);
+        var position = DockGeometry.CaptureRelative(work, size, -1200, 100);
+
+        var restored = DockGeometry.PlaceRelative(work, size, position);
+        Assert.InRange(restored.Left, -1200.001, -1199.999);
+        Assert.InRange(restored.Top, 99.999, 100.001);
+        var resized = DockGeometry.PlaceRelative(new DockingRect(-1200, 0, 1200, 700), size, position);
+        Assert.InRange(resized.Left, -1200, -250);
+        Assert.InRange(resized.Top, 0, 670);
+    }
+
+    [Fact]
+    public void Dragged_position_is_clamped_when_strip_exceeds_work_area()
+    {
+        var work = new DockingRect(20, 40, 200, 100);
+        var size = new DockingSize(300, 40);
+        var saved = DockGeometry.CaptureRelative(work, size, 500, -100);
+
+        Assert.Equal(new RelativePosition(0, 0), saved);
+        Assert.Equal(new DockingRect(20, 40, 200, 40),
+            DockGeometry.PlaceRelative(work, size, saved));
+    }
+
+    [Fact]
     public void Pane_is_right_aligned_above_the_strip_when_space_allows()
     {
         var placed = DockGeometry.PlacePaneAbove(
