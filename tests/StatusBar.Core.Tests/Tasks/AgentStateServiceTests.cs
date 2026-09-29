@@ -143,6 +143,23 @@ public sealed class AgentStateServiceTests
     }
 
     [Fact]
+    public async Task Finishing_a_seen_task_notifies_once_but_recovered_completion_does_not()
+    {
+        var time = new FakeTimeProvider(Now);
+        var provider = new TestProvider(AgentProvider.Codex);
+        await using var service = new AgentStateService([provider], time, StateServiceOptions.Default);
+        var finished = new List<AgentTaskStatus>();
+        service.TaskFinished += task => finished.Add(task.Status);
+        var working = CreateTask("codex:one", AgentProvider.Codex, AgentTaskStatus.Working, Now);
+        provider.Publish(TaskSnapshot(AgentProvider.Codex, [working]));
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+            [working with { Status = AgentTaskStatus.Complete, LastActivity = Now.AddSeconds(1) }]));
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+            [working with { Status = AgentTaskStatus.Complete, LastActivity = Now.AddSeconds(1) }]));
+        Assert.Equal([AgentTaskStatus.Complete], finished);
+    }
+
+    [Fact]
     public async Task Unknown_rows_can_be_dismissed_but_confirmed_attention_cannot()
     {
         var time = new FakeTimeProvider(Now);

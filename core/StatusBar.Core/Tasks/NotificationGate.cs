@@ -47,8 +47,11 @@ public sealed class NotificationGate
             var changed = PruneExpired(now);
             foreach (var task in tasks)
             {
-                if (task is null || task.Status != AgentTaskStatus.NeedsAttention) continue;
-                changed |= _notifiedAt.TryAdd(ComputeKey(task.Id, EvidenceKeyFor(task)), now);
+                if (task is null) continue;
+                if (task.Status == AgentTaskStatus.NeedsAttention)
+                    changed |= _notifiedAt.TryAdd(ComputeKey(task.Id, EvidenceKeyFor(task)), now);
+                if (task.Status is AgentTaskStatus.Complete or AgentTaskStatus.Failed)
+                    changed |= _notifiedAt.TryAdd(ComputeKey(task.Id, CompletionKeyFor(task)), now);
             }
 
             if (changed) Persist();
@@ -77,6 +80,30 @@ public sealed class NotificationGate
             return true;
         }
     }
+
+    /// <summary>Claims a newly observed terminal task state for notification.</summary>
+    public bool ShouldNotifyCompletion(AgentTask task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (task.Status is not (AgentTaskStatus.Complete or AgentTaskStatus.Failed)) return false;
+        lock (_gate)
+        {
+            var now = _time.GetUtcNow();
+            var changed = PruneExpired(now);
+            var key = ComputeKey(task.Id, CompletionKeyFor(task));
+            if (_notifiedAt.ContainsKey(key))
+            {
+                if (changed) Persist();
+                return false;
+            }
+            _notifiedAt[key] = now;
+            Persist();
+            return true;
+        }
+    }
+
+    static string CompletionKeyFor(AgentTask task) =>
+        "completion:" + task.Status + ":" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
 
     void Load()
     {

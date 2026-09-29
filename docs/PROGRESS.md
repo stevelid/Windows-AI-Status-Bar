@@ -96,6 +96,8 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-29 — P5.2 follow-up — Added tray pop-ups when a previously visible Codex or Claude task completes or fails. Completion claims use the existing hashed notification state, and recovered terminal tasks are seeded without a pop-up. Windows acceptance still needs a manual check. Local build and tests could not run because this machine has only the .NET runtime, not the SDK.
+
 - 2026-09-28 — P5.4 — Monitor settings now show the device name and resolution for every display, and docking preserves a disconnected monitor selection for automatic fallback and restoration; 152 Core tests pass.
 - 2026-09-28 — P5.5 — Added a Core redacted report builder and ZIP writer with fixed `report.txt`, `log-tail.txt`, and `format-drift.txt` entries; task titles, IDs and session references are excluded by construction, and app-owned logs are sanitized before inclusion. Build clean; 154 Core tests pass.
 - 2026-09-28 — P5.3 — Added a one-shot 400 ms attention-pill fade that respects Windows animation settings, plus an amber tray-icon attention dot; 152 Core tests pass.

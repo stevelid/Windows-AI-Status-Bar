@@ -561,6 +561,7 @@ public partial class App : System.Windows.Application
         if (_agentStateService is not null)
         {
             _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
+            _agentStateService.TaskFinished -= OnTaskFinished;
             await _agentStateService.DisposeAsync();
         }
         _detailsPane?.Close();
@@ -633,6 +634,7 @@ public partial class App : System.Windows.Application
         {
             _agentStateService.StateChanged -= OnTaskStateChanged;
             _agentStateService.EnteredNeedsAttention -= OnEnteredNeedsAttention;
+            _agentStateService.TaskFinished -= OnTaskFinished;
             _ = _agentStateService.DisposeAsync();
         }
 
@@ -679,6 +681,7 @@ public partial class App : System.Windows.Application
         _taskState = _agentStateService.Current;
         _agentStateService.StateChanged += OnTaskStateChanged;
         _agentStateService.EnteredNeedsAttention += OnEnteredNeedsAttention;
+        _agentStateService.TaskFinished += OnTaskFinished;
         UpdateStrip();
     }
 
@@ -726,6 +729,15 @@ public partial class App : System.Windows.Application
         {
             if (_exitStarted) return;
             _attentionNotifier?.Notify(task);
+        });
+    }
+
+    void OnTaskFinished(AgentTask task)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_exitStarted) return;
+            _attentionNotifier?.NotifyFinished(task);
         });
     }
 

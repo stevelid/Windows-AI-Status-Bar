@@ -27,4 +27,18 @@ internal sealed class AttentionNotifier
             : L10n.T("pane_provider_claude");
         _tray.ShowAttention($"{provider} {L10n.T("notification_needs_you")}", task.Title);
     }
+
+    /// <summary>Shows a completion or failure pop-up when notifications are enabled.</summary>
+    public void NotifyFinished(AgentTask task)
+    {
+        ArgumentNullException.ThrowIfNull(task);
+        if (!_settings.NotificationsEnabled) return;
+        var provider = task.Provider == AgentProvider.Codex
+            ? L10n.T("pane_provider_codex")
+            : L10n.T("pane_provider_claude");
+        var status = task.Status == AgentTaskStatus.Failed
+            ? L10n.T("notification_failed")
+            : L10n.T("notification_finished");
+        _tray.ShowCompletion($"{provider} {status}", task.Title, task.Status == AgentTaskStatus.Failed);
+    }
 }
