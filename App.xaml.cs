@@ -20,9 +20,11 @@ public partial class App : System.Windows.Application
     UsageMonitor? _usageMonitor;
     AgentStateService? _agentStateService;
     CodexTaskProvider? _codexTaskProvider;
+    ClaudeCodeTaskProvider? _claudeTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
     AttentionNotifier? _attentionNotifier;
+    SystemEventsAdapter? _systemEvents;
     long? _detailsPaneClosedAtMs;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
@@ -191,7 +193,12 @@ public partial class App : System.Windows.Application
         });
         ThemeManager.Init(_settings.Theme == "light");
 
-        if (!_settings.FirstRunDone)
+        if (AppPaths.LaunchableExecutable is null)
+        {
+            // Development run through the dotnet host: leave the installed copy's shortcut alone.
+            Log.Write("Running under the dotnet host; auto-start shortcut left unchanged.");
+        }
+        else if (!_settings.FirstRunDone)
         {
             var result = AutoStart.TryEnable();
             if (!result.Succeeded || result.Detail is not null)
@@ -241,6 +248,9 @@ public partial class App : System.Windows.Application
         _usageMonitor.Start();
 
         ConfigureAgentTaskService();
+        _systemEvents = new SystemEventsAdapter(
+            () => _ = ReconcileTasksQuietlyAsync(),
+            () => _usageMonitor?.RefreshNow());
 
         _ = AutoCheckUpdatesAsync();
     }
@@ -556,6 +566,8 @@ public partial class App : System.Windows.Application
         if (_exitStarted) return;
         _exitStarted = true;
         Log.Write("使用者選擇結束");
+        _systemEvents?.Dispose();
+        _systemEvents = null;
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
         if (_agentStateService is not null)
@@ -639,8 +651,13 @@ public partial class App : System.Windows.Application
         }
 
         if (_codexTaskProvider is not null)
+        {
             _codexTaskProvider.WatcherOverflowed -= OnCodexWatcherOverflow;
+            _codexTaskProvider.Trace -= OnCodexTrace;
+        }
         _codexTaskProvider = null;
+        if (_claudeTaskProvider is not null) _claudeTaskProvider.Trace -= OnClaudeTrace;
+        _claudeTaskProvider = null;
         IAgentTaskProvider[] taskProviders;
         if (demoMode)
         {
@@ -652,16 +669,20 @@ public partial class App : System.Windows.Application
         }
         else
         {
-            _codexTaskProvider = new CodexTaskProvider(_settings.CodexHomeOverride);
-            _codexTaskProvider.WatcherOverflowed += OnCodexWatcherOverflow;
+            var codexHome = _settings.CodexHomeOverride;
+            var claudeHome = _settings.ClaudeCodeHomeOverride;
             var claudeHookPath = claudeHooksEnabled
                 ? Path.Combine(AppPaths.DataDir, "claude-hooks.jsonl")
                 : null;
-            taskProviders =
-            [
-                _codexTaskProvider,
-                new ClaudeCodeTaskProvider(_settings.ClaudeCodeHomeOverride, claudeHookPath),
-            ];
+            // P6.1: each provider is recreated after an unexpected failure without touching the other.
+            var codex = new SupervisedTaskProvider(AgentProvider.Codex, () => CreateCodexTaskProvider(codexHome), TimeProvider.System);
+            var claude = new SupervisedTaskProvider(
+                AgentProvider.Claude,
+                () => CreateClaudeTaskProvider(claudeHome, claudeHookPath),
+                TimeProvider.System);
+            codex.Supervision += OnProviderSupervision;
+            claude.Supervision += OnProviderSupervision;
+            taskProviders = [codex, claude];
         }
 
         var stateTime = TimeProvider.System;
@@ -678,10 +699,14 @@ public partial class App : System.Windows.Application
         _agentStateCodexHomeOverride = codexHomeOverride;
         _agentStateClaudeHomeOverride = claudeHomeOverride;
         _agentStateClaudeHooksEnabled = claudeHooksEnabled;
-        _taskState = _agentStateService.Current;
+        // Providers start inside the constructor, so subscribe before reading the state and read it
+        // once: an update landing in between was otherwise neither shown nor logged.
         _agentStateService.StateChanged += OnTaskStateChanged;
         _agentStateService.EnteredNeedsAttention += OnEnteredNeedsAttention;
         _agentStateService.TaskFinished += OnTaskFinished;
+        var initialState = _agentStateService.Current;
+        LogTaskChanges(StatusBarState.Empty, initialState);
+        _taskState = initialState;
         UpdateStrip();
     }
 
@@ -718,7 +743,9 @@ public partial class App : System.Windows.Application
         Dispatcher.BeginInvoke(() =>
         {
             if (_exitStarted) return;
-            _taskState = _agentStateService?.Current ?? state;
+            var next = _agentStateService?.Current ?? state;
+            LogTaskChanges(_taskState, next);
+            _taskState = next;
             UpdateStrip();
         });
     }
@@ -741,7 +768,65 @@ public partial class App : System.Windows.Application
         });
     }
 
+    // Content-free task transitions (short ids, states, counts); titles are never logged.
+    static void LogTaskChanges(StatusBarState previous, StatusBarState next)
+    {
+        try
+        {
+            foreach (var line in StatusBar.Core.Diagnostics.TaskChangeLog.Describe(previous, next))
+                Log.Write(line);
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Task change logging failed ({ex.GetType().Name})");
+        }
+    }
+
+    CodexTaskProvider CreateCodexTaskProvider(string? codexHome)
+    {
+        if (_codexTaskProvider is not null)
+        {
+            _codexTaskProvider.WatcherOverflowed -= OnCodexWatcherOverflow;
+            _codexTaskProvider.Trace -= OnCodexTrace;
+        }
+        var provider = new CodexTaskProvider(codexHome);
+        provider.WatcherOverflowed += OnCodexWatcherOverflow;
+        provider.Trace += OnCodexTrace;
+        _codexTaskProvider = provider;
+        return provider;
+    }
+
+    // Called by the supervisor on start and after each restart, so the replacement keeps logging.
+    ClaudeCodeTaskProvider CreateClaudeTaskProvider(string? claudeHome, string? hookPath)
+    {
+        if (_claudeTaskProvider is not null) _claudeTaskProvider.Trace -= OnClaudeTrace;
+        var provider = new ClaudeCodeTaskProvider(claudeHome, hookPath);
+        provider.Trace += OnClaudeTrace;
+        _claudeTaskProvider = provider;
+        return provider;
+    }
+
+    async Task ReconcileTasksQuietlyAsync()
+    {
+        var service = _agentStateService;
+        if (service is null) return;
+        try
+        {
+            await service.ReconcileAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Task reconcile after system event failed", ex);
+        }
+    }
+
+    static void OnProviderSupervision(string message) => Log.Write("Supervisor: " + message);
+
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
+
+    static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
+
+    static void OnClaudeTrace(string message) => Log.Write("Claude: " + message);
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 
@@ -786,10 +871,12 @@ public partial class App : System.Windows.Application
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;
+            _widget.SetPaneOpen(false);
             _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
         };
         _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
         _detailsPane.ShowAbove(_widget);
+        _widget.SetPaneOpen(true);
         _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: true);
     }
 

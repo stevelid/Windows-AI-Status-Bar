@@ -59,6 +59,7 @@ public sealed class ClaudeCodeTaskProvider : IAgentTaskProvider
         _timings = timings ?? TaskTimings.Default;
         _watchFiles = watchFiles;
         _sessions = new ClaudeCodeSessionReader(paths, time, _timings);
+        _sessions.Trace += message => Trace?.Invoke(message);
         _hooks = _hookFilePath is null
             ? null
             : new ClaudeHookEventParser(new IncrementalJsonlReader(_hookFilePath), new FormatDriftCounter());
@@ -70,6 +71,9 @@ public sealed class ClaudeCodeTaskProvider : IAgentTaskProvider
 
     /// <inheritdoc />
     public event Action<ProviderTaskSnapshot>? Changed;
+
+    /// <summary>Content-free debug lines about sessions and turns (see <c>ClaudeCodeSessionReader.Trace</c>).</summary>
+    public event Action<string>? Trace;
 
     /// <inheritdoc />
     public ProviderTaskSnapshot Current
@@ -277,6 +281,10 @@ public sealed class ClaudeCodeTaskProvider : IAgentTaskProvider
             case "Stop":
             case "SessionEnd":
                 if (transcriptTask is { Status: AgentTaskStatus.NeedsAttention, AttentionReason: "Asked you a question" })
+                    return transcriptTask;
+                // ⚠️ A-K6 Stop fires when the turn ends even though background agents are still running.
+                if (hookEvent.Event == "Stop" &&
+                    transcriptTask is { StatusDetail: ClaudeCodeTaskMapper.WaitingForBackgroundDetail })
                     return transcriptTask;
                 return task with
                 {

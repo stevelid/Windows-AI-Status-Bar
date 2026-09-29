@@ -51,6 +51,7 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
         _timings = timings ?? TaskTimings.Default;
         _watchFiles = watchFiles;
         _sessions = new CodexSessionReader(paths, time, _timings);
+        _sessions.Trace += message => Trace?.Invoke(message);
         _current = Snapshot([], new ProviderHealth(ProviderHealthState.Starting, "NotStarted", null));
         _diagnostics = new CodexTaskDiagnostics(
             _current.Health,
@@ -71,6 +72,9 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
 
     /// <summary>Raised after a filesystem watcher overflow schedules a full reconciliation.</summary>
     public event Action? WatcherOverflowed;
+
+    /// <summary>Content-free debug lines about sessions and turns (see <c>CodexSessionReader.Trace</c>).</summary>
+    public event Action<string>? Trace;
 
     /// <inheritdoc />
     public ProviderTaskSnapshot Current

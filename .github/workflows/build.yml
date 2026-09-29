@@ -37,10 +37,19 @@ jobs:
         run: dotnet publish tests/CodexAppServerMock/CodexAppServerMock.csproj -c Release -r win-x64 --self-contained false -o tests/mock-out
       - name: Run smoke tests
         run: dotnet run --project tests/ClaudeUsageWidget.SmokeTests/ClaudeUsageWidget.SmokeTests.csproj -c Release -- tests/mock-out/CodexAppServerMock.exe
+      # Pull-request runs check out a temporary merge commit; label the build with the PR's own
+      # commit instead so the log, diagnostics and artifact name match the commit on the PR.
+      - name: Resolve build commit
+        id: rev
+        shell: bash
+        run: |
+          sha="${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "short=${sha:0:7}" >> "$GITHUB_OUTPUT"
       - name: Publish single-file exe for manual testing
-        run: dotnet publish ClaudeUsageWidget.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
+        run: dotnet publish ClaudeUsageWidget.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:SourceRevisionId=${{ steps.rev.outputs.sha }} -o dist
       - uses: actions/upload-artifact@v4
         with:
-          name: status-bar-win-x64
+          name: status-bar-win-x64-${{ steps.rev.outputs.short }}
           path: dist/
           retention-days: 14

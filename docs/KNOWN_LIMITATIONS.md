@@ -29,3 +29,5 @@ These limits describe the current Codex and Claude Code task collectors. Recon n
 
 - Claude Cowork task tracking is not included in this build. It remains an optional future phase.
 - Claude and Codex allowance percentages come from their provider data and may lag by one refresh interval.
+
+- A Claude Code turn that ends while background agents or shells are still running shows as Working ("Waiting for background agents") until each reports back. This relies on undocumented transcript records (A-K6). Background work that never reports back is ignored after 2 hours.

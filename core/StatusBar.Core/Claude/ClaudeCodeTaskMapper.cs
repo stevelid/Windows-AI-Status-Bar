@@ -7,7 +7,14 @@ namespace StatusBar.Core.Claude;
 /// <summary>Maps accumulated Claude Code transcript state to the provider-neutral task model.</summary>
 internal static class ClaudeCodeTaskMapper
 {
-    internal static AgentTask Map(ClaudeCodeSessionState state, DateTimeOffset now, TaskTimings timings)
+    /// <summary>Detail for a finished turn whose background agents or shells are still running.</summary>
+    internal const string WaitingForBackgroundDetail = "Waiting for background agents";
+
+    internal static AgentTask Map(
+        ClaudeCodeSessionState state,
+        DateTimeOffset now,
+        TaskTimings timings,
+        ClaudeSubagentActivity? subagents = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(timings);
@@ -30,14 +37,57 @@ internal static class ClaudeCodeTaskMapper
 
         if (!state.HasSeenTurnEvent) return task;
 
-        var inactivity = now >= task.LastActivity ? now - task.LastActivity : TimeSpan.Zero;
+        // Subagents write their own transcripts, so their writes count as this session's activity.
+        var effectiveActivity = subagents is not null && subagents.LastActivity > task.LastActivity
+            ? subagents.LastActivity
+            : task.LastActivity;
+        var inactivity = now >= effectiveActivity ? now - effectiveActivity : TimeSpan.Zero;
         if (state.Turn == ClaudeCodeTurnStatus.Running)
         {
+            task = task with { LastActivity = effectiveActivity };
+            // ⚠️ A-K5 A pending AskUserQuestion/ExitPlanMode waits for Steve, however long it has been.
+            // Ordinary pending tools stay Working: a running command and a permission prompt look the
+            // same in the transcript (the opt-in hooks tell them apart).
+            var waiting = state.PendingTools.Values
+                .Where(tool => tool.Kind != ClaudePendingToolKind.Other)
+                .OrderBy(tool => tool.Since)
+                .FirstOrDefault();
+            if (waiting is not null)
+            {
+                return task with
+                {
+                    Status = AgentTaskStatus.NeedsAttention,
+                    Confidence = StateConfidence.Inferred,
+                    AttentionReason = waiting.Kind == ClaudePendingToolKind.Question
+                        ? "Waiting for your answer"
+                        : "Plan needs approval",
+                    EvidenceKey = "pending-tool:" + waiting.ToolUseId,
+                };
+            }
+
             if (inactivity >= timings.ClaudeCodeWorkingUnknownAfter)
                 return task with { Status = AgentTaskStatus.Unknown, Confidence = StateConfidence.Stale };
             if (inactivity >= timings.ClaudeCodeWorkingStaleAfter)
                 return task with { Status = AgentTaskStatus.Working, Confidence = StateConfidence.Stale };
             return task with { Status = AgentTaskStatus.Working, Confidence = StateConfidence.Confirmed };
+        }
+
+        // ⚠️ A-K6 The turn has ended but launched background work has not reported back (or a subagent
+        // transcript is still being written): Claude is waiting on it, not finished.
+        var waitingOnBackground = state.Turn == ClaudeCodeTurnStatus.Completed &&
+            !(state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry) &&
+            inactivity < timings.ClaudeCodeWorkingUnknownAfter &&
+            (subagents?.Running == true ||
+             state.BackgroundTasks.Values.Any(since => now - since < timings.ClaudeCodeWorkingUnknownAfter));
+        if (waitingOnBackground)
+        {
+            return task with
+            {
+                Status = AgentTaskStatus.Working,
+                Confidence = inactivity >= timings.ClaudeCodeWorkingStaleAfter ? StateConfidence.Stale : StateConfidence.Inferred,
+                StatusDetail = WaitingForBackgroundDetail,
+                LastActivity = effectiveActivity,
+            };
         }
 
         return state.Turn switch

@@ -1,0 +1,2 @@
+{"type":"user","isSidechain":true,"agentId":"synthetic-agent","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:02Z","message":{"role":"user","content":"Placeholder prompt"}}
+{"type":"assistant","isSidechain":true,"agentId":"synthetic-agent","sessionId":"synthetic-session","timestamp":"2026-01-01T12:00:04Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"synthetic-sub-read","name":"Read","input":{"file_path":"placeholder.txt"}}],"stop_reason":"tool_use"}}

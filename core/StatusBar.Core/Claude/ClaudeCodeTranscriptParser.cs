@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using StatusBar.Core.Common;
 using StatusBar.Core.Diagnostics;
 
@@ -8,6 +9,10 @@ namespace StatusBar.Core.Claude;
 internal static class ClaudeCodeTranscriptParser
 {
     const string InterruptedPrefix = "[Request interrupted by user";
+
+    // ⚠️ A-K6 Claude Code reports a finished background agent or shell as a user record with
+    // origin.kind "task-notification" whose text wraps the id in <task-id>…</task-id>. Only the id is read.
+    static readonly Regex NotificationTaskId = new("<task-id>([^<]{1,128})</task-id>", RegexOptions.CultureInvariant);
 
     internal static void Apply(
         ClaudeCodeSessionState state,
@@ -47,6 +52,13 @@ internal static class ClaudeCodeTranscriptParser
             {
                 // ⚠️ A-K2 Sidechain records belong to the parent task and do not change turn state.
                 state.HasSidechainActivity = true;
+                // ⚠️ A-K6 A subagent transcript is finished when its last assistant record ends the turn;
+                // the parent stays busy while it is still being written.
+                if (recordType == "assistant")
+                    state.SidechainEnded = string.Equals(
+                        ReadString(GetObject(root, "message"), "stop_reason"), "end_turn", StringComparison.Ordinal);
+                else if (recordType == "user")
+                    state.SidechainEnded = false;
                 return;
             }
 
@@ -63,6 +75,17 @@ internal static class ClaudeCodeTranscriptParser
                     return;
                 case "ai-title":
                     ApplyTitleRecord(root, "aiTitle", value => state.AiTitleCandidate = value);
+                    return;
+                case "queue-operation":
+                    // ⚠️ A-K6 A finished background task is queued as a notification. If Claude is mid-turn
+                    // it is absorbed there and never becomes a user record, so the queue entry is the signal.
+                    if (string.Equals(ReadString(root, "operation"), "enqueue", StringComparison.Ordinal))
+                        ClearNotifiedBackgroundTask(state, ReadString(root, "content"));
+                    return;
+                case "attachment":
+                    var attachment = GetObject(root, "attachment");
+                    if (string.Equals(ReadString(GetObject(attachment, "origin"), "kind"), "task-notification", StringComparison.Ordinal))
+                        ClearNotifiedBackgroundTask(state, ReadString(attachment, "prompt"));
                     return;
                 // Transcript metadata and future record types are activity only. In particular,
                 // last-prompt content can contain the full user prompt and is deliberately ignored.
@@ -91,7 +114,10 @@ internal static class ClaudeCodeTranscriptParser
     {
         // ⚠️ A-K2 User records and text/tool_result content blocks are only structurally inferred so far.
         var message = GetObject(root, "message");
+        ApplyBackgroundLaunch(state, root);
         if (IsTrue(GetProperty(root, "isMeta")) || IsTrue(GetProperty(message, "isMeta"))) return;
+        var isTaskNotification = string.Equals(
+            ReadString(GetObject(root, "origin"), "kind"), "task-notification", StringComparison.Ordinal);
 
         var content = GetProperty(message, "content");
         var hasToolResult = false;
@@ -119,6 +145,8 @@ internal static class ClaudeCodeTranscriptParser
             firstText = content.GetString();
         }
 
+        if (isTaskNotification) ClearNotifiedBackgroundTask(state, firstText);
+
         if (hasToolResult || string.IsNullOrWhiteSpace(firstText)) return;
 
         var text = firstText.TrimStart();
@@ -140,9 +168,43 @@ internal static class ClaudeCodeTranscriptParser
         state.Turn = ClaudeCodeTurnStatus.Running;
         state.EndedWithQuestion = false;
         state.PendingTools.Clear();
-        if (state.FirstPromptTitleCandidate is null)
+        // A notification wakes Claude for a new turn, but its wrapper is not something Steve typed.
+        if (state.FirstPromptTitleCandidate is null && !isTaskNotification)
             state.FirstPromptTitleCandidate = TextSanitizer.SanitizeTitleCandidate(firstText);
     }
+
+    // Only the id inside Claude Code's own notification wrapper is read; the summary is ignored.
+    static void ClearNotifiedBackgroundTask(ClaudeCodeSessionState state, string? text)
+    {
+        if (state.BackgroundTasks.Count == 0 || text is null) return;
+        if (!text.TrimStart().StartsWith("<task-notification>", StringComparison.Ordinal)) return;
+        var match = NotificationTaskId.Match(text);
+        if (match.Success) state.BackgroundTasks.Remove(match.Groups[1].Value.Trim());
+    }
+
+    // ⚠️ A-K6 An Agent call with run_in_background returns at once with toolUseResult.status
+    // "async_launched" and an agentId; a background shell returns a backgroundTaskId. The turn can then
+    // end while the work continues, so the ids are kept until the matching task-notification arrives.
+    static void ApplyBackgroundLaunch(ClaudeCodeSessionState state, JsonElement root)
+    {
+        var result = GetObject(root, "toolUseResult");
+        if (result.ValueKind != JsonValueKind.Object) return;
+        var id = string.Equals(ReadString(result, "status"), "async_launched", StringComparison.Ordinal)
+            ? ReadString(result, "agentId")
+            : ReadString(result, "backgroundTaskId");
+        if (!string.IsNullOrWhiteSpace(id) && id.Length <= 128)
+            state.BackgroundTasks[id] = state.LastActivity;
+    }
+
+    // ⚠️ A-K5 A structured question or plan approval is an assistant tool_use named AskUserQuestion or
+    // ExitPlanMode that stays unanswered (no matching tool_result) until Steve responds. Confirmed for the
+    // same agent runtime in Cowork (A-C5); not yet observed in a Claude Code transcript.
+    static ClaudePendingToolKind ToolKind(string? name) => name switch
+    {
+        "AskUserQuestion" => ClaudePendingToolKind.Question,
+        "ExitPlanMode" => ClaudePendingToolKind.PlanApproval,
+        _ => ClaudePendingToolKind.Other,
+    };
 
     static void ApplyAssistantRecord(ClaudeCodeSessionState state, JsonElement root)
     {
@@ -158,10 +220,16 @@ internal static class ClaudeCodeTranscriptParser
                 var blockType = ReadString(block, "type");
                 if (string.Equals(blockType, "tool_use", StringComparison.Ordinal))
                 {
-                    // Tool inputs can contain prompts, paths and credentials; only retain the opaque id.
+                    // Tool inputs can contain prompts, paths and credentials; only retain the opaque id
+                    // and the kind derived from the tool's fixed name.
                     var toolUseId = ReadString(block, "id");
                     if (!string.IsNullOrWhiteSpace(toolUseId))
-                        state.PendingTools[toolUseId] = new ClaudePendingTool(toolUseId, state.LastActivity);
+                    {
+                        state.PendingTools[toolUseId] = new ClaudePendingTool(
+                            toolUseId,
+                            state.LastActivity,
+                            ToolKind(ReadString(block, "name")));
+                    }
                 }
                 else if (string.Equals(blockType, "text", StringComparison.Ordinal))
                 {

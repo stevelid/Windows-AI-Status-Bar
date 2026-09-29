@@ -8,7 +8,26 @@ internal enum ClaudeCodeTurnStatus
     Aborted,
 }
 
-internal sealed record ClaudePendingTool(string ToolUseId, DateTimeOffset Since);
+/// <summary>What a pending tool call is waiting for. Only the tool's name decides this; its input is never read.</summary>
+internal enum ClaudePendingToolKind
+{
+    /// <summary>Any ordinary tool (Read, Bash, ...): the tool is running or awaiting a permission prompt.</summary>
+    Other,
+
+    /// <summary>A structured multiple-choice question (<c>AskUserQuestion</c>).</summary>
+    Question,
+
+    /// <summary>A plan waiting for approval (<c>ExitPlanMode</c>).</summary>
+    PlanApproval,
+}
+
+internal sealed record ClaudePendingTool(
+    string ToolUseId,
+    DateTimeOffset Since,
+    ClaudePendingToolKind Kind = ClaudePendingToolKind.Other);
+
+/// <summary>Activity of a session's subagent transcripts (<c>&lt;session&gt;/subagents/agent-*.jsonl</c>).</summary>
+internal sealed record ClaudeSubagentActivity(DateTimeOffset LastActivity, bool Running);
 
 /// <summary>In-memory state accumulated from one Claude Code transcript.</summary>
 internal sealed class ClaudeCodeSessionState
@@ -27,4 +46,10 @@ internal sealed class ClaudeCodeSessionState
     internal bool EndedWithQuestion { get; set; }
     internal ClaudeCodeTurnStatus Turn { get; set; }
     internal Dictionary<string, ClaudePendingTool> PendingTools { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Background agents and shells launched by this session that have not reported back (opaque ids only).</summary>
+    internal Dictionary<string, DateTimeOffset> BackgroundTasks { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>For a subagent transcript: its last assistant record ended its turn.</summary>
+    internal bool SidechainEnded { get; set; }
 }

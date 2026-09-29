@@ -10,7 +10,7 @@
     <AssemblyName>AIStatusBar</AssemblyName>
     <RootNamespace>ClaudeUsageWidget</RootNamespace>
     <Product>Windows AI Status Bar</Product>
-    <Version>3.0.0-alpha.1</Version>
+    <Version>3.0.0</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <EnableCompressionInSingleFile>false</EnableCompressionInSingleFile>

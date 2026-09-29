@@ -28,6 +28,12 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
         _timings = timings;
     }
 
+    /// <summary>
+    /// Content-free debug lines (short session id, turn state, question flag, pending tool counts by
+    /// kind). Never includes text, tool inputs, tool names or paths. Subscribers must not throw.
+    /// </summary>
+    internal event Action<string>? Trace;
+
     internal int TrackedFiles => _entries.Count;
     internal IReadOnlyList<(string SessionId, long Offset, long LastReadStartOffset)> ReaderPositions =>
         _entries.Values.Select(entry => (
@@ -55,21 +61,28 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                 if (_entries.ContainsKey(path)) continue;
                 try
                 {
-                    _entries[path] = CreateEntry(path, now);
+                    var created = CreateEntry(path, now);
+                    _entries[path] = created;
+                    Emit($"session {ShortId(created.State)} tracked: {Describe(created.State)}");
                 }
-                catch (IOException)
+                catch (IOException ex)
                 {
                     // A file being written or replaced is retried on the next watcher event or scan.
+                    Emit($"session read failed on discovery ({ex.GetType().Name})");
                 }
-                catch (UnauthorizedAccessException)
+                catch (UnauthorizedAccessException ex)
                 {
                     // Do not expose per-user paths in errors; inaccessible files are skipped.
+                    Emit($"session read failed on discovery ({ex.GetType().Name})");
                 }
             }
 
             var discoveredSet = new HashSet<string>(discovered, StringComparer.OrdinalIgnoreCase);
             foreach (var stale in _entries.Keys.Where(path => !discoveredSet.Contains(path)).ToArray())
+            {
+                Emit($"session {ShortId(_entries[stale].State)} no longer recent; dropped");
                 _entries.Remove(stale);
+            }
 
             _lastDiscovery = now;
             _hasDiscovery = true;
@@ -83,20 +96,29 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                 var result = entry.Reader.ReadNewLines();
                 if (result.Reset)
                 {
-                    _entries[path] = CreateEntry(path, now);
+                    var recreated = CreateEntry(path, now);
+                    _entries[path] = recreated;
+                    Emit($"session {ShortId(recreated.State)} file reset; re-read: {Describe(recreated.State)}");
                     continue;
                 }
 
+                if (result.Lines.Count == 0) continue;
+                var before = Describe(entry.State);
                 foreach (var line in result.Lines)
                     ClaudeCodeTranscriptParser.Apply(entry.State, line, fallbackTime, _drift);
+                var after = Describe(entry.State);
+                if (after != before)
+                    Emit($"session {ShortId(entry.State)} {before} -> {after} ({result.Lines.Count} new records)");
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 // Retain current in-memory state and retry on the next pass.
+                Emit($"session {ShortId(entry.State)} read failed ({ex.GetType().Name})");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
                 // Retain current in-memory state and retry on the next pass.
+                Emit($"session {ShortId(entry.State)} read failed ({ex.GetType().Name})");
             }
         }
 
@@ -128,9 +150,24 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
 
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)
     {
+        // Subagent transcripts share their parent's sessionId; fold them into the parent's activity.
+        var subagents = _entries.Values
+            .Where(entry => entry.State.IsSidechainOnly && entry.State.SessionId is not null)
+            .GroupBy(entry => entry.State.SessionId!, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => new ClaudeSubagentActivity(
+                    group.Max(entry => entry.State.LastActivity),
+                    group.Any(entry => !entry.State.SidechainEnded &&
+                        now - entry.State.LastActivity < _timings.ClaudeCodeWorkingStaleAfter)),
+                StringComparer.Ordinal);
         return _entries.Values
             .Where(entry => !entry.State.IsSidechainOnly)
-            .Select(entry => ClaudeCodeTaskMapper.Map(entry.State, now, _timings))
+            .Select(entry => ClaudeCodeTaskMapper.Map(
+                entry.State,
+                now,
+                _timings,
+                entry.State.SessionId is { } id && subagents.TryGetValue(id, out var activity) ? activity : null))
             .GroupBy(task => task.Id, StringComparer.Ordinal)
             .Select(group => group.OrderByDescending(task => task.LastActivity).First())
             .OrderByDescending(task => task.Status == AgentTaskStatus.NeedsAttention)
@@ -177,6 +214,34 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
         }
 
         return files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    void Emit(string message)
+    {
+        try { Trace?.Invoke(message); }
+        catch (Exception)
+        {
+            // Logging must never interrupt task collection.
+        }
+    }
+
+    // Last eight characters of the session id (matches TaskChangeLog), plus "/sub" for a sub-agent
+    // transcript, which shares its parent's session id.
+    internal static string ShortId(ClaudeCodeSessionState state)
+    {
+        var key = string.IsNullOrWhiteSpace(state.SessionId) ? "unknown" : state.SessionId;
+        var shortKey = key.Length > 8 ? key[^8..] : key;
+        return state.IsSidechainOnly ? shortKey + "/sub" : shortKey;
+    }
+
+    // Turn state, question flag and pending tool counts by kind only.
+    internal static string Describe(ClaudeCodeSessionState state)
+    {
+        var pending = state.PendingTools.Values;
+        var questions = pending.Count(tool => tool.Kind == ClaudePendingToolKind.Question);
+        var plans = pending.Count(tool => tool.Kind == ClaudePendingToolKind.PlanApproval);
+        return $"turn={state.Turn}, question={(state.EndedWithQuestion ? "yes" : "no")}, " +
+               $"pending={pending.Count} (ask={questions}, plan={plans})";
     }
 
     static DateTimeOffset GetFileTime(string path, DateTimeOffset fallback)

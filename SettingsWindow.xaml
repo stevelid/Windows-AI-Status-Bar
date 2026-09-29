@@ -1,26 +1,51 @@
 <Window x:Class="ClaudeUsageWidget.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="設定" Width="460" MaxHeight="760" SizeToContent="Height"
+        Title="設定" Width="460" MaxHeight="780" SizeToContent="Height"
         WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Topmost="True">
+    <Window.Resources>
+        <Style x:Key="SectionHeading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+        <Style x:Key="SectionRule" TargetType="Border">
+            <Setter Property="Height" Value="1"/>
+            <Setter Property="Margin" Value="0,4,0,4"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,12,0,0"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,4,0,0"/>
+        </Style>
+    </Window.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                  MaxHeight="720">
-        <StackPanel x:Name="Root" Margin="22,18,22,22">
-            <TextBlock x:Name="LanguageLabel" Text="語言" FontSize="13" FontWeight="SemiBold"/>
+                  MaxHeight="740">
+        <StackPanel x:Name="Root" Margin="22,16,22,22">
+            <!-- General -->
+            <TextBlock x:Name="GeneralHeading" Style="{StaticResource SectionHeading}"/>
+            <Border x:Name="GeneralRule" Style="{StaticResource SectionRule}"/>
+
+            <TextBlock x:Name="LanguageLabel" Text="語言" Style="{StaticResource FieldLabel}" Margin="0,6,0,0"/>
             <ComboBox x:Name="LanguageCombo" Margin="0,6,0,0" Padding="6,5"
                       SelectionChanged="OnLanguageChanged">
                 <ComboBoxItem Content="繁體中文"/>
                 <ComboBoxItem Content="English"/>
             </ComboBox>
 
-            <TextBlock x:Name="ThemeLabel" Text="主題" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBlock x:Name="ThemeLabel" Text="主題" Style="{StaticResource FieldLabel}"/>
             <ComboBox x:Name="ThemeCombo" Margin="0,6,0,0" Padding="6,5"
                       SelectionChanged="OnThemeChanged">
                 <ComboBoxItem Content="深色"/>
                 <ComboBoxItem Content="淺色"/>
             </ComboBox>
 
-            <TextBlock x:Name="IntervalLabel" Text="更新頻率" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBlock x:Name="IntervalLabel" Text="更新頻率" Style="{StaticResource FieldLabel}"/>
             <ComboBox x:Name="IntervalCombo" Margin="0,6,0,0" Padding="6,5"
                       SelectionChanged="OnIntervalChanged">
                 <ComboBoxItem/>
@@ -29,84 +54,105 @@
                 <ComboBoxItem/>
             </ComboBox>
 
-            <TextBlock x:Name="CodexPathLabel" Text="Codex 執行檔（選填）" FontSize="13"
-                       FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBlock x:Name="MonitorLabel" Style="{StaticResource FieldLabel}"/>
+            <ComboBox x:Name="MonitorCombo" Margin="0,6,0,0" Padding="6,5"
+                      SelectionChanged="OnMonitorChanged"/>
+
+            <!-- Strip and pane -->
+            <TextBlock x:Name="DisplayHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
+            <Border x:Name="DisplayRule" Style="{StaticResource SectionRule}"/>
+
+            <DockPanel Margin="0,6,0,0">
+                <TextBlock x:Name="OpacityValue" Text="10%" FontSize="13" DockPanel.Dock="Right"/>
+                <TextBlock x:Name="OpacityLabel" Text="背景透明度" FontSize="13" FontWeight="SemiBold"/>
+            </DockPanel>
+            <Slider x:Name="OpacitySlider" Margin="0,8,0,0" Minimum="0" Maximum="100"
+                    TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="OnOpacityChanged"/>
+            <TextBlock x:Name="OpacityHint" Text="" Style="{StaticResource Hint}"/>
+
+            <TextBlock x:Name="AttentionLabelText" Style="{StaticResource FieldLabel}"/>
+            <TextBox x:Name="AttentionLabelBox" Padding="6,5" Margin="0,6,0,0"
+                     LostFocus="OnAttentionLabelLostFocus"/>
+
+            <TextBlock x:Name="RecentCompletedLabel" Style="{StaticResource FieldLabel}"/>
+            <DockPanel Margin="0,5,0,0">
+                <TextBlock x:Name="RecentCompletedValue" Width="42" TextAlignment="Right" DockPanel.Dock="Right"
+                           VerticalAlignment="Center" Margin="8,0,0,0"/>
+                <Slider x:Name="RecentCompletedSlider" Minimum="5" Maximum="15" TickFrequency="1"
+                        IsSnapToTickEnabled="True" ValueChanged="OnRecentCompletedChanged"/>
+            </DockPanel>
+
+            <TextBlock x:Name="PaneAutoCollapseLabel" Style="{StaticResource FieldLabel}"/>
+            <ComboBox x:Name="PaneAutoCollapseCombo" Margin="0,6,0,0" Padding="6,5"
+                      SelectionChanged="OnPaneAutoCollapseChanged"/>
+
+            <TextBlock x:Name="ApproachingLabel" Style="{StaticResource FieldLabel}"/>
+            <DockPanel Margin="0,5,0,0">
+                <TextBlock x:Name="ApproachingValue" Width="42" TextAlignment="Right" DockPanel.Dock="Right"
+                           VerticalAlignment="Center" Margin="8,0,0,0"/>
+                <Slider x:Name="ApproachingSlider" Minimum="1" Maximum="100" TickFrequency="1"
+                        IsSnapToTickEnabled="True" ValueChanged="OnThresholdChanged"/>
+            </DockPanel>
+
+            <TextBlock x:Name="LowLabel" Style="{StaticResource FieldLabel}"/>
+            <DockPanel Margin="0,5,0,0">
+                <TextBlock x:Name="LowValue" Width="42" TextAlignment="Right" DockPanel.Dock="Right"
+                           VerticalAlignment="Center" Margin="8,0,0,0"/>
+                <Slider x:Name="LowSlider" Minimum="0" Maximum="99" TickFrequency="1"
+                        IsSnapToTickEnabled="True" ValueChanged="OnThresholdChanged"/>
+            </DockPanel>
+
+            <!-- Alerts -->
+            <TextBlock x:Name="AlertsHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
+            <Border x:Name="AlertsRule" Style="{StaticResource SectionRule}"/>
+
+            <CheckBox x:Name="NotificationsCheckBox" Margin="0,8,0,0"
+                      Checked="OnNotificationsChanged" Unchecked="OnNotificationsChanged"/>
+            <CheckBox x:Name="FinishedNotificationsCheckBox" Margin="0,8,0,0"
+                      Checked="OnFinishedNotificationsChanged" Unchecked="OnFinishedNotificationsChanged"/>
+
+            <!-- Data sources -->
+            <TextBlock x:Name="SourcesHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
+            <Border x:Name="SourcesRule" Style="{StaticResource SectionRule}"/>
+
+            <TextBlock x:Name="CodexPathLabel" Text="Codex 執行檔（選填）" Style="{StaticResource FieldLabel}" Margin="0,6,0,0"/>
             <DockPanel Margin="0,6,0,0">
                 <Button x:Name="CodexBrowseButton" DockPanel.Dock="Right" Content="瀏覽…"
                         Margin="8,0,0,0" Padding="10,5" Click="OnCodexBrowseClick"/>
                 <TextBox x:Name="CodexPathBox" Padding="6,5" VerticalContentAlignment="Center"
                          LostFocus="OnCodexPathLostFocus"/>
             </DockPanel>
-            <TextBlock x:Name="CodexPathHint" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"/>
+            <TextBlock x:Name="CodexPathHint" Style="{StaticResource Hint}"/>
 
-            <TextBlock x:Name="CodexHomeLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBlock x:Name="CodexHomeLabel" Style="{StaticResource FieldLabel}"/>
             <TextBox x:Name="CodexHomeBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnCodexHomeLostFocus"/>
 
-            <TextBlock x:Name="ClaudeCodeHomeLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
+            <TextBlock x:Name="ClaudeCodeHomeLabel" Style="{StaticResource FieldLabel}"/>
             <TextBox x:Name="ClaudeCodeHomeBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnClaudeCodeHomeLostFocus"/>
+            <TextBlock x:Name="DataFolderHint" Style="{StaticResource Hint}"/>
 
-            <CheckBox x:Name="ClaudeHooksCheckBox" Margin="0,16,0,0"
+            <CheckBox x:Name="ClaudeHooksCheckBox" Margin="0,14,0,0"
                       Checked="OnClaudeHooksChanged" Unchecked="OnClaudeHooksChanged"/>
-            <TextBlock x:Name="ClaudeHooksHint" TextWrapping="Wrap" FontSize="11" Margin="0,4,0,0"/>
-            <TextBox x:Name="ClaudeHooksPreview" IsReadOnly="True" TextWrapping="Wrap"
-                     VerticalScrollBarVisibility="Auto" MaxHeight="150" Padding="6,5" Margin="0,4,0,0"/>
+            <TextBlock x:Name="ClaudeHooksHint" Style="{StaticResource Hint}" Margin="20,4,0,0"/>
+            <TextBlock Margin="20,4,0,0" FontSize="11">
+                <Hyperlink x:Name="ClaudeHooksPreviewLink" Click="OnClaudeHooksPreviewClick">
+                    <Run x:Name="ClaudeHooksPreviewLinkText"/>
+                </Hyperlink>
+            </TextBlock>
+            <TextBox x:Name="ClaudeHooksPreview" IsReadOnly="True" TextWrapping="NoWrap"
+                     FontFamily="Consolas" FontSize="11"
+                     HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                     MaxHeight="160" Padding="6,5" Margin="20,6,0,0" Visibility="Collapsed"/>
 
-            <TextBlock x:Name="CoworkRootLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
-            <TextBox x:Name="CoworkRootBox" Padding="6,5" Margin="0,6,0,0"
+            <!-- Cowork (optional Phase 4) has no collector yet; the setting is kept but not shown. -->
+            <TextBlock x:Name="CoworkRootLabel" Style="{StaticResource FieldLabel}" Visibility="Collapsed"/>
+            <TextBox x:Name="CoworkRootBox" Padding="6,5" Margin="0,6,0,0" Visibility="Collapsed"
                      LostFocus="OnCoworkRootLostFocus"/>
 
-            <DockPanel Margin="0,18,0,0">
-                <TextBlock x:Name="OpacityLabel" Text="背景透明度" FontSize="13" FontWeight="SemiBold"/>
-                <TextBlock x:Name="OpacityValue" Text="10%" FontSize="13" HorizontalAlignment="Right"/>
-            </DockPanel>
-            <Slider x:Name="OpacitySlider" Margin="0,8,0,0" Minimum="0" Maximum="100"
-                    TickFrequency="5" IsSnapToTickEnabled="True" ValueChanged="OnOpacityChanged"/>
-            <TextBlock x:Name="OpacityHint" Text="" FontSize="11" Margin="0,4,0,0"/>
-
-            <CheckBox x:Name="NotificationsCheckBox" Margin="0,16,0,0"
-                      Checked="OnNotificationsChanged" Unchecked="OnNotificationsChanged"/>
-            <CheckBox x:Name="FinishedNotificationsCheckBox" Margin="0,8,0,0"
-                      Checked="OnFinishedNotificationsChanged" Unchecked="OnFinishedNotificationsChanged"/>
-            <CheckBox x:Name="DemoTasksCheckBox" Margin="0,8,0,0"
+            <CheckBox x:Name="DemoTasksCheckBox" Margin="0,14,0,0"
                       Checked="OnDemoTasksChanged" Unchecked="OnDemoTasksChanged"/>
-
-            <TextBlock x:Name="RecentCompletedLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
-            <DockPanel Margin="0,5,0,0">
-                <Slider x:Name="RecentCompletedSlider" Minimum="5" Maximum="15" TickFrequency="1"
-                        IsSnapToTickEnabled="True" ValueChanged="OnRecentCompletedChanged"/>
-                <TextBlock x:Name="RecentCompletedValue" Width="34" TextAlignment="Right"
-                           VerticalAlignment="Center" Margin="8,0,0,0"/>
-            </DockPanel>
-
-            <TextBlock x:Name="PaneAutoCollapseLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
-            <ComboBox x:Name="PaneAutoCollapseCombo" Margin="0,6,0,0" Padding="6,5"
-                      SelectionChanged="OnPaneAutoCollapseChanged"/>
-
-            <TextBlock x:Name="AttentionLabelText" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
-            <TextBox x:Name="AttentionLabelBox" Padding="6,5" Margin="0,6,0,0"
-                     LostFocus="OnAttentionLabelLostFocus"/>
-
-            <TextBlock x:Name="MonitorLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
-            <ComboBox x:Name="MonitorCombo" Margin="0,6,0,0" Padding="6,5"
-                      SelectionChanged="OnMonitorChanged"/>
-
-            <TextBlock x:Name="ApproachingLabel" FontSize="13" FontWeight="SemiBold" Margin="0,16,0,0"/>
-            <DockPanel Margin="0,5,0,0">
-                <Slider x:Name="ApproachingSlider" Minimum="1" Maximum="100" TickFrequency="1"
-                        IsSnapToTickEnabled="True" ValueChanged="OnThresholdChanged"/>
-                <TextBlock x:Name="ApproachingValue" Width="42" TextAlignment="Right"
-                           VerticalAlignment="Center" Margin="8,0,0,0"/>
-            </DockPanel>
-
-            <TextBlock x:Name="LowLabel" FontSize="13" FontWeight="SemiBold" Margin="0,14,0,0"/>
-            <DockPanel Margin="0,5,0,0">
-                <Slider x:Name="LowSlider" Minimum="0" Maximum="99" TickFrequency="1"
-                        IsSnapToTickEnabled="True" ValueChanged="OnThresholdChanged"/>
-                <TextBlock x:Name="LowValue" Width="42" TextAlignment="Right"
-                           VerticalAlignment="Center" Margin="8,0,0,0"/>
-            </DockPanel>
         </StackPanel>
     </ScrollViewer>
 </Window>
