@@ -192,7 +192,12 @@ public partial class App : System.Windows.Application
         });
         ThemeManager.Init(_settings.Theme == "light");
 
-        if (!_settings.FirstRunDone)
+        if (AppPaths.LaunchableExecutable is null)
+        {
+            // Development run through the dotnet host: leave the installed copy's shortcut alone.
+            Log.Write("Running under the dotnet host; auto-start shortcut left unchanged.");
+        }
+        else if (!_settings.FirstRunDone)
         {
             var result = AutoStart.TryEnable();
             if (!result.Succeeded || result.Detail is not null)
@@ -689,10 +694,13 @@ public partial class App : System.Windows.Application
         _agentStateCodexHomeOverride = codexHomeOverride;
         _agentStateClaudeHomeOverride = claudeHomeOverride;
         _agentStateClaudeHooksEnabled = claudeHooksEnabled;
-        LogTaskChanges(StatusBarState.Empty, _agentStateService.Current);
-        _taskState = _agentStateService.Current;
+        // Providers start inside the constructor, so subscribe before reading the state and read it
+        // once: an update landing in between was otherwise neither shown nor logged.
         _agentStateService.StateChanged += OnTaskStateChanged;
         _agentStateService.EnteredNeedsAttention += OnEnteredNeedsAttention;
+        var initialState = _agentStateService.Current;
+        LogTaskChanges(StatusBarState.Empty, initialState);
+        _taskState = initialState;
         UpdateStrip();
     }
 

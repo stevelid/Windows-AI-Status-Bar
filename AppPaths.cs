@@ -16,6 +16,23 @@ public static class AppPaths
 
     public static string DataDir { get; } = Path.Combine(BaseDir, "WindowsAIStatusBar");
 
+    /// <summary>
+    /// The exe that Windows can start again (auto-start, Claude hook command), or null when the app
+    /// runs as <c>dotnet AIStatusBar.dll</c>: a shortcut or hook pointing at the shared dotnet host
+    /// would start nothing useful and would replace the user's real installed copy.
+    /// </summary>
+    public static string? LaunchableExecutable
+    {
+        get
+        {
+            var path = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            return string.Equals(Path.GetFileNameWithoutExtension(path), "dotnet", StringComparison.OrdinalIgnoreCase)
+                ? null
+                : path;
+        }
+    }
+
     static string ResolveBaseDir()
     {
         string? baseDir = null;
