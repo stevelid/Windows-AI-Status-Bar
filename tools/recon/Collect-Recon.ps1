@@ -545,6 +545,14 @@ if ($WatchSeconds -gt 0) {
 
     # Track every rollout/audit file modified in the last day plus any created during the watch.
     $offsets = @{}
+    $desktopSessionRoots = @()
+    if ($AppData) { $desktopSessionRoots += (Join-Path $AppData 'Claude\claude-code-sessions') }
+    $pkgRoot = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Packages'
+    if (Test-Path -LiteralPath $pkgRoot) {
+        Get-ChildItem -LiteralPath $pkgRoot -Directory -Filter 'Claude_*' -ErrorAction SilentlyContinue | ForEach-Object {
+            $desktopSessionRoots += (Join-Path $_.FullName 'LocalCache\Roaming\Claude\claude-code-sessions')
+        }
+    }
     function Get-WatchedFiles {
         $files = @()
         $sd = Join-Path $CodexHome 'sessions'
@@ -565,6 +573,13 @@ if ($WatchSeconds -gt 0) {
             $files += Get-ChildItem -LiteralPath $cs -File -Filter '*.json' -ErrorAction SilentlyContinue |
                 Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-1) } | ForEach-Object { @{ Path = $_.FullName; Source = 'claude-status' } }
         }
+        # Claude desktop's own per-session metadata for Code-tab sessions (one small json per session).
+        foreach ($d in $desktopSessionRoots) {
+            if (Test-Path -LiteralPath $d) {
+                $files += Get-ChildItem -LiteralPath $d -Recurse -Depth 3 -File -Filter 'local_*.json' -ErrorAction SilentlyContinue |
+                    Where-Object { $_.LastWriteTime -gt (Get-Date).AddDays(-1) } | ForEach-Object { @{ Path = $_.FullName; Source = 'claude-desktop-meta' } }
+            }
+        }
         foreach ($r in $roots) {
             if (Test-Path -LiteralPath $r) {
                 $files += Get-ChildItem -LiteralPath $r -Recurse -File -Filter 'audit.jsonl' -ErrorAction SilentlyContinue |
@@ -581,6 +596,13 @@ if ($WatchSeconds -gt 0) {
     }
     $metaStamps = @{}
 
+    $watchedNow = @(Get-WatchedFiles)
+    $counts = ($watchedNow | Group-Object { $_.Source } | Sort-Object Name | ForEach-Object { $_.Name + '=' + $_.Count }) -join ', '
+    if (-not $counts) { $counts = 'nothing found' }
+    $timeline.Add('Watching at start (files changed in the last day, by source): ' + $counts)
+    $timeline.Add('')
+    Write-Host ('Watching: ' + $counts)
+
     Write-Host ('Watching for ' + $WatchSeconds + ' s. Work through the scenarios in docs/recon/README.md. Press Ctrl+C to stop early.')
     $deadline = (Get-Date).AddSeconds($WatchSeconds)
     try {
@@ -589,6 +611,25 @@ if ($WatchSeconds -gt 0) {
                 $path = $f.Path
                 $id = Get-ShortId $path
                 try { $info = Get-Item -LiteralPath $path -ErrorAction Stop } catch { continue }
+
+                if ($f.Source -eq 'claude-desktop-meta') {
+                    if (-not $metaStamps.ContainsKey($path)) { $metaStamps[$path] = $info.LastWriteTimeUtc; continue }
+                    if ($metaStamps[$path] -ne $info.LastWriteTimeUtc) {
+                        $metaStamps[$path] = $info.LastWriteTimeUtc
+                        $vals = @()
+                        try {
+                            $o = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+                            foreach ($k in 'permissionMode', 'completedTurns', 'isArchived', 'effort', 'titleSource', 'postTurnSummaryFor') {
+                                $v = Get-Prop $o $k
+                                if ($null -eq $v) { continue }
+                                $txt = [string]$v
+                                if ($txt -match $EnumLikePattern -and $txt.Length -le 24) { $vals += ($k + '=' + $txt) } else { $vals += ($k + '=<redacted>') }
+                            }
+                        } catch { $vals = @('<unreadable>') }
+                        $timeline.Add((Get-Date -Format 'HH:mm:ss') + ' | claude-desktop-meta | ' + $id + ' | `' + ($vals -join ' ') + '`')
+                    }
+                    continue
+                }
 
                 if ($f.Source -eq 'claude-status') {
                     if (-not $metaStamps.ContainsKey($path)) { $metaStamps[$path] = $info.LastWriteTimeUtc; continue }

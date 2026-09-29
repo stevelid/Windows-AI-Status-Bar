@@ -20,6 +20,7 @@ public partial class App : System.Windows.Application
     UsageMonitor? _usageMonitor;
     AgentStateService? _agentStateService;
     CodexTaskProvider? _codexTaskProvider;
+    ClaudeCodeTaskProvider? _claudeTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
     AttentionNotifier? _attentionNotifier;
@@ -653,6 +654,8 @@ public partial class App : System.Windows.Application
             _codexTaskProvider.Trace -= OnCodexTrace;
         }
         _codexTaskProvider = null;
+        if (_claudeTaskProvider is not null) _claudeTaskProvider.Trace -= OnClaudeTrace;
+        _claudeTaskProvider = null;
         IAgentTaskProvider[] taskProviders;
         if (demoMode)
         {
@@ -673,7 +676,7 @@ public partial class App : System.Windows.Application
             var codex = new SupervisedTaskProvider(AgentProvider.Codex, () => CreateCodexTaskProvider(codexHome), TimeProvider.System);
             var claude = new SupervisedTaskProvider(
                 AgentProvider.Claude,
-                () => new ClaudeCodeTaskProvider(claudeHome, claudeHookPath),
+                () => CreateClaudeTaskProvider(claudeHome, claudeHookPath),
                 TimeProvider.System);
             codex.Supervision += OnProviderSupervision;
             claude.Supervision += OnProviderSupervision;
@@ -781,6 +784,16 @@ public partial class App : System.Windows.Application
         return provider;
     }
 
+    // Called by the supervisor on start and after each restart, so the replacement keeps logging.
+    ClaudeCodeTaskProvider CreateClaudeTaskProvider(string? claudeHome, string? hookPath)
+    {
+        if (_claudeTaskProvider is not null) _claudeTaskProvider.Trace -= OnClaudeTrace;
+        var provider = new ClaudeCodeTaskProvider(claudeHome, hookPath);
+        provider.Trace += OnClaudeTrace;
+        _claudeTaskProvider = provider;
+        return provider;
+    }
+
     async Task ReconcileTasksQuietlyAsync()
     {
         var service = _agentStateService;
@@ -800,6 +813,8 @@ public partial class App : System.Windows.Application
     void OnCodexWatcherOverflow() => Log.Write("Codex session watcher overflow; full reconciliation scheduled.");
 
     static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
+
+    static void OnClaudeTrace(string message) => Log.Write("Claude: " + message);
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 
