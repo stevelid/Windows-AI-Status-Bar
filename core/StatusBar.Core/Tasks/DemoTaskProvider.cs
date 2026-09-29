@@ -119,7 +119,8 @@ public sealed class DemoTaskProvider : IAgentTaskProvider
             2 => AgentTaskStatus.Working,
             _ => AgentTaskStatus.Complete,
         };
-        var phaseStart = _cycleStart + TimeSpan.FromTicks(stepTicks * stepIndex);
+        // Relative to now, so the phase start moves on with each completed cycle.
+        var phaseStart = now - TimeSpan.FromTicks(cyclePosition - stepTicks * stepIndex);
         var task = new AgentTask
         {
             Id = $"demo:{_provider.ToString().ToLowerInvariant()}",

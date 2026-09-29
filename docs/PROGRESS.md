@@ -75,7 +75,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 - [x] P6.1 Collector supervision
 - [x] P6.2 System events
-- [ ] P6.3 🧑 Manual test matrix — template ready in `docs/TEST_MATRIX.md`
+- [ ] P6.3 🧑 Manual test matrix — 12 of 14 pass (several simulated), Cowork N/A, network-off left for Steve; see `docs/TEST_MATRIX.md`
 - [ ] P6.4 Release 3.0.0 — prepared (version, README, tag-triggered release workflow); tag `v3.0.0` after P6.3 passes
 
 ## Waiting on Steve
@@ -93,12 +93,13 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 11. Report pass/fail for the Phase 5 checks and the build label. For failures, include the provider, launch environment, monitor/DPI setting, or bundle entry involved.
 12. Phase 6: install the build from the Phase 6 PR artifact (the Startup shortcut currently points at `Downloads\status-bar-win-x64-bb23e91`; the new build repairs it on first start while "Start with Windows" is ticked). Check the log shows `Tasks Claude: … -> Ok/Ok` shortly after start.
 13. Sleep the laptop for a few minutes and wake it: the log should show `System resumed…`, tasks should update without a restart, and usage should refresh within about 10 s. Turn Wi-Fi off for one refresh interval: usage greys out as stale, with no pop-up; turn it back on and it refreshes within a few seconds (`Network available…`).
-14. Work through `docs/TEST_MATRIX.md` (P6.3) and fill in Result and Build. Then push tag `v3.0.0` to publish the release.
+14. P6.3 was run by Claude on 2026-09-29 (`docs/TEST_MATRIX.md`). Still to do by hand: a real sleep/wake, and Wi-Fi off/on (step 13). Also check that a Claude Code task waiting on background agents shows ● with "Waiting for background agents" rather than ✓ (D18). Then push tag `v3.0.0` to publish the release.
 
 ## Decisions and deviations
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-29 — P6.3 (run by Claude at Steve's request) — 12 of 14 scenarios pass, including simulated resume, taskbar work-area change and monitor disconnect, plus a real DPI change and Explorer restart. Cowork is N/A. Network-off was not run because it would disconnect the session. The run also found the demo provider's age bug (the phase start ignored completed cycles, so demo rows showed hours-old ages), now fixed.
 - 2026-09-29 — D18 (Steve) — "The system reads complete when Claude is waiting on subagents." When Claude launches background agents it ends its turn (`end_turn`) and waits, so the parser showed Complete. The parser now tracks background launches (`async_launched` agent ids, `backgroundTaskId` shells) until their `task-notification` arrives. That can be a user record, or a `queue-operation`/`queued_command` attachment when absorbed mid-turn. Subagent transcripts (`<session>/subagents/agent-*.jsonl`) are folded into the parent: a still-running one keeps the parent Working and its writes count as activity. Such turns show `Working/Inferred` with "Waiting for background agents". Launches older than 2 h are ignored, and a `Stop` hook does not override. New assumption A-K6. A replay of six real transcripts (structure only, nothing kept) showed Waiting at each turn that ended with agents out, clearing when they reported. Fixtures added; 196 Core tests pass.
 - 2026-09-29 — P6.1 (review fix) — Providers publish on the thread pool, so a snapshot queued by a replaced provider could arrive after a restart and overwrite the new provider's state. Each subscription is now tagged with its provider and stale events are dropped; test added (188 pass).
 - 2026-09-29 — P6.2 (review fix) — Two bugs found while running the app on Steve's machine. (1) Start-up race: `ConfigureAgentTaskService` read the task state, then subscribed to changes, so a provider update landing in between (typically the Claude Code provider's first pass) was neither shown nor logged until the next change. Steve's logs since 28 Sep show `Tasks Claude: … -> Starting/NotStarted` with no later transition. The app now subscribes first and reads the state once; the log shows `Tasks Claude: none/- -> Ok/Ok`. (2) Running as `dotnet AIStatusBar.dll` rewrote the Startup shortcut, and would have rewritten the Claude hook command, to point at `dotnet.exe`. `AppPaths.LaunchableExecutable` now returns null under the dotnet host, and auto-start and hook refresh are skipped. Steve's shortcut was restored to his `status-bar-win-x64-bb23e91` build.
