@@ -6,6 +6,8 @@ using System.Windows.Input;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using Color = System.Windows.Media.Color;
+using Point = System.Windows.Point;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace ClaudeUsageWidget;
 
