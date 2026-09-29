@@ -2,9 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
-    paths:
-      - ClaudeUsageWidget.csproj
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -22,15 +20,20 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Read version
+      # A tag push releases that tag. A manual run releases v<project version> at the selected commit.
+      - name: Resolve tag
         id: version
         shell: pwsh
         run: |
-          [xml]$project = Get-Content ClaudeUsageWidget.csproj
-          $version = $project.Project.PropertyGroup.Version
-          if (-not $version) { throw 'Project version is missing.' }
-          "version=$version" >> $env:GITHUB_OUTPUT
-          "tag=v$version" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $tag = $env:GITHUB_REF_NAME
+          } else {
+            [xml]$project = Get-Content ClaudeUsageWidget.csproj
+            $version = @($project.Project.PropertyGroup.Version) | Where-Object { $_ } | Select-Object -First 1
+            if (-not $version) { throw 'Project version is missing.' }
+            $tag = "v$version"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
 
       - name: Reject an existing release
         shell: pwsh
@@ -40,22 +43,21 @@ jobs:
         run: |
           gh release view $env:TAG --repo $env:GITHUB_REPOSITORY 2>$null
           if ($LASTEXITCODE -eq 0) {
-            throw "Release $env:TAG already exists. Bump the project version before publishing."
+            throw "Release $env:TAG already exists. Use a new tag."
           }
           $global:LASTEXITCODE = 0
 
-      - name: Build mock Codex app-server
-        shell: pwsh
-        run: dotnet publish tests/CodexAppServerMock/CodexAppServerMock.csproj -c Release -r win-x64 --self-contained false -o tests/mock-out
+      - name: Restore
+        run: dotnet restore WindowsAIStatusBar.slnx
 
-      - name: Run smoke tests
-        shell: pwsh
-        run: dotnet run --project tests/ClaudeUsageWidget.SmokeTests/ClaudeUsageWidget.SmokeTests.csproj -c Release -- tests/mock-out/CodexAppServerMock.exe
+      - name: Core tests
+        run: dotnet test tests/StatusBar.Core.Tests/StatusBar.Core.Tests.csproj -c Release --nologo
 
-      - name: Publish self-contained widget
-        shell: pwsh
-        run: dotnet publish ClaudeUsageWidget.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o dist
+      # Same command as the manual-test artifact in build.yml, so the released exe matches what was tested.
+      - name: Publish single-file exe
+        run: dotnet publish ClaudeUsageWidget.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:SourceRevisionId=${{ github.sha }} -o dist
 
+      # The in-app updater looks for exactly these two asset names and expects one AIStatusBar.exe in the zip.
       - name: Package and hash release asset
         shell: pwsh
         run: |
@@ -64,26 +66,14 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 $asset).Hash.ToLowerInvariant()
           "$hash  $asset" | Set-Content -Encoding ascii SHA256SUMS.txt
 
-      - name: Create tag and public release
+      - name: Create GitHub release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          $tagCommit = git rev-list -n 1 $env:TAG 2>$null
-          if ($LASTEXITCODE -eq 0) {
-            if ($tagCommit -ne $env:GITHUB_SHA) {
-              throw "Existing tag $env:TAG does not point to the current release commit."
-            }
-          } else {
-            $global:LASTEXITCODE = 0
-            git tag -a $env:TAG -m "Release $env:TAG"
-            git push origin $env:TAG
-          }
           gh release create $env:TAG AIStatusBar-win-x64.zip SHA256SUMS.txt `
             --repo $env:GITHUB_REPOSITORY `
-            --title "AI Usage Widget $env:TAG" `
-            --generate-notes `
-            --verify-tag
+            --target $env:GITHUB_SHA `
+            --title "Windows AI Status Bar $env:TAG" `
+            --generate-notes

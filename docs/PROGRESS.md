@@ -75,8 +75,8 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 - [x] P6.1 Collector supervision
 - [x] P6.2 System events
-- [ ] P6.3 🧑 Manual test matrix
-- [ ] P6.4 Release 3.0.0
+- [ ] P6.3 🧑 Manual test matrix — template ready in `docs/TEST_MATRIX.md`
+- [ ] P6.4 Release 3.0.0 — prepared (version, README, tag-triggered release workflow); tag `v3.0.0` after P6.3 passes
 
 ## Waiting on Steve
 
@@ -96,6 +96,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-29 — P6.4 (prepared) — Version is `3.0.0`. `release.yml` now runs only on a `v*` tag push or a manual run (previously it created a release whenever the csproj version changed on main): it runs Core tests, publishes the same single-file exe as `build.yml`, and attaches `AIStatusBar-win-x64.zip` and `SHA256SUMS.txt`, the asset names `UpdateService` expects. README rewritten for this product. `docs/TEST_MATRIX.md` holds the P6.3 checklist. Not yet tagged: release after Steve's P6.3 run.
 - 2026-09-29 — P5.3 (UI review on Windows) — Ran the demo build on Steve's machine and reviewed screenshots. The pane now stays at least 97% opaque whatever the strip's transparency (text behind it was bleeding through at 10%). Task rows show a compact age beside the provider (`Claude · 4m`) and, for Needs you/Failed rows, the app's fixed reason text as a subtitle. The strip's summary tooltip is suppressed while the pane is open. Settings are grouped into General, Strip and pane, Alerts and Data sources; they have a dark title bar and app icon, and readable slider values and hooks checkbox. The hooks JSON preview is collapsed behind "Show what will be added". The unused Cowork folder field is hidden (Phase 4 not built). The duplicate arrow in "Sign in ▸" is removed. Hook settings are written with relaxed JSON escaping, so the command's quotes no longer appear as `"` in Claude's `settings.json`.
 - 2026-09-29 — P6.2 — Added `SystemEventCoordinator` (Core) and a thin `SystemEventsAdapter`. Resume reconciles both task providers at once (watchers can miss changes across sleep) and refreshes usage 10 s later so Wi-Fi can reconnect first; network-available events are coalesced into one usage refresh after 3 s. Network loss needs no extra handling: failed fetches already mark usage Stale with no pop-up. Re-docking on resume, display/DPI change and Explorer restart (`TaskbarCreated`) was already in `DockController` from P1.6. Build clean; 187 Core tests pass.
 - 2026-09-29 — P6.1 — Added `SupervisedTaskProvider` (Core). The app builds the Codex and Claude Code providers through factories; when one reports `ReconcileFailed`, or its creation, `Start` or `ReconcileAsync` throws, the supervisor keeps its last tasks visible with `Degraded` health, logs a content-free `Supervisor:` line, and recreates only that provider after 5 s, doubling to 5 min, resetting on the next healthy snapshot. Expected conditions (`WatcherUnavailable`, missing folders) do not trigger restarts. Build clean; 184 Core tests pass.
