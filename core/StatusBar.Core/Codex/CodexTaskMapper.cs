@@ -66,6 +66,15 @@ internal static class CodexTaskMapper
             return task with { Status = AgentTaskStatus.Working, Confidence = StateConfidence.Confirmed };
         }
 
+        // A finished turn is dated by when it ended, so later housekeeping records (such as those
+        // written when Steve opens an old thread) neither re-show it as just finished nor re-raise
+        // its question with a new evidence key.
+        if (state.TurnEndedAt is { } endedAt)
+        {
+            task = task with { LastActivity = endedAt };
+            inactivity = now >= endedAt ? now - endedAt : TimeSpan.Zero;
+        }
+
         return state.Turn switch
         {
             // ⚠️ A-X4 The answer to a question card is expected to start a new turn, which clears this.

@@ -273,6 +273,7 @@ internal static class CodexRolloutParser
         state.EndedWithQuestion = false;
         state.AskedStructuredQuestion = false;
         state.EndedWithStructuredQuestion = false;
+        state.TurnEndedAt = null;
         state.TurnId = null;
         state.AbortReason = null;
         state.PendingCalls.Clear();
@@ -281,6 +282,7 @@ internal static class CodexRolloutParser
     static void CompleteTurn(CodexSessionState state, JsonElement payload)
     {
         state.HasSeenTurnEvent = true;
+        state.TurnEndedAt = state.LastActivity;
         state.TurnId = ReadString(payload, "turn_id") ?? ReadString(payload, "id");
         var error = GetProperty(payload, "error");
         if (error.ValueKind == JsonValueKind.Object)
@@ -304,6 +306,7 @@ internal static class CodexRolloutParser
     static void AbortTurn(CodexSessionState state, JsonElement payload)
     {
         state.HasSeenTurnEvent = true;
+        state.TurnEndedAt = state.LastActivity;
         state.Turn = CodexTurnStatus.Aborted;
         state.EndedWithQuestion = false;
         state.AskedStructuredQuestion = false;

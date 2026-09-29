@@ -129,6 +129,17 @@ public class ClaudeCodeTranscriptParserTests
     }
 
     [Fact]
+    public void Records_after_a_finished_turn_do_not_redate_it()
+    {
+        var (state, _) = ReadFixture("provisional-reopened-completed-session.jsonl");
+
+        var task = ClaudeCodeTaskMapper.Map(state, EvaluationTime, TaskTimings.Default);
+
+        Assert.Equal(AgentTaskStatus.Complete, task.Status);
+        Assert.Equal(DateTimeOffset.Parse("2026-01-01T10:00:05Z"), task.LastActivity);
+    }
+
+    [Fact]
     public void Pending_question_stays_attention_while_unanswered_and_uses_the_tool_id_as_evidence()
     {
         var (state, _) = ReadFixture("provisional-ask-user-question.jsonl");
