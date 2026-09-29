@@ -99,6 +99,7 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 _(Date — commit ID — what changed from PLAN.md and why.)_
 
+- 2026-09-29 — UI text fix (found installing `main` build `449782b`) — The signed-out messages told users to choose "Connect / sign in again", a menu item that no longer exists. They now name the real path, "Sign in › Claude" or "Sign in › ChatGPT / Codex". The smoke test now builds the expected path from the menu's own labels, so a renamed menu item fails CI instead of leaving a stale hint.
 - 2026-09-29 — P1.6 follow-up (D9 revised by Steve) — The strip can be dragged after the normal Windows drag threshold. Its monitor and position relative to that monitor's work area are saved, so docking, restart and display changes preserve the chosen placement. Clicking still toggles the pane. Windows drag behavior needs manual acceptance.
 
 - 2026-09-29 — P5.2 follow-up — Added tray pop-ups only for Working → Complete/Failed transitions, excluding stopped tasks. A separate setting controls finished-task pop-ups independently of attention pop-ups. Completion claims use the existing hashed notification state, and recovered terminal tasks are seeded without a pop-up. Windows acceptance still needs a manual check. Local build and tests could not run because this machine has only the .NET runtime, not the SDK.
