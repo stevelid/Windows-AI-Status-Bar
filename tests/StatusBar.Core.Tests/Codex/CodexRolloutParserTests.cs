@@ -39,7 +39,11 @@ public class CodexRolloutParserTests
         Assert.Equal(expectedConfidence, task.Confidence);
         Assert.Equal(expectedReason, task.AttentionReason);
         Assert.Equal(expectedDetail, task.StatusDetail);
-        if (fixture == "provisional-turn-running.jsonl") Assert.Equal("codex:thread-running", task.Id);
+        if (fixture == "provisional-turn-running.jsonl")
+        {
+            Assert.Equal("codex:thread-running", task.Id);
+            Assert.Equal("thread-running", task.SessionReference);
+        }
         if (fixture == "provisional-malformed-and-truncated.jsonl") Assert.Equal(1, drift.MalformedCount);
     }
 

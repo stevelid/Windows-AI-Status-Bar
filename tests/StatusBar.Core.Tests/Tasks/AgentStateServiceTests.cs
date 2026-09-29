@@ -176,22 +176,83 @@ public sealed class AgentStateServiceTests
     }
 
     [Fact]
-    public async Task Unknown_rows_can_be_dismissed_but_confirmed_attention_cannot()
+    public async Task Unknown_and_confirmed_attention_rows_can_be_dismissed()
     {
         var time = new FakeTimeProvider(Now);
         var provider = new TestProvider(AgentProvider.Claude);
         await using var service = new AgentStateService([provider], time, StateServiceOptions.Default);
-        var confirmedAttention = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.NeedsAttention, Now);
+        var confirmedAttention = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.NeedsAttention, Now) with
+        {
+            EvidenceKey = "permission:one",
+        };
 
         provider.Publish(TaskSnapshot(AgentProvider.Claude, [confirmedAttention]));
         service.Dismiss("claude:one");
-        Assert.Single(service.Current.Tasks);
+        Assert.Empty(service.Current.Tasks);
 
-        var unknown = CreateTask("claude:one", AgentProvider.Claude, AgentTaskStatus.Unknown, Now);
+        provider.Publish(TaskSnapshot(AgentProvider.Claude, [confirmedAttention with { LastActivity = Now.AddSeconds(1) }]));
+        Assert.Empty(service.Current.Tasks);
+
+        var unknown = confirmedAttention with { Status = AgentTaskStatus.Unknown };
         provider.Publish(TaskSnapshot(AgentProvider.Claude, [unknown]));
+        Assert.Single(service.Current.Tasks);
         service.Dismiss("claude:one");
 
         Assert.Empty(service.Current.Tasks);
+    }
+
+    [Theory]
+    [InlineData(AgentTaskStatus.Complete)]
+    [InlineData(AgentTaskStatus.Failed)]
+    [InlineData(AgentTaskStatus.Working)]
+    public async Task Dismissed_rows_stay_hidden_across_restart_but_new_activity_appears(AgentTaskStatus status)
+    {
+        var path = Path.Combine(Path.GetTempPath(), "statusbar-row-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        try
+        {
+            var stateFile = Path.Combine(path, "state.json");
+            var time = new FakeTimeProvider(Now);
+            var task = CreateTask("codex:synthetic", AgentProvider.Codex, status, Now);
+            var provider = new TestProvider(AgentProvider.Codex);
+            await using (var service = new AgentStateService([provider], time, StateServiceOptions.Default,
+                new DismissalStore(time, stateFile)))
+            {
+                provider.Publish(TaskSnapshot(AgentProvider.Codex, [task]));
+                service.Dismiss(task.Id);
+                provider.Publish(TaskSnapshot(AgentProvider.Codex, [task with { }]));
+                Assert.Empty(service.Current.Tasks);
+                Assert.Equal(0, service.Current.DoneCount);
+                Assert.Equal(0, service.Current.FailedCount);
+                Assert.Equal(0, service.Current.WorkingCount);
+            }
+            var restarted = new TestProvider(AgentProvider.Codex);
+            await using var recovered = new AgentStateService([restarted], time, StateServiceOptions.Default,
+                new DismissalStore(time, stateFile));
+            restarted.Publish(TaskSnapshot(AgentProvider.Codex, [task]));
+            Assert.Empty(recovered.Current.Tasks);
+            restarted.Publish(TaskSnapshot(AgentProvider.Codex, [task with { LastActivity = Now.AddSeconds(1) }]));
+            Assert.Single(recovered.Current.Tasks);
+            Assert.DoesNotContain(task.Id, File.ReadAllText(stateFile));
+            Assert.DoesNotContain(task.Title, File.ReadAllText(stateFile));
+        }
+        finally { Directory.Delete(path, recursive: true); }
+    }
+
+    [Fact]
+    public async Task Dismissing_work_does_not_hide_its_completion_or_suppress_its_finished_notification()
+    {
+        var time = new FakeTimeProvider(Now);
+        var provider = new TestProvider(AgentProvider.Codex);
+        await using var service = new AgentStateService([provider], time, StateServiceOptions.Default);
+        var finished = 0;
+        service.TaskFinished += _ => finished++;
+        var task = CreateTask("codex:synthetic", AgentProvider.Codex, AgentTaskStatus.Working, Now) with { EvidenceKey = "turn:one" };
+        provider.Publish(TaskSnapshot(AgentProvider.Codex, [task]));
+        service.Dismiss(task.Id);
+        provider.Publish(TaskSnapshot(AgentProvider.Codex, [task with { Status = AgentTaskStatus.Complete }]));
+        Assert.Equal(AgentTaskStatus.Complete, Assert.Single(service.Current.Tasks).Status);
+        Assert.Equal(1, finished);
     }
 
     [Fact]

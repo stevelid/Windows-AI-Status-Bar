@@ -10,7 +10,7 @@ A small strip docked above the Windows taskbar that shows, at a glance:
 GPT 62%  Claude 41%  ● 3  ⚠ 1
 ```
 
-Clicking the strip opens a small pane with reset times and the task list. Drag the strip to place it elsewhere on a monitor; the position is remembered. Clicking a task brings the relevant app to the front.
+Clicking the strip opens a small pane with reset times and the task list. Drag the strip to place it elsewhere on a monitor; the position is remembered. Clicking a task opens its conversation in Codex or Claude Desktop. Hover any task row and choose Dismiss to hide that update; new activity can bring it back. Dismiss does not stop work or answer a pending request. See [navigation limitations](docs/KNOWN_LIMITATIONS.md) for Claude terminal sessions and app-only fallback.
 
 ## Install
 

@@ -144,7 +144,7 @@ public sealed class AgentStateService : IAsyncDisposable
         }
     }
 
-    /// <summary>Hides the current dismissible evidence for a task for the configured dismissal lifetime.</summary>
+    /// <summary>Hides the current task update for the dismissal lifetime; new evidence remains visible.</summary>
     public void Dismiss(string taskId)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(taskId);
@@ -152,8 +152,8 @@ public sealed class AgentStateService : IAsyncDisposable
         lock (_gate)
         {
             var task = _current.Tasks.FirstOrDefault(candidate => candidate.Id == taskId);
-            if (_disposed || task is null || !CanDismiss(task)) return;
-            _dismissals.Dismiss(task.Id, EvidenceKeyFor(task));
+            if (_disposed || task is null) return;
+            _dismissals.Dismiss(task.Id, DismissalKeyFor(task));
             changed = RebuildIfChanged(_time.GetUtcNow());
         }
 
@@ -198,6 +198,7 @@ public sealed class AgentStateService : IAsyncDisposable
             if (_disposed || !_providers.ContainsKey(expectedProvider)) return;
 
             var previous = _current;
+            var previousProviderTasks = _snapshots[expectedProvider].Tasks;
             try
             {
                 _snapshots[expectedProvider] = CopySnapshot(snapshot, expectedProvider);
@@ -229,7 +230,7 @@ public sealed class AgentStateService : IAsyncDisposable
                 : _current.Tasks
                     .Where(task => (task.Status is AgentTaskStatus.Complete or AgentTaskStatus.Failed) &&
                         !string.Equals(task.StatusDetail, "Stopped", StringComparison.Ordinal) &&
-                        previous.Tasks.Any(old => old.Id == task.Id && old.Status == AgentTaskStatus.Working))
+                        previousProviderTasks.Any(old => old.Id == task.Id && old.Status == AgentTaskStatus.Working))
                     .Where(_notifications.ShouldNotifyCompletion)
                     .ToArray();
         }
@@ -283,7 +284,7 @@ public sealed class AgentStateService : IAsyncDisposable
     {
         var tasks = _snapshots.Values
             .SelectMany(snapshot => snapshot.Tasks)
-            .Where(task => (!CanDismiss(task) || !_dismissals.Contains(task.Id, EvidenceKeyFor(task))) && IsVisible(task, now))
+            .Where(task => !IsDismissed(task) && IsVisible(task, now))
             .GroupBy(task => task.Id, StringComparer.Ordinal)
             .Select(group => group
                 .OrderByDescending(task => task.LastActivity)
@@ -337,14 +338,20 @@ public sealed class AgentStateService : IAsyncDisposable
         _expiryTimer.Change(due, Timeout.InfiniteTimeSpan);
     }
 
-    static bool CanDismiss(AgentTask task) =>
-        task.Status == AgentTaskStatus.Unknown ||
-        task.Status == AgentTaskStatus.NeedsAttention && task.Confidence != StateConfidence.Confirmed;
-
     static string EvidenceKeyFor(AgentTask task) =>
         !string.IsNullOrWhiteSpace(task.EvidenceKey)
             ? task.EvidenceKey
             : task.Status + ":" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture);
+
+    // Scope each acknowledgement to its status as well as evidence: completing a dismissed
+    // question must show completion even if the provider retains the question's evidence key.
+    static string DismissalKeyFor(AgentTask task) => "row:" + task.Status + ":" + EvidenceKeyFor(task);
+
+    bool IsDismissed(AgentTask task) =>
+        _dismissals.Contains(task.Id, DismissalKeyFor(task)) ||
+        // Preserve attention/unknown acknowledgements saved by older versions.
+        (task.Status is AgentTaskStatus.NeedsAttention or AgentTaskStatus.Unknown &&
+            _dismissals.Contains(task.Id, EvidenceKeyFor(task)));
 
     static int TaskOrder(AgentTask task) => task.Status switch
     {
