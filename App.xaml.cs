@@ -23,6 +23,7 @@ public partial class App : System.Windows.Application
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
     AttentionNotifier? _attentionNotifier;
+    SystemEventsAdapter? _systemEvents;
     long? _detailsPaneClosedAtMs;
     ChatGptUsageService? _chatGptService;
     string? _chatGptServicePath;
@@ -241,6 +242,9 @@ public partial class App : System.Windows.Application
         _usageMonitor.Start();
 
         ConfigureAgentTaskService();
+        _systemEvents = new SystemEventsAdapter(
+            () => _ = ReconcileTasksQuietlyAsync(),
+            () => _usageMonitor?.RefreshNow());
 
         _ = AutoCheckUpdatesAsync();
     }
@@ -556,6 +560,8 @@ public partial class App : System.Windows.Application
         if (_exitStarted) return;
         _exitStarted = true;
         Log.Write("使用者選擇結束");
+        _systemEvents?.Dispose();
+        _systemEvents = null;
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
         if (_agentStateService is not null)
@@ -765,6 +771,20 @@ public partial class App : System.Windows.Application
         provider.Trace += OnCodexTrace;
         _codexTaskProvider = provider;
         return provider;
+    }
+
+    async Task ReconcileTasksQuietlyAsync()
+    {
+        var service = _agentStateService;
+        if (service is null) return;
+        try
+        {
+            await service.ReconcileAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Task reconcile after system event failed", ex);
+        }
     }
 
     static void OnProviderSupervision(string message) => Log.Write("Supervisor: " + message);
