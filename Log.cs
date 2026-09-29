@@ -9,6 +9,8 @@ public static class Log
     static readonly object Gate = new();
     static string Dir => AppPaths.DataDir;
     public static string FilePath => Path.Combine(Dir, "log.txt");
+    static string PreviousFilePath => Path.Combine(Dir, "log.old.txt");
+    const long MaxBytes = 1024 * 1024;
 
     public static void Write(string message)
     {
@@ -17,9 +19,10 @@ public static class Log
             lock (Gate)
             {
                 Directory.CreateDirectory(Dir);
-                // keep the log from growing unbounded
-                if (File.Exists(FilePath) && new FileInfo(FilePath).Length > 512 * 1024)
-                    File.Delete(FilePath);
+                // Keep the log bounded but keep one previous file, so a problem that happened just
+                // before a roll-over is still in log.old.txt.
+                if (File.Exists(FilePath) && new FileInfo(FilePath).Length > MaxBytes)
+                    File.Move(FilePath, PreviousFilePath, overwrite: true);
                 File.AppendAllText(FilePath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {Sanitize(message)}\r\n");
             }
         }

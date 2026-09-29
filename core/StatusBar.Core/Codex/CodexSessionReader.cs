@@ -32,6 +32,12 @@ internal sealed class CodexSessionReader : IDisposable
         _titles = new CodexTitleResolver(new IncrementalJsonlReader(paths.SessionIndexPath), _drift);
     }
 
+    /// <summary>
+    /// Content-free debug lines (short session ids, turn states, counts). Never includes titles,
+    /// prompts, paths or message text.
+    /// </summary>
+    internal event Action<string>? Trace;
+
     internal int TrackedFiles => _entries.Count;
     internal int ReadFailureCount => Volatile.Read(ref _readFailureCount);
     internal long ParseErrorCount => _drift.MalformedCount;
@@ -64,21 +70,28 @@ internal sealed class CodexSessionReader : IDisposable
                 if (_entries.ContainsKey(path)) continue;
                 try
                 {
-                    _entries[path] = CreateEntry(path, now);
+                    var created = CreateEntry(path, now);
+                    _entries[path] = created;
+                    Emit($"session {ShortId(created.State)} tracked: {Describe(created.State)}, meta={(created.State.ThreadId is null ? "no" : "yes")}");
                 }
-                catch (IOException)
+                catch (IOException ex)
                 {
                     Interlocked.Increment(ref _readFailureCount);
+                    Emit($"session read failed on discovery ({ex.GetType().Name})");
                 }
-                catch (UnauthorizedAccessException)
+                catch (UnauthorizedAccessException ex)
                 {
                     Interlocked.Increment(ref _readFailureCount);
+                    Emit($"session read failed on discovery ({ex.GetType().Name})");
                 }
             }
 
             var discoveredSet = new HashSet<string>(discovered, StringComparer.OrdinalIgnoreCase);
             foreach (var stale in _entries.Keys.Where(path => !discoveredSet.Contains(path)).ToArray())
+            {
+                Emit($"session {ShortId(_entries[stale].State)} no longer recent; dropped");
                 _entries.Remove(stale);
+            }
 
             _lastDiscovery = now;
             _hasDiscovery = true;
@@ -93,20 +106,29 @@ internal sealed class CodexSessionReader : IDisposable
                 var result = entry.Reader.ReadNewLines();
                 if (result.Reset)
                 {
-                    _entries[path] = CreateEntry(path, now);
+                    var recreated = CreateEntry(path, now);
+                    _entries[path] = recreated;
+                    Emit($"session {ShortId(recreated.State)} file reset; re-read: {Describe(recreated.State)}");
                     continue;
                 }
 
+                if (result.Lines.Count == 0) continue;
+                var before = Describe(entry.State);
                 foreach (var line in result.Lines)
                     CodexRolloutParser.Apply(entry.State, line, fallbackTime, _drift);
+                var after = Describe(entry.State);
+                if (after != before)
+                    Emit($"session {ShortId(entry.State)} {before} -> {after} ({result.Lines.Count} new records)");
             }
-            catch (IOException)
+            catch (IOException ex)
             {
                 Interlocked.Increment(ref _readFailureCount);
+                Emit($"session {ShortId(entry.State)} read failed ({ex.GetType().Name})");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
                 Interlocked.Increment(ref _readFailureCount);
+                Emit($"session {ShortId(entry.State)} read failed ({ex.GetType().Name})");
             }
         }
 
@@ -122,7 +144,7 @@ internal sealed class CodexSessionReader : IDisposable
 
     SessionEntry CreateEntry(string path, DateTimeOffset now)
     {
-        var state = new CodexSessionState();
+        var state = new CodexSessionState { FileKey = FileKeyFromPath(path) };
         var fallbackTime = GetFileTime(path, now);
         var tail = TailReader.ReadWithOffset(path, InitialTailBytes);
         foreach (var line in ReadHeadLines(path, tail.FirstLineOffset))
@@ -133,6 +155,34 @@ internal sealed class CodexSessionReader : IDisposable
         var reader = new IncrementalJsonlReader(path);
         reader.StartAt(tail.Offset);
         return new SessionEntry(state, reader);
+    }
+
+    void Emit(string message)
+    {
+        try { Trace?.Invoke(message); }
+        catch { /* logging must never break collection */ }
+    }
+
+    // First 8 characters of the thread id (or file uuid): enough to correlate lines, not content.
+    // Last eight characters: thread ids are UUIDv7, so the leading characters are a timestamp
+    // shared by sessions started close together, while the tail is random. Matches TaskChangeLog.
+    internal static string ShortId(CodexSessionState state)
+    {
+        var key = state.ThreadId ?? state.FileKey ?? "unknown";
+        return key.Length > 8 ? key[^8..] : key;
+    }
+
+    // Turn state, question flag and pending-call count only.
+    static string Describe(CodexSessionState state) =>
+        $"turn={state.Turn}, question={(state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "yes" : "no")}, pending={state.PendingCalls.Count}";
+
+    // Rollout files are named rollout-<timestamp>-<uuid>.jsonl; the uuid matches the thread id.
+    internal static string FileKeyFromPath(string path)
+    {
+        var stem = Path.GetFileNameWithoutExtension(path);
+        return stem.Length >= 36 && Guid.TryParse(stem.AsSpan(stem.Length - 36), out _)
+            ? stem[^36..]
+            : stem;
     }
 
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)

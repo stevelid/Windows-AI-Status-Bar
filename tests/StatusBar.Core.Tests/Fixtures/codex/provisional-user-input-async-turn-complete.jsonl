@@ -1,0 +1,6 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-card"}}
+{"timestamp":"2026-01-01T12:00:00Z","type":"turn_context","payload":{"approval_policy":"never"}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-card","name":"request_user_input_async","arguments":"{\"questions\":[{\"question\":\"Which format would you like?\",\"options\":[{\"label\":\"PDF\"},{\"label\":\"Word\"}]}]}"}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-card","output":"Question posted."}}
+{"timestamp":"2026-01-01T12:00:03Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I have posted the options."}]}}
+{"timestamp":"2026-01-01T12:00:04Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-card","last_agent_message":"I have posted the options."}}

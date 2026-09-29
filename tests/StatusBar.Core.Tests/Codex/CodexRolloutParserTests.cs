@@ -17,6 +17,9 @@ public class CodexRolloutParserTests
     [InlineData("provisional-pending-user-input.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your input", null)]
     [InlineData("provisional-approval-resolved.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-approval-policy-never.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-user-input-async-turn-complete.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your answer", null)]
+    [InlineData("provisional-user-input-async-answered.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
+    [InlineData("provisional-user-input-policy-never.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Waiting for your input", null)]
     [InlineData("provisional-malformed-and-truncated.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-paginated-turn.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
     [InlineData("provisional-turn-complete-with-question.jsonl", AgentTaskStatus.NeedsAttention, StateConfidence.Inferred, "Asked you a question", null)]
@@ -55,6 +58,21 @@ public class CodexRolloutParserTests
 
         Assert.Single(state.PendingCalls);
         Assert.Equal(CodexPendingKind.Approval, state.PendingCalls["call-approval"].Kind);
+    }
+
+    [Fact]
+    public void Sessions_without_session_meta_get_distinct_ids_from_their_file_names()
+    {
+        var first = CodexSessionReader.FileKeyFromPath("rollout-2026-09-28T10-00-00-0f8fad5b-d9cb-469f-a165-70867728950e.jsonl");
+        var second = CodexSessionReader.FileKeyFromPath("rollout-2026-09-28T10-05-00-7c9e6679-7425-40de-944b-e07fc1f90ae7.jsonl");
+        var stateA = new CodexSessionState { FileKey = first };
+        var stateB = new CodexSessionState { FileKey = second };
+
+        var idA = CodexTaskMapper.Map(stateA, EvaluationTime, TaskTimings.Default).Id;
+        var idB = CodexTaskMapper.Map(stateB, EvaluationTime, TaskTimings.Default).Id;
+
+        Assert.Equal("codex:0f8fad5b-d9cb-469f-a165-70867728950e", idA);
+        Assert.NotEqual(idA, idB);
     }
 
     [Fact]
