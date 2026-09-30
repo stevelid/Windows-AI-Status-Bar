@@ -12,6 +12,7 @@ public sealed class UsageMonitor : IAsyncDisposable
     readonly Dictionary<UsageSource, ProviderRuntime> _runtimes = new();
     readonly TimeProvider _time;
     readonly UsageBurnTracker _burn = new();
+    readonly UsageRateHistory? _rates;
     readonly Func<TimeSpan> _baseInterval;
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _current;
     bool _started;
@@ -30,7 +31,11 @@ public sealed class UsageMonitor : IAsyncDisposable
     }
 
     /// <summary>Creates a monitor with one initial Loading snapshot per provider.</summary>
-    public UsageMonitor(IEnumerable<IUsageProvider> providers, TimeProvider time, Func<TimeSpan> baseInterval)
+    public UsageMonitor(
+        IEnumerable<IUsageProvider> providers,
+        TimeProvider time,
+        Func<TimeSpan> baseInterval,
+        UsageRateHistory? rates = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(time);
@@ -38,6 +43,7 @@ public sealed class UsageMonitor : IAsyncDisposable
 
         _time = time;
         _baseInterval = baseInterval;
+        _rates = rates;
         _ = ReadBaseInterval();
 
         var initial = new Dictionary<UsageSource, UsageSnapshot>();
@@ -273,6 +279,7 @@ public sealed class UsageMonitor : IAsyncDisposable
         DateTimeOffset now)
     {
         _burn.Record(source, windows, now);
+        _rates?.Record(source, windows, now);
         var runways = new Dictionary<string, UsageRunway>(StringComparer.Ordinal);
         foreach (var window in windows)
         {

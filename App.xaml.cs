@@ -27,6 +27,7 @@ public partial class App : System.Windows.Application
     DetailsPaneWindow? _detailsPane;
     TaskHistory _history = null!;
     TurnEndMonitor? _turnEnds;
+    UsageRateHistory _usageRates = null!;
     HttpClient? _jevHttp;
     JevTurnEndClassifier? _jevClassifier;
     string? _jevKeyInUse;
@@ -179,6 +180,7 @@ public partial class App : System.Windows.Application
     {
         _settings = Settings.Load();
         _history = new TaskHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "history.json"), _settings.KeepHistory);
+        _usageRates = new UsageRateHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "usage-history.json"), _settings.SaveUsageHistory);
         _turnEnds = new TurnEndMonitor(
             () => _jevClassifier,
             Log.Write,
@@ -258,7 +260,8 @@ public partial class App : System.Windows.Application
                 new CodexUsageProvider(GetChatGptService),
             ],
             TimeProvider.System,
-            () => TimeSpan.FromSeconds(BaseIntervalSec));
+            () => TimeSpan.FromSeconds(BaseIntervalSec),
+            _usageRates);
         _usageMonitor.Changed += OnUsageChanged;
         UpdateStrip();
         UpdateTray();
@@ -526,6 +529,7 @@ public partial class App : System.Windows.Application
         if (_detailsPane?.IsVisible == true) _detailsPane.ApplyAppearance();
         _dockController?.Redock();
         _history.SetPersistence(_settings.KeepHistory);
+        _usageRates.SetPersistence(_settings.SaveUsageHistory);
         ApplyJevSettings();
         ConfigureAgentTaskService();
         UpdateTray();
@@ -938,7 +942,7 @@ public partial class App : System.Windows.Application
         if (_detailsPaneClosedAtMs is long closedAt &&
             Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
-        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory);
+        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory, _usageRates);
         _detailsPane.ClearFinishedRequested += () => _agentStateService?.DismissFinished();
         _detailsPane.OpenHistoryTaskRequested += OnFocusTaskRequested;
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;

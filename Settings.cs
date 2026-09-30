@@ -40,6 +40,8 @@ public class Settings
     public bool DemoTasks { get; set; } = false;
     /// <summary>Saves the completed-task history, including short titles, so it survives a restart.</summary>
     public bool KeepHistory { get; set; } = false;
+    /// <summary>Saves the recent usage readings (percentages and times only) so the pane's usage chart survives a restart.</summary>
+    public bool SaveUsageHistory { get; set; } = true;
     /// <summary>Checks each finished turn's final message with Jev and logs how it compares with the built-in rules. Off by default; needs an API key.</summary>
     public bool JevEnabled { get; set; } = false;
     /// <summary>When the Jev check is on: let its answer decide whether a finished turn asked a question (and show review hints). Off = log only, the built-in rules decide.</summary>

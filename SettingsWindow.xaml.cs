@@ -44,6 +44,7 @@ public partial class SettingsWindow : Window
         FinishedNotificationsCheckBox.IsChecked = _settings.FinishedTaskNotificationsEnabled;
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
         KeepHistoryCheckBox.IsChecked = _settings.KeepHistory;
+        SaveUsageHistoryCheckBox.IsChecked = _settings.SaveUsageHistory;
         JevEnabledCheckBox.IsChecked = _settings.JevEnabled;
         JevAffectsCheckBox.IsChecked = _settings.JevAffectsState;
         RecentCompletedSlider.Value = _settings.RecentlyCompletedMinutes;
@@ -204,6 +205,13 @@ public partial class SettingsWindow : Window
         var saved = JevKeyStore.Exists;
         JevStatus.Text = L10n.T(saved ? "settings_jev_key_saved" : "settings_jev_key_missing");
         JevRemoveButton.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    void OnSaveUsageHistoryChanged(object sender, RoutedEventArgs e)
+    {
+        if (_initializing) return;
+        _settings.SaveUsageHistory = SaveUsageHistoryCheckBox.IsChecked == true;
+        SaveAndApply();
     }
 
     void OnKeepHistoryChanged(object sender, RoutedEventArgs e)
@@ -427,6 +435,8 @@ public partial class SettingsWindow : Window
         FinishedNotificationsCheckBox.Content = L10n.T("settings_finished_notifications");
         DemoTasksCheckBox.Content = L10n.T("settings_demo_tasks");
         KeepHistoryCheckBox.Content = L10n.T("settings_keep_history");
+        SaveUsageHistoryCheckBox.Content = L10n.T("settings_save_usage_history");
+        SaveUsageHistoryHint.Text = L10n.T("settings_save_usage_history_hint");
         JevHeading.Text = L10n.T("settings_section_jev");
         JevEnabledCheckBox.Content = L10n.T("settings_jev_enabled");
         JevAffectsCheckBox.Content = L10n.T("settings_jev_affects");
@@ -468,13 +478,14 @@ public partial class SettingsWindow : Window
         FinishedNotificationsCheckBox.Foreground = fg;
         DemoTasksCheckBox.Foreground = fg;
         KeepHistoryCheckBox.Foreground = fg;
+        SaveUsageHistoryCheckBox.Foreground = fg;
         JevEnabledCheckBox.Foreground = fg;
         JevAffectsCheckBox.Foreground = fg;
         JevKeyLabel.Foreground = fg;
         JevStatus.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
         ClaudeHooksCheckBox.Foreground = fg;
         var subtle = ThemeManager.Brush(ThemeManager.SubtleText);
-        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint, KeepHistoryHint, JevHint })
+        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint, KeepHistoryHint, SaveUsageHistoryHint, JevHint })
             hint.Foreground = subtle;
 
         var accent = ThemeManager.Brush(ThemeManager.ColorForAllowance(StatusBar.Core.Usage.AllowanceLevel.Normal));

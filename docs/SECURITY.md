@@ -8,6 +8,7 @@
 | ChatGPT/Codex tokens | Codex-managed storage | Owned by official Codex | Official Codex process only |
 | Widget settings | `%APPDATA%\WindowsAIStatusBar\settings.json` | Normal user file permissions | Never |
 | Widget log | `%APPDATA%\WindowsAIStatusBar\log.txt` | Normal user file permissions | Never automatically |
+| Recent usage readings (on by default; "Save usage readings" in Settings) | `%APPDATA%\WindowsAIStatusBar\usage-history.json`: the remaining percentage of each five-hour window and the time of each reading, for the last 3 hours | Normal user file permissions; deleted when the setting is turned off | Never |
 | TypeSafe (Jev) API key (only if you save one) | `%APPDATA%\WindowsAIStatusBar\jev.key` | Windows DPAPI, current user | TypeSafe API (`api.typesafe.ai`) |
 | Tail of a finished turn's final message (only while the AI check is on) | Memory only, up to 1,500 characters, never logged or saved | Not stored | TypeSafe API, one request per finished turn (TypeSafe states it does not retain or train on it) |
 | Completed-task history (only if "Keep completed history after restart" is on) | `%APPDATA%\WindowsAIStatusBar\history.json`: short task titles, provider, finish time and the session reference used to reopen the task, kept 7 days | Normal user file permissions; deleted when the setting is turned off | Never |

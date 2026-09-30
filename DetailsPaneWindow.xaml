@@ -1,6 +1,7 @@
 <Window x:Class="ClaudeUsageWidget.DetailsPaneWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ClaudeUsageWidget"
         Title="Windows AI Status Details"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ResizeMode="NoResize"
@@ -18,12 +19,14 @@
             <StackPanel x:Name="ContentPanel">
                 <TextBlock x:Name="CodexHeading" FontSize="11" FontWeight="Bold"
                            Margin="0,0,0,5"/>
+                <local:RateStrip x:Name="CodexRate" Height="24" Margin="5,0,5,3" Visibility="Collapsed"/>
                 <StackPanel x:Name="CodexUsageRows"/>
                 <TextBlock x:Name="CodexHealth" FontSize="10" TextWrapping="Wrap"
                            Margin="0,0,0,6"/>
 
                 <TextBlock x:Name="ClaudeHeading" FontSize="11" FontWeight="Bold"
                            Margin="0,7,0,5"/>
+                <local:RateStrip x:Name="ClaudeRate" Height="24" Margin="5,0,5,3" Visibility="Collapsed"/>
                 <StackPanel x:Name="ClaudeUsageRows"/>
                 <TextBlock x:Name="ClaudeHealth" FontSize="10" TextWrapping="Wrap"
                            Margin="0,0,0,6"/>
