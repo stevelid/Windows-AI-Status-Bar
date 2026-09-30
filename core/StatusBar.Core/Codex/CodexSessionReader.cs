@@ -188,6 +188,8 @@ internal sealed class CodexSessionReader : IDisposable
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)
     {
         var mapped = _entries.Values
+            // ⚠️ A-X6 Codex's approval-review ("guardian") sessions are internal safety checks, not tasks.
+            .Where(entry => !entry.State.IsGuardianReview)
             .Select(entry => (entry.State, Task: CodexTaskMapper.Map(entry.State, now, _timings)))
             .Select(pair => (pair.State, Task: pair.Task with { Title = _titles.Resolve(pair.State) }))
             .ToList();

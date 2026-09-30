@@ -178,6 +178,35 @@ public sealed class CodexTaskProviderTests
         Assert.Equal("Waiting for your input", task.AttentionReason);
     }
 
+    [Fact]
+    public async Task Guardian_review_sessions_are_hidden_and_spawned_subagents_fold_into_their_parent()
+    {
+        using var temp = new TempRoot();
+        var time = new FakeTimeProvider(Now);
+        var paths = CodexPaths.Resolve(overrideHome: temp.Path);
+        WriteSession(SessionPath(paths, time, "parent.jsonl"), "thread-parent", Now.AddSeconds(-5));
+        WriteRealShapeSession(SessionPath(paths, time, "guardian.jsonl"),
+            "{\"subagent\":{\"other\":\"guardian\"}}", "guardian_review", Now.AddSeconds(-3));
+        WriteRealShapeSession(SessionPath(paths, time, "spawned.jsonl"),
+            "{\"subagent\":{\"thread_spawn\":{\"parent_thread_id\":\"thread-parent\"}}}", "subagent", Now.AddSeconds(-2));
+
+        await using var provider = new CodexTaskProvider(paths, time, watchFiles: false);
+        await provider.ReconcileAsync();
+
+        var task = Assert.Single(provider.Current.Tasks);
+        Assert.Equal("codex:thread-parent", task.Id);
+        Assert.Equal(AgentTaskStatus.Working, task.Status);
+    }
+
+    static void WriteRealShapeSession(string path, string sourceJson, string threadSource, DateTimeOffset timestamp)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var id = "thread-" + Path.GetFileNameWithoutExtension(path);
+        using var writer = new StreamWriter(path, append: false, Utf8WithoutBom);
+        writer.WriteLine($"{{\"timestamp\":\"{timestamp:O}\",\"type\":\"session_meta\",\"payload\":{{\"id\":\"{id}\",\"source\":{sourceJson},\"thread_source\":\"{threadSource}\"}}}}");
+        writer.WriteLine(EventRecord("task_started", timestamp));
+    }
+
     static void WriteSession(string path, string threadId, DateTimeOffset timestamp, int paddingBytes = 0)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

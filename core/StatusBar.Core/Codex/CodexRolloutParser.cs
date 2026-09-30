@@ -83,10 +83,27 @@ internal static class CodexRolloutParser
     {
         // ⚠️ A-X1 The rollout's session metadata carries its thread and working-directory fields.
         state.ThreadId = ReadString(payload, "id");
-        state.Source = ReadString(payload, "source");
-        if (IsSubAgent(state.Source))
+        var source = GetProperty(payload, "source");
+        state.Source = source.ValueKind == JsonValueKind.String ? source.GetString() : null;
+
+        // ⚠️ A-X6 Confirmed on Steve's machine 2026-09-30: a sub-agent's source is an object,
+        // {"subagent":{"thread_spawn":{"parent_thread_id":…}}}, and Codex's approval reviewer is
+        // {"subagent":{"other":"guardian"}} with thread_source "guardian_review". Neither is a task
+        // Steve started; the reviewer is hidden and a spawned sub-agent folds into its parent.
+        var subagent = GetObject(source, "subagent");
+        if (subagent.ValueKind == JsonValueKind.Object)
         {
-            // ⚠️ A-X6 Sub-agent parent metadata is not yet confirmed by live recon.
+            state.Source = "sub-agent";
+            state.ParentThreadId = ReadString(GetObject(subagent, "thread_spawn"), "parent_thread_id");
+            if (string.Equals(ReadString(subagent, "other"), "guardian", StringComparison.Ordinal))
+                state.IsGuardianReview = true;
+        }
+        if (string.Equals(ReadString(payload, "thread_source"), "guardian_review", StringComparison.Ordinal))
+            state.IsGuardianReview = true;
+
+        if (IsSubAgent(state.Source) && state.ParentThreadId is null)
+        {
+            // Older rollout shape (and the provisional fixtures): a flat string source and parent id.
             state.ParentThreadId = ReadString(payload, "parent_thread_id") ?? ReadString(payload, "parentThreadId");
         }
 

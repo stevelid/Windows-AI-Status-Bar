@@ -1,0 +1,2 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"session_meta","payload":{"id":"thread-child","originator":"placeholder_originator","source":{"subagent":{"thread_spawn":{"parent_thread_id":"thread-parent","depth":1}}},"thread_source":"subagent"}}
+{"timestamp":"2026-01-01T12:00:01Z","type":"event_msg","payload":{"type":"task_started"}}
