@@ -9,8 +9,8 @@ public sealed class TurnVerdictPolicyTests
 {
     static readonly DateTimeOffset At = DateTimeOffset.Parse("2030-01-01T12:00:00Z");
 
-    static TurnVerdict Verdict(double asks, double review = 0, double followUp = 0) =>
-        new(TurnVerdictPolicy.EvidenceKeyFor(At), new TurnEndJudgment(asks, review, followUp, 0.5, 1, 1));
+    static TurnVerdict Verdict(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer) =>
+        new(TurnVerdictPolicy.EvidenceKeyFor(At), new TurnEndJudgment(TurnEndKind.Finished, alertKind, alert, report, offer, 0, 0, 1, 1));
 
     [Theory]
     [InlineData(true, false)]
@@ -18,7 +18,7 @@ public sealed class TurnVerdictPolicyTests
     public void Without_captured_text_the_rules_decide(bool rules, bool _)
     {
         Assert.Equal(rules, TurnVerdictPolicy.AsksUser(rules, null, null, At));
-        Assert.Null(TurnVerdictPolicy.Detail(null, Verdict(0.1, review: 0.9)));
+        Assert.Null(TurnVerdictPolicy.Detail(null, Verdict(0.1, report: 0.9)));
     }
 
     [Fact]
@@ -48,20 +48,52 @@ public sealed class TurnVerdictPolicyTests
     }
 
     [Fact]
+    public void Broadly_asking_for_input_does_not_raise_an_alert_unless_the_assistant_is_stopped()
+    {
+        var reportWithNextSteps = new TurnVerdict(
+            TurnVerdictPolicy.EvidenceKeyFor(At),
+            new TurnEndJudgment(TurnEndKind.ReportWithNextSteps, TurnEndKind.WaitingForAnswer, Alert: 0.14, Report: 0.9, Offer: 0.02, Blocked: 0.29, Asks: 0.92, 1, 1));
+
+        Assert.False(TurnVerdictPolicy.AsksUser(false, At, reportWithNextSteps, At.AddSeconds(1)));
+        Assert.Equal(TurnVerdictPolicy.NextStepsDetail, TurnVerdictPolicy.Detail(At, reportWithNextSteps));
+    }
+
+    [Theory]
+    [InlineData(TurnEndKind.WaitingForAnswer, TurnVerdictPolicy.AnswerReason)]
+    [InlineData(TurnEndKind.WaitingForApproval, TurnVerdictPolicy.ApprovalReason)]
+    [InlineData(TurnEndKind.Stuck, TurnVerdictPolicy.StuckReason)]
+    public void The_alert_wording_follows_the_kind_of_stop(TurnEndKind kind, string expected)
+    {
+        Assert.Equal(expected, TurnVerdictPolicy.AttentionReason(At, Verdict(0.9, alertKind: kind)));
+        Assert.True(TurnVerdictPolicy.IsQuestionReason(expected));
+    }
+
+    [Fact]
+    public void Without_an_answer_the_rules_wording_is_used_and_it_still_counts_as_a_question()
+    {
+        Assert.Equal(TurnVerdictPolicy.RulesQuestionReason, TurnVerdictPolicy.AttentionReason(At, null));
+        Assert.Equal(TurnVerdictPolicy.RulesQuestionReason, TurnVerdictPolicy.AttentionReason(null, Verdict(0.9)));
+        Assert.True(TurnVerdictPolicy.IsQuestionReason(TurnVerdictPolicy.RulesQuestionReason));
+        Assert.False(TurnVerdictPolicy.IsQuestionReason("Permission requested"));
+        Assert.False(TurnVerdictPolicy.IsQuestionReason(null));
+    }
+
+    [Fact]
     public void An_answer_for_an_earlier_turn_is_ignored()
     {
-        var stale = new TurnVerdict(TurnVerdictPolicy.EvidenceKeyFor(At.AddMinutes(-5)), new TurnEndJudgment(0.9, 0.9, 0.9, 0, 1, 1));
+        var stale = new TurnVerdict(TurnVerdictPolicy.EvidenceKeyFor(At.AddMinutes(-5)), Verdict(0.9, report: 0.9).Judgment);
 
         Assert.Null(TurnVerdictPolicy.AsksUser(false, At, stale, At.AddSeconds(1)));
         Assert.Null(TurnVerdictPolicy.Detail(At, stale));
     }
 
     [Theory]
-    [InlineData(0.1, 0.9, 0.9, TurnVerdictPolicy.ReviewDetail)]
+    [InlineData(0.1, 0.9, 0.9, TurnVerdictPolicy.NextStepsDetail)]
     [InlineData(0.1, 0.59, 0.6, TurnVerdictPolicy.FollowUpDetail)]
     [InlineData(0.1, 0.2, 0.2, null)]
-    public void Review_outranks_follow_up_and_both_need_the_threshold(double asks, double review, double followUp, string? expected) =>
-        Assert.Equal(expected, TurnVerdictPolicy.Detail(At, Verdict(asks, review, followUp)));
+    [InlineData(0.9, 0.9, 0.9, null)]
+    public void Next_steps_outrank_an_offer_both_need_the_threshold_and_a_stopped_turn_gets_no_hint(double alert, double report, double offer, string? expected) =>
+        Assert.Equal(expected, TurnVerdictPolicy.Detail(At, Verdict(alert, report, offer)));
 }
 
 [Collection("FinalMessageCapture")]
@@ -81,7 +113,8 @@ public sealed class TurnVerdictProviderTests : IDisposable
 
     static string Now() => DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
-    static TurnEndJudgment Judgment(double asks, double review = 0, double followUp = 0) => new(asks, review, followUp, 0.5, 1, 1);
+    static TurnEndJudgment Judgment(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer) =>
+        new(TurnEndKind.Finished, alertKind, alert, report, offer, alert, alert, 1, 1);
 
     [Theory]
     [InlineData(Question, 0.95, AgentTaskStatus.NeedsAttention)]
@@ -102,7 +135,7 @@ public sealed class TurnVerdictProviderTests : IDisposable
 
         var task = Assert.Single(provider.Current.Tasks);
         Assert.Equal(expected, task.Status);
-        if (expected == AgentTaskStatus.NeedsAttention) Assert.Equal("Asked you a question", task.AttentionReason);
+        if (expected == AgentTaskStatus.NeedsAttention) Assert.Equal(TurnVerdictPolicy.AnswerReason, task.AttentionReason);
         await provider.DisposeAsync();
     }
 
@@ -122,17 +155,17 @@ public sealed class TurnVerdictProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task Codex_shows_a_review_hint_on_a_finished_turn()
+    public async Task Codex_shows_a_next_steps_hint_on_a_finished_turn()
     {
         var (provider, file, seen) = await StartCodexAsync();
         Append(file, CodexComplete(Statement));
         await provider.ReconcileAsync();
 
-        await provider.ApplyTurnJudgmentAsync(Assert.Single(seen), Judgment(asks: 0.05, review: 0.9));
+        await provider.ApplyTurnJudgmentAsync(Assert.Single(seen), Judgment(alert: 0.05, report: 0.9));
 
         var task = Assert.Single(provider.Current.Tasks);
         Assert.Equal(AgentTaskStatus.Complete, task.Status);
-        Assert.Equal(TurnVerdictPolicy.ReviewDetail, task.StatusDetail);
+        Assert.Equal(TurnVerdictPolicy.NextStepsDetail, task.StatusDetail);
         await provider.DisposeAsync();
     }
 

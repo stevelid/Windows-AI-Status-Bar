@@ -247,7 +247,8 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                 "claude:" + ShortId(state),
                 StatusBar.Core.Judgment.TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithQuestion ? "question" : "none",
-                text));
+                text,
+                state.FinalMessageStart));
         }
         catch (Exception)
         {

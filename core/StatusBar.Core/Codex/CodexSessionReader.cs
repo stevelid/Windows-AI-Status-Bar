@@ -189,7 +189,8 @@ internal sealed class CodexSessionReader : IDisposable
                 "codex:" + ShortId(state),
                 TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "question" : "none",
-                text));
+                text,
+                state.FinalMessageStart));
         }
         catch (Exception)
         {

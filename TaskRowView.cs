@@ -136,13 +136,14 @@ internal sealed class TaskRowView : Border
         {
             AgentTaskStatus.NeedsAttention => task.AttentionReason,
             AgentTaskStatus.Failed => task.StatusDetail,
-            AgentTaskStatus.Complete when task.StatusDetail is StatusBar.Core.Judgment.TurnVerdictPolicy.ReviewDetail
+            AgentTaskStatus.Complete when task.StatusDetail is StatusBar.Core.Judgment.TurnVerdictPolicy.NextStepsDetail
                 or StatusBar.Core.Judgment.TurnVerdictPolicy.FollowUpDetail => task.StatusDetail,
             _ => null,
         };
         _reason.Text = reason ?? "";
+        // Next-step and follow-up hints stay grey: only a stopped assistant is amber.
         _reason.Foreground = ThemeManager.Brush(
-            task.Status == AgentTaskStatus.NeedsAttention || task.StatusDetail == StatusBar.Core.Judgment.TurnVerdictPolicy.ReviewDetail
+            task.Status == AgentTaskStatus.NeedsAttention
                 ? (ThemeManager.IsLight ? Color.FromRgb(0x9A, 0x62, 0x10) : Color.FromRgb(0xFF, 0xD0, 0x75))
                 : ThemeManager.SubtleText);
         _reason.Visibility = string.IsNullOrWhiteSpace(reason) ? Visibility.Collapsed : Visibility.Visible;

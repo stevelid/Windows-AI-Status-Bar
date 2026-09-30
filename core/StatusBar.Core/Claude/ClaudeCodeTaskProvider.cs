@@ -320,7 +320,8 @@ public sealed class ClaudeCodeTaskProvider : IAgentTaskProvider
                 };
             case "Stop":
             case "SessionEnd":
-                if (transcriptTask is { Status: AgentTaskStatus.NeedsAttention, AttentionReason: "Asked you a question" })
+                if (transcriptTask is { Status: AgentTaskStatus.NeedsAttention } &&
+                    StatusBar.Core.Judgment.TurnVerdictPolicy.IsQuestionReason(transcriptTask.AttentionReason))
                     return transcriptTask;
                 // ⚠️ A-K6 Stop fires when the turn ends even though background agents are still running.
                 if (hookEvent.Event == "Stop" &&

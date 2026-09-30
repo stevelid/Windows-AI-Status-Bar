@@ -171,6 +171,7 @@ internal static class ClaudeCodeTranscriptParser
         state.TurnEndedAt = null;
         state.EndedWithQuestion = false;
         state.FinalMessageTail = null;
+        state.FinalMessageStart = null;
         state.FinalMessageAt = null;
         state.Verdict = null;
         state.PendingTools.Clear();
@@ -254,6 +255,7 @@ internal static class ClaudeCodeTranscriptParser
         state.TurnEndedAt = null;
         state.EndedWithQuestion = false;
         state.FinalMessageTail = null;
+        state.FinalMessageStart = null;
         state.FinalMessageAt = null;
         state.Verdict = null;
         var stopReason = ReadString(message, "stop_reason");
@@ -265,6 +267,7 @@ internal static class ClaudeCodeTranscriptParser
             state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(lastText);
             // Only when the user has switched the AI check on: keep the tail in memory for that check.
             state.FinalMessageTail = FinalMessageCapture.Tail(lastText);
+            state.FinalMessageStart = FinalMessageCapture.Start(lastText);
             state.FinalMessageAt = state.FinalMessageTail is null ? null : state.LastActivity;
             state.Verdict = null;
             state.PendingTools.Clear();

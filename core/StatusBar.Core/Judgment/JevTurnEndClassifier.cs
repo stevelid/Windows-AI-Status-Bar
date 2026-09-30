@@ -18,16 +18,32 @@ public sealed class TurnEndClassifierException(string code, HttpStatusCode? stat
 }
 
 /// <summary>
-/// Asks TypeSafe's Jev model four yes/no questions about a final message in one request.
-/// One message can be both "finished" and "offers follow-on work", so each is its own Noul.
+/// Asks TypeSafe's Jev model, in one request, what kind of ending a final message is (which drives the alert)
+/// and two yes/no questions that are kept as second opinions for the log. The wording was chosen by trying
+/// alternatives on made-up messages of the shapes seen in real use; see docs/PROGRESS.md (D22).
 /// </summary>
 public sealed class JevTurnEndClassifier : ITurnEndClassifier
 {
     /// <summary>The documented endpoint: https://docs.typesafe.ai/api.md.</summary>
     public static readonly Uri Endpoint = new("https://api.typesafe.ai/v1/systemone");
 
+    /// <summary>Which wording of the questions is in use; logged with each decision so results can be compared across changes.</summary>
+    public const int PromptVersion = 3;
+
     const string Model = "jev-latest";
     const int MaximumAttempts = 2;
+
+    // Option ids of the "kind" question, in the order of TurnEndKind.
+    static readonly (string Id, TurnEndKind Kind)[] KindOptions =
+    [
+        ("waiting_for_answer", TurnEndKind.WaitingForAnswer),
+        ("waiting_for_approval", TurnEndKind.WaitingForApproval),
+        ("stuck", TurnEndKind.Stuck),
+        ("carrying_on", TurnEndKind.CarryingOn),
+        ("report_with_next_steps", TurnEndKind.ReportWithNextSteps),
+        ("finished_with_offer", TurnEndKind.FinishedWithOffer),
+        ("finished", TurnEndKind.Finished),
+    ];
 
     readonly HttpClient _http;
     readonly string _apiKey;
@@ -44,10 +60,10 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
     }
 
     /// <inheritdoc />
-    public async Task<TurnEndJudgment> ClassifyAsync(string finalMessage, CancellationToken cancellationToken)
+    public async Task<TurnEndJudgment> ClassifyAsync(string finalMessage, CancellationToken cancellationToken, string? messageStart = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(finalMessage);
-        var body = BuildRequest(finalMessage).ToJsonString();
+        var body = BuildRequest(finalMessage, messageStart).ToJsonString();
 
         for (var attempt = 1; ; attempt++)
         {
@@ -94,12 +110,51 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
         }
     }
 
-    internal static JsonObject BuildRequest(string finalMessage) => new()
+    internal static JsonObject BuildRequest(string finalMessage, string? messageStart = null) => new()
     {
         ["model"] = Model,
-        ["state"] = new JsonObject { ["assistant_final_message"] = finalMessage },
+        ["state"] = State(finalMessage, messageStart),
         ["questions"] = new JsonObject
         {
+            // Drives the alert. One exclusive choice beat the yes/no wordings on 30 made-up messages: every
+            // real blocker scored 0.91–1.00 (summed over the three waiting kinds) and every quiet case at most
+            // 0.20. "carrying_on" matters: without it "I'm starting on A now, shout if you'd rather B" was read
+            // as waiting for approval.
+            ["kind"] = new JsonObject
+            {
+                ["type"] = "choice",
+                ["instructions"] =
+                    "The state holds the final message an AI assistant sent when it stopped working. Which kind of ending is it? " +
+                    "Decide by whether the assistant is actually stopped waiting for the user, not by whether the message contains " +
+                    "a question or mentions next steps. When the message is long, assistant_message_start shows how it began and " +
+                    "assistant_final_message is its end.",
+                ["criteria"] = new JsonObject
+                {
+                    ["waiting_for_answer"] = "The assistant asked a specific question or needs a decision, and cannot continue without the reply.",
+                    ["waiting_for_approval"] = "The assistant proposes a plan or action and is stopped, waiting for permission to proceed.",
+                    ["stuck"] = "The assistant hit an error or missing access it cannot resolve and needs the user to fix something.",
+                    ["carrying_on"] = "The assistant chose a way forward and is continuing by itself; it only invites the user to object if they disagree.",
+                    ["report_with_next_steps"] = "The assistant delivered a review, findings or a result and lists next steps or inputs that would help later; nothing is blocked.",
+                    ["finished_with_offer"] = "The work is done and the assistant offers optional extra work or asks if anything else is needed.",
+                    ["finished"] = "The work is done with nothing further proposed.",
+                },
+            },
+
+            // Second opinion, logged beside the kind so the two can be compared.
+            ["blocked_on_user"] = Noul(
+                "The state holds the end of the final message an AI coding assistant sent to the user when it stopped working " +
+                "(assistant_final_message), and, when the message is long, how it began (assistant_message_start). " +
+                "Is the assistant now stopped, unable to make any further progress until the user answers a specific question " +
+                "or makes a decision? Count: a question it needs answered before it can go on, a request for permission or " +
+                "approval, or a blocker it cannot work around. Do NOT count: a report of results, findings or analysis; a review " +
+                "that lists issues; suggestions or recommendations; optional next steps; an offer to do more; or a list of " +
+                "information the user could supply later to improve or extend the work. If the message delivers something to read " +
+                "and only says what would help next, the answer is no.",
+                "Work is paused and only the user's reply lets it continue.",
+                "The assistant delivered a result, suggestions or optional next steps; the user can read it when convenient."),
+
+            // The first wording. It also counted "information the assistant needs", so it over-alerted on reports that
+            // end with next steps (0.92–0.95 on made-up examples of them); kept for the log only.
             ["asks_user"] = Noul(
                 "The state holds the final message an AI coding assistant sent to the user when it stopped working. " +
                 "Does the message ask the user a question, or ask for a decision, choice, confirmation, permission or " +
@@ -107,21 +162,16 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
                 "message itself answers, do not count.",
                 "The message ends by waiting for the user's answer, decision or approval.",
                 "The message reports results or status and does not wait for an answer."),
-            ["needs_review"] = Noul(
-                "Has the assistant produced something the user should look over before relying on it, such as a draft, " +
-                "a proposed plan, a set of changes to check, or results the assistant itself is unsure about?",
-                "The user is expected to inspect or approve the result.",
-                "The message is a routine report that needs no inspection."),
-            ["offers_follow_up"] = Noul(
-                "Does the message suggest or offer further work, next steps or optional improvements the user could ask for?",
-                "It proposes or offers something more to do.",
-                "It does not propose anything further."),
-            ["finished"] = Noul(
-                "Does the message report that the requested work is complete, with nothing left unfinished or blocked?",
-                "The work is reported as done.",
-                "The work is partial, blocked, failed or still in progress."),
         },
     };
+
+    static JsonObject State(string finalMessage, string? messageStart)
+    {
+        var state = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(messageStart)) state["assistant_message_start"] = messageStart;
+        state["assistant_final_message"] = finalMessage;
+        return state;
+    }
 
     static JsonObject Noul(string instructions, string yes, string no) => new()
     {
@@ -136,18 +186,27 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
         {
             var root = JsonNode.Parse(json)?.AsObject() ?? throw new JsonException();
             var answers = root["answers"]?.AsObject() ?? throw new JsonException();
-            double Noul(string name)
-            {
-                var value = answers[name]?["noul"]?.GetValue<double>() ?? throw new JsonException();
-                return Math.Clamp(value, 0, 1);
-            }
+
+            double Noul(string name) =>
+                Math.Clamp(answers[name]?["noul"]?.GetValue<double>() ?? throw new JsonException(), 0, 1);
+
+            var kind = answers["kind"]?.AsObject() ?? throw new JsonException();
+            var probabilities = kind["probabilities"]?.AsObject() ?? throw new JsonException();
+            double P(string id) => Math.Clamp(probabilities[id]?.GetValue<double>() ?? 0, 0, 1);
+
+            var top = KindOptions.MaxBy(option => P(option.Id));
+            var alertKind = KindOptions.Take(3).MaxBy(option => P(option.Id)).Kind;
+            var alert = Math.Min(1, P("waiting_for_answer") + P("waiting_for_approval") + P("stuck"));
 
             var usage = root["usage"]?.AsObject();
             return new TurnEndJudgment(
+                top.Kind,
+                alertKind,
+                alert,
+                P("report_with_next_steps"),
+                P("finished_with_offer"),
+                Noul("blocked_on_user"),
                 Noul("asks_user"),
-                Noul("needs_review"),
-                Noul("offers_follow_up"),
-                Noul("finished"),
                 usage?["input_tokens"]?.GetValue<int>() ?? 0,
                 usage?["output_tokens"]?.GetValue<int>() ?? 0);
         }
