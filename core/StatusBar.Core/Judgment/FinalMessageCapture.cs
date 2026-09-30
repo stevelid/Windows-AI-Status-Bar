@@ -11,6 +11,12 @@ public static class FinalMessageCapture
     /// <summary>Most characters of a final message that can be held.</summary>
     public const int MaximumCharacters = 1500;
 
+    /// <summary>
+    /// Characters of the start of a message that is longer than <see cref="MaximumCharacters"/>. The end of
+    /// a long report can read like a question on its own; the start shows it is a deliverable.
+    /// </summary>
+    public const int StartCharacters = 300;
+
     static volatile bool _enabled;
 
     /// <summary>Whether final-message tails are captured.</summary>
@@ -26,5 +32,13 @@ public static class FinalMessageCapture
         if (!_enabled || string.IsNullOrWhiteSpace(text)) return null;
         var trimmed = text.Trim();
         return trimmed.Length <= MaximumCharacters ? trimmed : trimmed[^MaximumCharacters..];
+    }
+
+    /// <summary>The start of <paramref name="text"/> when capture is on and the tail alone does not cover it; otherwise null.</summary>
+    internal static string? Start(string? text)
+    {
+        if (!_enabled || string.IsNullOrWhiteSpace(text)) return null;
+        var trimmed = text.Trim();
+        return trimmed.Length <= MaximumCharacters ? null : trimmed[..StartCharacters];
     }
 }

@@ -94,7 +94,7 @@ internal static class CodexTaskMapper
             {
                 Status = AgentTaskStatus.NeedsAttention,
                 Confidence = StateConfidence.Inferred,
-                AttentionReason = "Asked you a question",
+                AttentionReason = StatusBar.Core.Judgment.TurnVerdictPolicy.AttentionReason(state.FinalMessageAt, state.Verdict),
                 EvidenceKey = "question:" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
             },
             CodexTurnStatus.Completed => task with

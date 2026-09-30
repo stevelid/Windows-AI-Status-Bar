@@ -106,6 +106,23 @@ public sealed class TurnEndCaptureTests : IDisposable
         Assert.Equal("question", info.Heuristic);
         Assert.Equal(FinalMessageCapture.MaximumCharacters, info.Text.Length);
         Assert.EndsWith(Message, info.Text, StringComparison.Ordinal);
+        Assert.Equal(FinalMessageCapture.StartCharacters, info.Start!.Length);
+        Assert.StartsWith("xxx", info.Start, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_start_of_a_message_is_kept_only_when_the_tail_does_not_cover_it()
+    {
+        FinalMessageCapture.Enabled = true;
+
+        Assert.Null(FinalMessageCapture.Start("A short message."));
+        Assert.Null(FinalMessageCapture.Start(new string('y', FinalMessageCapture.MaximumCharacters)));
+        var start = FinalMessageCapture.Start("Opening. " + new string('y', FinalMessageCapture.MaximumCharacters));
+        Assert.Equal(FinalMessageCapture.StartCharacters, start!.Length);
+        Assert.StartsWith("Opening. ", start, StringComparison.Ordinal);
+
+        FinalMessageCapture.Enabled = false;
+        Assert.Null(FinalMessageCapture.Start(new string('y', 5000)));
     }
 
     [Fact]

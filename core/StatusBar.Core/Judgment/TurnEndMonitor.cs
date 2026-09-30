@@ -129,7 +129,7 @@ public sealed class TurnEndMonitor : IDisposable
         try
         {
             var started = _time.GetTimestamp();
-            var judgment = await classifier.ClassifyAsync(info.Text, _stop.Token).ConfigureAwait(false);
+            var judgment = await classifier.ClassifyAsync(info.Text, _stop.Token, info.Start).ConfigureAwait(false);
             var elapsedMs = _time.GetElapsedTime(started).TotalMilliseconds;
             Record(info, judgment, elapsedMs);
         }
@@ -148,7 +148,7 @@ public sealed class TurnEndMonitor : IDisposable
 
     void Record(TurnEndInfo info, TurnEndJudgment judgment, double elapsedMs)
     {
-        var jevAsks = judgment.AsksUser >= Threshold;
+        var jevAsks = judgment.Alert >= Threshold;
         string verdict;
         lock (_gate)
         {
@@ -180,11 +180,23 @@ public sealed class TurnEndMonitor : IDisposable
         var applied = info.Heuristic != "card" && (_affectsState?.Invoke() ?? false) ? "jev" : "rules";
         _log(string.Format(
             CultureInfo.InvariantCulture,
-            "Jev {0}: rules={1} | asks={2:0.00} review={3:0.00} followup={4:0.00} finished={5:0.00} | agree={6} | applied={7} | {8:0} ms, {9}+{10} tokens",
-            info.TaskKey, info.Heuristic, judgment.AsksUser, judgment.NeedsReview, judgment.OffersFollowUp,
-            judgment.Finished, verdict, applied, elapsedMs, judgment.InputTokens, judgment.OutputTokens));
+            "Jev v{0} {1}: rules={2} | kind={3} alert={4:0.00} report={5:0.00} offer={6:0.00} | blocked={7:0.00} asks={8:0.00} | agree={9} | applied={10} | {11:0} ms, {12}+{13} tokens",
+            JevTurnEndClassifier.PromptVersion, info.TaskKey, info.Heuristic, KindName(judgment.Kind), judgment.Alert,
+            judgment.Report, judgment.Offer, judgment.Blocked, judgment.Asks, verdict, applied, elapsedMs,
+            judgment.InputTokens, judgment.OutputTokens));
         Resolve(info, judgment);
     }
+
+    static string KindName(TurnEndKind kind) => kind switch
+    {
+        TurnEndKind.WaitingForAnswer => "waiting_for_answer",
+        TurnEndKind.WaitingForApproval => "waiting_for_approval",
+        TurnEndKind.Stuck => "stuck",
+        TurnEndKind.CarryingOn => "carrying_on",
+        TurnEndKind.ReportWithNextSteps => "report_with_next_steps",
+        TurnEndKind.FinishedWithOffer => "finished_with_offer",
+        _ => "finished",
+    };
 
     // The provider must always hear back, so a turn never waits on an answer that will not come.
     void Resolve(TurnEndInfo info, TurnEndJudgment? judgment)

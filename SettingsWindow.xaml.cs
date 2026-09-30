@@ -177,12 +177,12 @@ public partial class SettingsWindow : Window
             var classifier = new StatusBar.Core.Judgment.JevTurnEndClassifier(http, key);
             var started = System.Diagnostics.Stopwatch.StartNew();
             var judgment = await classifier.ClassifyAsync(
-                "I've updated the report template and the checks pass. Shall I also refresh the appendix figures?",
+                "I can't continue until you tell me which option to use. Should I keep the old template or replace it?",
                 CancellationToken.None);
             JevStatus.Text = L10n.F(
                 "settings_jev_test_ok",
-                judgment.AsksUser.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
-                judgment.Finished.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                judgment.Alert.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                judgment.Kind,
                 started.ElapsedMilliseconds);
         }
         catch (StatusBar.Core.Judgment.TurnEndClassifierException ex)

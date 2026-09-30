@@ -295,6 +295,7 @@ internal static class CodexRolloutParser
         state.TurnId = null;
         state.AbortReason = null;
         state.FinalMessageTail = null;
+        state.FinalMessageStart = null;
         state.FinalMessageAt = null;
         state.Verdict = null;
         state.PendingCalls.Clear();
@@ -321,6 +322,7 @@ internal static class CodexRolloutParser
             state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(finalMessage);
             // Only when the user has switched the AI check on: keep the tail in memory for that check.
             state.FinalMessageTail = FinalMessageCapture.Tail(finalMessage);
+            state.FinalMessageStart = FinalMessageCapture.Start(finalMessage);
             state.FinalMessageAt = state.FinalMessageTail is null ? null : state.LastActivity;
             state.Verdict = null;
             state.EndedWithStructuredQuestion = state.AskedStructuredQuestion;
