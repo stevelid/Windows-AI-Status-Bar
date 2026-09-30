@@ -14,6 +14,7 @@ public sealed class AgentStateService : IAsyncDisposable
     readonly DismissalStore _dismissals;
     readonly NotificationGate _notifications;
     readonly TaskHistory? _history;
+    readonly TaskActivityLog? _activity;
     readonly TimeProvider _time;
     readonly StateServiceOptions _options;
     readonly ITimer _expiryTimer;
@@ -43,7 +44,8 @@ public sealed class AgentStateService : IAsyncDisposable
         StateServiceOptions options,
         DismissalStore? dismissalStore = null,
         NotificationGate? notificationGate = null,
-        TaskHistory? history = null)
+        TaskHistory? history = null,
+        TaskActivityLog? activity = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(time);
@@ -64,6 +66,7 @@ public sealed class AgentStateService : IAsyncDisposable
         _dismissals = dismissalStore ?? new DismissalStore(time);
         _notifications = notificationGate ?? new NotificationGate(time);
         _history = history;
+        _activity = activity;
         _expiryTimer = time.CreateTimer(
             OnExpiryTimer,
             null,
@@ -180,7 +183,12 @@ public sealed class AgentStateService : IAsyncDisposable
     }
 
     // Records finishes from the raw provider lists, so a task that was dismissed still reaches the history.
-    void ObserveHistory() => _history?.Observe(_snapshots.Values.SelectMany(snapshot => snapshot.Tasks));
+    void ObserveHistory()
+    {
+        var tasks = _snapshots.Values.SelectMany(snapshot => snapshot.Tasks).ToArray();
+        _history?.Observe(tasks);
+        _activity?.Observe(tasks);
+    }
 
     /// <summary>Cancels expiry timing and disposes every provider without allowing one failure to block another.</summary>
     public async ValueTask DisposeAsync()

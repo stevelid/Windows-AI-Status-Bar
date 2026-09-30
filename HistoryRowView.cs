@@ -16,7 +16,7 @@ internal sealed class HistoryRowView : Border
     internal event Action<HistoryEntry>? OpenRequested;
     internal event Action<string>? RemoveRequested;
 
-    public HistoryRowView(HistoryEntry entry)
+    public HistoryRowView(HistoryEntry entry, double? costPoints = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         _entry = entry;
@@ -55,7 +55,7 @@ internal sealed class HistoryRowView : Border
         var providerName = L10n.T(entry.Provider == AgentProvider.Codex ? "pane_provider_codex" : "pane_provider_claude");
         var meta = new TextBlock
         {
-            Text = $"{providerName} · {FormatTime(entry.FinishedAt)}",
+            Text = $"{providerName} · {FormatTime(entry.FinishedAt)}{(costPoints is >= 0.5 ? " · " + L10n.F("pane_cost", Math.Round(costPoints.Value)) : "")}",
             FontSize = 10,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
@@ -97,7 +97,8 @@ internal sealed class HistoryRowView : Border
             HistoryOutcome.Stopped => "pane_history_stopped",
             _ => "pane_history_finished",
         });
-        ToolTip = $"{outcome} · {entry.FinishedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}";
+        ToolTip = $"{outcome} · {entry.FinishedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}" +
+            (costPoints is >= 0.5 ? "\n" + L10n.T("pane_cost_tooltip") : "");
 
         MouseEnter += (_, _) =>
         {

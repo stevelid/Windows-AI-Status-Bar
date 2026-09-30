@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -22,6 +23,8 @@ public partial class DetailsPaneWindow : Window
     readonly Settings _settings;
     readonly TaskHistory? _history;
     readonly UsageRateHistory? _rates;
+    readonly TaskActivityLog? _activity;
+    Dictionary<string, double> _costs = new(StringComparer.Ordinal);
     double? _anchorBottom;
     double _workAreaTop;
     readonly Dictionary<string, UsageRow> _usageRows = new(StringComparer.Ordinal);
@@ -46,12 +49,13 @@ public partial class DetailsPaneWindow : Window
     public event Action<AgentTask>? FocusTaskRequested;
 
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
-    public DetailsPaneWindow(Settings settings, TaskHistory? history = null, UsageRateHistory? rates = null)
+    public DetailsPaneWindow(Settings settings, TaskHistory? history = null, UsageRateHistory? rates = null, TaskActivityLog? activity = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         _history = history;
         _rates = rates;
+        _activity = activity;
         if (_history is not null) _history.Changed += OnHistoryChanged;
         InitializeComponent();
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
@@ -406,14 +410,59 @@ public partial class DetailsPaneWindow : Window
         var stale = snapshot.Health is UsageHealth.Stale or UsageHealth.Unavailable;
         var level = UsageSummary.Level(window.RemainingPercent, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
         strip.Update(series, stale ? ThemeManager.SubtleText : ThemeManager.ColorForAllowance(level));
-        strip.ToolTip = series is { HasData: true, PeakPerHour: double peak }
-            ? L10n.F("pane_rate_tooltip", Math.Round(peak), UsageRateHistory.EvenPacePerHour)
-            : L10n.T("pane_rate_collecting");
+        strip.Describe = point => DescribeSlice(source, point);
         strip.Visibility = Visibility.Visible;
+    }
+
+    // What the hover on the strip says: the slice's time and rate, and which conversations were working then.
+    string DescribeSlice(UsageSource source, RatePoint point)
+    {
+        var from = point.At - UsageRateHistory.Bucket / 2;
+        var to = point.At + UsageRateHistory.Bucket / 2;
+        var time = $"{from.ToLocalTime().ToString("HH:mm", CultureInfo.CurrentCulture)}–{to.ToLocalTime().ToString("HH:mm", CultureInfo.CurrentCulture)}";
+        if (point.PerHour is not double rate) return time + " · " + L10n.T("pane_rate_hover_nodata");
+
+        var lines = new List<string> { time + " · " + L10n.F("pane_rate_hover_rate", Math.Round(rate)) };
+        var running = _activity?.RunningBetween(ProviderOf(source), from, to) ?? Array.Empty<ActivityInterval>();
+        if (running.Count == 0)
+        {
+            lines.Add(L10n.T(rate >= 1 ? "pane_rate_hover_untracked" : "pane_rate_hover_idle"));
+        }
+        else
+        {
+            lines.AddRange(running.Take(3).Select(interval => "● " + interval.Title));
+            if (running.Count > 3) lines.Add(L10n.F("pane_rate_hover_more", running.Count - 3));
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    static AgentProvider ProviderOf(UsageSource source) => source == UsageSource.Codex ? AgentProvider.Codex : AgentProvider.Claude;
+
+    // Estimated points of each provider's five-hour window used by each conversation over the last three hours.
+    Dictionary<string, double> ComputeCosts()
+    {
+        var costs = new Dictionary<string, double>(StringComparer.Ordinal);
+        if (_rates is null || _activity is null) return costs;
+        foreach (var source in new[] { UsageSource.Codex, UsageSource.Claude })
+        {
+            if (!_usage.TryGetValue(source, out var snapshot)) continue;
+            var window = UsageSummary.Compact(snapshot.Windows);
+            if (window is not { Length: { } length } || length > UsageRateHistory.MaximumWindowLength) continue;
+            var attribution = UsageAttributionCalculator.Compute(
+                _rates.Readings(source, window.Key),
+                _activity.Intervals(ProviderOf(source)),
+                DateTimeOffset.UtcNow,
+                TaskActivityLog.Retention);
+            foreach (var (taskId, points) in attribution.PointsByTask) costs[taskId] = points;
+        }
+
+        return costs;
     }
 
     void RenderTasks()
     {
+        _costs = ComputeCosts();
         var panels = new[] { NeedsYouRows, WorkingRows, UnknownRows, RecentRows };
         foreach (var panel in panels) panel.Children.Clear();
         var activeIds = new HashSet<string>(StringComparer.Ordinal);
@@ -431,7 +480,7 @@ public partial class DetailsPaneWindow : Window
                 row.FocusRequested += task => FocusTaskRequested?.Invoke(task);
                 _taskRows.Add(task.Id, row);
             }
-            row.Update(task);
+            row.Update(task, _costs.GetValueOrDefault(task.Id));
             panels[group].Children.Add(row);
         }
 
@@ -493,7 +542,7 @@ public partial class DetailsPaneWindow : Window
                 lastGroup = group;
             }
 
-            var row = new HistoryRowView(entry);
+            var row = new HistoryRowView(entry, _costs.TryGetValue(entry.TaskId, out var cost) ? cost : null);
             row.OpenRequested += item => OpenHistoryTaskRequested?.Invoke(item.ToTask());
             row.RemoveRequested += taskId => _history?.Remove(taskId);
             HistoryRows.Children.Add(row);

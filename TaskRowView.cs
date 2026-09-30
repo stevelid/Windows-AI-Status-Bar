@@ -96,7 +96,7 @@ internal sealed class TaskRowView : Border
     }
 
     /// <summary>Updates this row from a normalized task, keeping provider evidence in memory only.</summary>
-    public void Update(AgentTask task)
+    public void Update(AgentTask task, double? costPoints = null)
     {
         ArgumentNullException.ThrowIfNull(task);
         _task = task;
@@ -150,7 +150,8 @@ internal sealed class TaskRowView : Border
         var providerName = L10n.T(task.Provider == AgentProvider.Codex
             ? "pane_provider_codex"
             : "pane_provider_claude");
-        _provider.Text = $"{providerName} · {FormatAge(task.LastActivity)}";
+        var cost = costPoints is >= 0.5 ? " · " + L10n.F("pane_cost", Math.Round(costPoints.Value)) : "";
+        _provider.Text = $"{providerName} · {FormatAge(task.LastActivity)}{cost}";
         _provider.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
 
         var tooltip = new List<string>();
@@ -160,6 +161,7 @@ internal sealed class TaskRowView : Border
             tooltip.Add(L10n.F("pane_attention_reason", task.AttentionReason));
         tooltip.Add(L10n.F("pane_confidence", ConfidenceLabel(task.Confidence)));
         tooltip.Add(FormatActivity(task.LastActivity));
+        if (costPoints is >= 0.5) tooltip.Add(L10n.T("pane_cost_tooltip"));
         ToolTip = string.Join(Environment.NewLine, tooltip);
     }
 
