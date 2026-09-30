@@ -108,6 +108,48 @@ public sealed class TurnEndMonitorTests
         Assert.DoesNotContain("secret", line, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, "question", "applied=jev")]
+    [InlineData(false, "question", "applied=rules")]
+    [InlineData(true, "card", "applied=rules")]
+    public async Task Every_turn_is_returned_to_the_provider_and_the_log_says_who_decided(bool affects, string rules, string expected)
+    {
+        var log = new LogSink();
+        var returned = new BlockingCollection<(TurnEndInfo Info, TurnEndJudgment? Judgment)>();
+        var judgment = new TurnEndJudgment(0.2, 0, 0, 1, 5, 5);
+        using var monitor = new TurnEndMonitor(
+            () => new StubClassifier(judgment), log.Write, new FakeTimeProvider(),
+            (info, result) => returned.Add((info, result)), () => affects);
+
+        monitor.Observe(Info("codex:1a2b3c4d", "t1", rules));
+
+        Assert.Contains(expected, await log.NextAsync(), StringComparison.Ordinal);
+        Assert.True(returned.TryTake(out var item, TimeSpan.FromSeconds(10)));
+        Assert.Equal("t1", item.Info.EvidenceKey);
+        Assert.Equal(judgment, item.Judgment);
+    }
+
+    [Fact]
+    public async Task A_failed_or_paused_check_returns_null_so_the_rules_decide()
+    {
+        var log = new LogSink();
+        var returned = new BlockingCollection<TurnEndJudgment?>();
+        var time = new FakeTimeProvider();
+        var classifier = new StubClassifier(error: new TurnEndClassifierException("Timeout"));
+        using var monitor = new TurnEndMonitor(() => classifier, log.Write, time, (_, result) => returned.Add(result));
+
+        for (var i = 0; i < 5; i++)
+        {
+            monitor.Observe(Info("codex:1a2b3c4d", "t" + i, "none"));
+            await log.NextAsync();
+        }
+        await log.NextAsync(); // "paused"
+        monitor.Observe(Info("codex:1a2b3c4d", "while-paused", "none"));
+
+        Assert.Equal(6, returned.Count);
+        Assert.All(returned, result => Assert.Null(result));
+    }
+
     static TurnEndInfo Info(string key, string evidence, string rules) =>
         new(key.StartsWith("codex", StringComparison.Ordinal) ? AgentProvider.Codex : AgentProvider.Claude, key, evidence, rules, SecretText);
 

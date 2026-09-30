@@ -45,6 +45,7 @@ public partial class SettingsWindow : Window
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
         KeepHistoryCheckBox.IsChecked = _settings.KeepHistory;
         JevEnabledCheckBox.IsChecked = _settings.JevEnabled;
+        JevAffectsCheckBox.IsChecked = _settings.JevAffectsState;
         RecentCompletedSlider.Value = _settings.RecentlyCompletedMinutes;
         AttentionLabelBox.Text = _settings.AttentionLabel;
         ApproachingSlider.Value = _settings.ApproachingBelowPercent;
@@ -111,6 +112,13 @@ public partial class SettingsWindow : Window
         }
 
         _settings.JevEnabled = enabled;
+        SaveAndApply();
+    }
+
+    void OnJevAffectsChanged(object sender, RoutedEventArgs e)
+    {
+        if (_initializing) return;
+        _settings.JevAffectsState = JevAffectsCheckBox.IsChecked == true;
         SaveAndApply();
     }
 
@@ -421,6 +429,7 @@ public partial class SettingsWindow : Window
         KeepHistoryCheckBox.Content = L10n.T("settings_keep_history");
         JevHeading.Text = L10n.T("settings_section_jev");
         JevEnabledCheckBox.Content = L10n.T("settings_jev_enabled");
+        JevAffectsCheckBox.Content = L10n.T("settings_jev_affects");
         JevHint.Text = L10n.T("settings_jev_hint");
         JevKeyLabel.Text = L10n.T("settings_jev_key");
         JevSaveButton.Content = L10n.T("settings_jev_save");
@@ -460,6 +469,7 @@ public partial class SettingsWindow : Window
         DemoTasksCheckBox.Foreground = fg;
         KeepHistoryCheckBox.Foreground = fg;
         JevEnabledCheckBox.Foreground = fg;
+        JevAffectsCheckBox.Foreground = fg;
         JevKeyLabel.Foreground = fg;
         JevStatus.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
         ClaudeHooksCheckBox.Foreground = fg;

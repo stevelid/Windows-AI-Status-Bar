@@ -53,6 +53,9 @@ internal sealed class ClaudeCodeSessionState
 
     /// <summary>When <see cref="FinalMessageTail"/> was captured; changes once per finished turn.</summary>
     internal DateTimeOffset? FinalMessageAt { get; set; }
+
+    /// <summary>The AI's answer for the current finished turn, once it arrives.</summary>
+    internal StatusBar.Core.Judgment.TurnVerdict? Verdict { get; set; }
     internal ClaudeCodeTurnStatus Turn { get; set; }
     internal Dictionary<string, ClaudePendingTool> PendingTools { get; } = new(StringComparer.Ordinal);
 

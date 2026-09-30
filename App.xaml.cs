@@ -179,7 +179,12 @@ public partial class App : System.Windows.Application
     {
         _settings = Settings.Load();
         _history = new TaskHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "history.json"), _settings.KeepHistory);
-        _turnEnds = new TurnEndMonitor(() => _jevClassifier, Log.Write, TimeProvider.System);
+        _turnEnds = new TurnEndMonitor(
+            () => _jevClassifier,
+            Log.Write,
+            TimeProvider.System,
+            (info, judgment) => _ = ApplyTurnJudgmentAsync(info, _settings.JevAffectsState ? judgment : null),
+            () => _settings.JevAffectsState);
         ApplyJevSettings();
         if (_settings.UseClaudeCodeHooks)
         {
@@ -851,7 +856,28 @@ public partial class App : System.Windows.Application
 
     static void OnClaudeTrace(string message) => Log.Write("Claude: " + message);
 
-    void OnTurnEnded(TurnEndInfo info) => _turnEnds?.Observe(info);
+    void OnTurnEnded(TurnEndInfo info)
+    {
+        _turnEnds?.Observe(info);
+        // Log-only mode: the built-in rules apply at once instead of waiting for the answer.
+        if (!_settings.JevAffectsState) _ = ApplyTurnJudgmentAsync(info, null);
+    }
+
+    // Returns the AI's answer (null: rules decide) to the provider that owns the finished turn.
+    async Task ApplyTurnJudgmentAsync(TurnEndInfo info, TurnEndJudgment? judgment)
+    {
+        try
+        {
+            if (info.Provider == AgentProvider.Codex && _codexTaskProvider is { } codex)
+                await codex.ApplyTurnJudgmentAsync(info, judgment);
+            else if (info.Provider == AgentProvider.Claude && _claudeTaskProvider is { } claude)
+                await claude.ApplyTurnJudgmentAsync(info, judgment);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Applying a turn judgment failed", ex);
+        }
+    }
 
     // The AI check is opt-in and needs a saved key. Final-message text is only kept in memory while it is on.
     void ApplyJevSettings()
@@ -862,7 +888,7 @@ public partial class App : System.Windows.Application
             _jevKeyInUse = key;
             _jevClassifier = key is null
                 ? null
-                : new JevTurnEndClassifier(_jevHttp ??= new HttpClient { Timeout = TimeSpan.FromSeconds(10) }, key);
+                : new JevTurnEndClassifier(_jevHttp ??= new HttpClient { Timeout = TimeSpan.FromSeconds(8) }, key);
         }
         FinalMessageCapture.Enabled = _jevClassifier is not null;
     }

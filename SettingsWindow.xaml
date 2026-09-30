@@ -122,6 +122,8 @@
             <CheckBox x:Name="JevEnabledCheckBox" Margin="0,8,0,0"
                       Checked="OnJevEnabledChanged" Unchecked="OnJevEnabledChanged"/>
             <TextBlock x:Name="JevHint" Style="{StaticResource Hint}" Margin="20,4,0,0"/>
+            <CheckBox x:Name="JevAffectsCheckBox" Margin="20,8,0,0"
+                      Checked="OnJevAffectsChanged" Unchecked="OnJevAffectsChanged"/>
 
             <TextBlock x:Name="JevKeyLabel" Style="{StaticResource FieldLabel}"/>
             <DockPanel Margin="0,6,0,0">

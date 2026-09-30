@@ -123,6 +123,42 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
         _ = ReconcileFromSignalAsync(forceDiscovery: true);
     }
 
+    /// <summary>
+    /// Hands the AI's answer for a finished turn to this provider (null means the rules decide) and
+    /// republishes the task. Returns quietly if the turn is no longer the session's latest.
+    /// </summary>
+    public async Task ApplyTurnJudgmentAsync(StatusBar.Core.Judgment.TurnEndInfo info, StatusBar.Core.Judgment.TurnEndJudgment? judgment)
+    {
+        ArgumentNullException.ThrowIfNull(info);
+        bool applied;
+        try
+        {
+            await _reconcileGate.WaitAsync(_stop.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+            return;
+        }
+
+        try
+        {
+            applied = _sessions.ApplyJudgment(info.TaskKey, info.EvidenceKey, judgment);
+        }
+        finally
+        {
+            _reconcileGate.Release();
+        }
+
+        if (!applied) return;
+        try
+        {
+            await ReconcileCoreAsync(forceDiscovery: false, _stop.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
     /// <inheritdoc />
     public Task ReconcileAsync(CancellationToken cancellationToken = default) =>
         ReconcileCoreAsync(forceDiscovery: true, cancellationToken);

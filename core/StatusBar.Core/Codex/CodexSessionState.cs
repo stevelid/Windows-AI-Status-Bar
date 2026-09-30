@@ -37,6 +37,9 @@ internal sealed class CodexSessionState
 
     /// <summary>When <see cref="FinalMessageTail"/> was captured; changes once per finished turn.</summary>
     internal DateTimeOffset? FinalMessageAt { get; set; }
+
+    /// <summary>The AI's answer for the current finished turn, once it arrives.</summary>
+    internal StatusBar.Core.Judgment.TurnVerdict? Verdict { get; set; }
     internal string? CwdLeaf { get; set; }
     internal DateTimeOffset? StartedAt { get; set; }
     internal string? ApprovalPolicy { get; set; }

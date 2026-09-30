@@ -163,6 +163,22 @@ internal sealed class CodexSessionReader : IDisposable
         return new SessionEntry(state, reader);
     }
 
+    /// <summary>Attaches the AI's answer (or null: rules decide) to the session whose finished turn it belongs to.</summary>
+    internal bool ApplyJudgment(string taskKey, string evidenceKey, TurnEndJudgment? judgment)
+    {
+        foreach (var entry in _entries.Values)
+        {
+            var state = entry.State;
+            if (state.FinalMessageAt is not DateTimeOffset at ||
+                !string.Equals("codex:" + ShortId(state), taskKey, StringComparison.Ordinal) ||
+                !string.Equals(TurnVerdictPolicy.EvidenceKeyFor(at), evidenceKey, StringComparison.Ordinal)) continue;
+            state.Verdict = new TurnVerdict(evidenceKey, judgment);
+            return true;
+        }
+
+        return false;
+    }
+
     void RaiseTurnEnded(CodexSessionState state, DateTimeOffset? finalBefore)
     {
         if (state.FinalMessageAt is not DateTimeOffset at || at == finalBefore || state.FinalMessageTail is not { } text) return;
@@ -171,7 +187,7 @@ internal sealed class CodexSessionReader : IDisposable
             TurnEnded?.Invoke(new TurnEndInfo(
                 AgentProvider.Codex,
                 "codex:" + ShortId(state),
-                at.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "question" : "none",
                 text));
         }

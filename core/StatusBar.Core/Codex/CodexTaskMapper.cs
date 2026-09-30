@@ -76,6 +76,10 @@ internal static class CodexTaskMapper
             inactivity = now >= endedAt ? now - endedAt : TimeSpan.Zero;
         }
 
+        // Optional AI check: once it has answered for this turn it decides whether a finished turn asked a
+        // question; while its answer is awaited the turn is shown quietly, and the rules are the fallback.
+        var asksUser = StatusBar.Core.Judgment.TurnVerdictPolicy.AsksUser(
+            state.EndedWithQuestion, state.FinalMessageAt, state.Verdict, now) == true;
         return state.Turn switch
         {
             // ⚠️ A-X4 The answer to a question card is expected to start a new turn, which clears this.
@@ -86,7 +90,7 @@ internal static class CodexTaskMapper
                 AttentionReason = "Waiting for your answer",
                 EvidenceKey = "question:" + task.LastActivity.ToUniversalTime().Ticks.ToString(CultureInfo.InvariantCulture),
             },
-            CodexTurnStatus.Completed when state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry => task with
+            CodexTurnStatus.Completed when asksUser && inactivity < timings.QuestionAttentionExpiry => task with
             {
                 Status = AgentTaskStatus.NeedsAttention,
                 Confidence = StateConfidence.Inferred,
@@ -97,6 +101,7 @@ internal static class CodexTaskMapper
             {
                 Status = AgentTaskStatus.Complete,
                 Confidence = StateConfidence.Confirmed,
+                StatusDetail = StatusBar.Core.Judgment.TurnVerdictPolicy.Detail(state.FinalMessageAt, state.Verdict),
             },
             CodexTurnStatus.Failed => task with
             {

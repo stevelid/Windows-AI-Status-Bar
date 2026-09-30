@@ -74,8 +74,12 @@ internal static class ClaudeCodeTaskMapper
 
         // ⚠️ A-K6 The turn has ended but launched background work has not reported back (or a subagent
         // transcript is still being written): Claude is waiting on it, not finished.
+        // Optional AI check: once it has answered for this turn it decides whether a finished turn asked a
+        // question; while its answer is awaited the turn is shown quietly, and the rules are the fallback.
+        var asksUser = StatusBar.Core.Judgment.TurnVerdictPolicy.AsksUser(
+            state.EndedWithQuestion, state.FinalMessageAt, state.Verdict, now) == true;
         var waitingOnBackground = state.Turn == ClaudeCodeTurnStatus.Completed &&
-            !(state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry) &&
+            !(asksUser && inactivity < timings.QuestionAttentionExpiry) &&
             inactivity < timings.ClaudeCodeWorkingUnknownAfter &&
             (subagents?.Running == true ||
              state.BackgroundTasks.Values.Any(since => now - since < timings.ClaudeCodeWorkingUnknownAfter));
@@ -100,7 +104,7 @@ internal static class ClaudeCodeTaskMapper
 
         return state.Turn switch
         {
-            ClaudeCodeTurnStatus.Completed when state.EndedWithQuestion && inactivity < timings.QuestionAttentionExpiry => task with
+            ClaudeCodeTurnStatus.Completed when asksUser && inactivity < timings.QuestionAttentionExpiry => task with
             {
                 Status = AgentTaskStatus.NeedsAttention,
                 Confidence = StateConfidence.Inferred,
@@ -111,6 +115,7 @@ internal static class ClaudeCodeTaskMapper
             {
                 Status = AgentTaskStatus.Complete,
                 Confidence = StateConfidence.Confirmed,
+                StatusDetail = StatusBar.Core.Judgment.TurnVerdictPolicy.Detail(state.FinalMessageAt, state.Verdict),
             },
             ClaudeCodeTurnStatus.Aborted => task with
             {

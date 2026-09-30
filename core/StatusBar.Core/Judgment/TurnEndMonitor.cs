@@ -15,14 +15,15 @@ public sealed record TurnEndStats(
     long OutputTokens);
 
 /// <summary>
-/// Runs the AI check beside the built-in rules and only records how they compare. It never changes a
-/// task's state: the built-in rules stay in charge, and a failed or slow call costs nothing. Each
-/// decision is logged with probabilities and the task's short id but no message text.
+/// Runs the AI check on each finished turn and records how it compares with the built-in rules, so the
+/// two can be judged after a period of use. The answer goes back through <c>resolved</c>; a failed,
+/// skipped or slow call resolves with null and the rules decide. Each decision is logged with
+/// probabilities and the task's short id but no message text.
 /// </summary>
 public sealed class TurnEndMonitor : IDisposable
 {
     /// <summary>Probability at or above which a statement counts as true when comparing with the rules.</summary>
-    public const double Threshold = 0.5;
+    public const double Threshold = TurnVerdictPolicy.AskThreshold;
 
     const int MaximumConcurrentCalls = 2;
     const int RememberedTurns = 200;
@@ -32,6 +33,8 @@ public sealed class TurnEndMonitor : IDisposable
     readonly Func<ITurnEndClassifier?> _classifier;
     readonly Action<string> _log;
     readonly TimeProvider _time;
+    readonly Action<TurnEndInfo, TurnEndJudgment?>? _resolved;
+    readonly Func<bool>? _affectsState;
     readonly SemaphoreSlim _slots = new(MaximumConcurrentCalls);
     readonly CancellationTokenSource _stop = new();
     readonly object _gate = new();
@@ -45,7 +48,14 @@ public sealed class TurnEndMonitor : IDisposable
     DateTimeOffset _pausedUntil;
 
     /// <summary>Creates a monitor; <paramref name="classifier"/> returns null while the feature is off.</summary>
-    public TurnEndMonitor(Func<ITurnEndClassifier?> classifier, Action<string> log, TimeProvider time)
+    /// <param name="resolved">Called with the answer for a turn, or null when the rules should decide.</param>
+    /// <param name="affectsState">Whether answers currently change task state; only used to label the log.</param>
+    public TurnEndMonitor(
+        Func<ITurnEndClassifier?> classifier,
+        Action<string> log,
+        TimeProvider time,
+        Action<TurnEndInfo, TurnEndJudgment?>? resolved = null,
+        Func<bool>? affectsState = null)
     {
         ArgumentNullException.ThrowIfNull(classifier);
         ArgumentNullException.ThrowIfNull(log);
@@ -53,6 +63,8 @@ public sealed class TurnEndMonitor : IDisposable
         _classifier = classifier;
         _log = log;
         _time = time;
+        _resolved = resolved;
+        _affectsState = affectsState;
     }
 
     /// <summary>The totals so far.</summary>
@@ -73,6 +85,7 @@ public sealed class TurnEndMonitor : IDisposable
         ArgumentNullException.ThrowIfNull(info);
         var classifier = _classifier();
         if (classifier is null) return;
+        var paused = false;
         lock (_gate)
         {
             if (!_seen.Add(info.TaskKey + "|" + info.EvidenceKey)) return;
@@ -82,8 +95,14 @@ public sealed class TurnEndMonitor : IDisposable
             if (_time.GetUtcNow() < _pausedUntil)
             {
                 _skipped++;
-                return;
+                paused = true;
             }
+        }
+
+        if (paused)
+        {
+            Resolve(info, null);
+            return;
         }
 
         _ = Task.Run(() => JudgeAsync(classifier, info));
@@ -157,11 +176,27 @@ public sealed class TurnEndMonitor : IDisposable
             }
         }
 
+        // A structured question card is always decided by the rules: the AI cannot see it.
+        var applied = info.Heuristic != "card" && (_affectsState?.Invoke() ?? false) ? "jev" : "rules";
         _log(string.Format(
             CultureInfo.InvariantCulture,
-            "Jev {0}: rules={1} | asks={2:0.00} review={3:0.00} followup={4:0.00} finished={5:0.00} | agree={6} | {7:0} ms, {8}+{9} tokens",
+            "Jev {0}: rules={1} | asks={2:0.00} review={3:0.00} followup={4:0.00} finished={5:0.00} | agree={6} | applied={7} | {8:0} ms, {9}+{10} tokens",
             info.TaskKey, info.Heuristic, judgment.AsksUser, judgment.NeedsReview, judgment.OffersFollowUp,
-            judgment.Finished, verdict, elapsedMs, judgment.InputTokens, judgment.OutputTokens));
+            judgment.Finished, verdict, applied, elapsedMs, judgment.InputTokens, judgment.OutputTokens));
+        Resolve(info, judgment);
+    }
+
+    // The provider must always hear back, so a turn never waits on an answer that will not come.
+    void Resolve(TurnEndInfo info, TurnEndJudgment? judgment)
+    {
+        try
+        {
+            _resolved?.Invoke(info, judgment);
+        }
+        catch (Exception)
+        {
+            // A provider that has gone away must not break the check.
+        }
     }
 
     void RecordFailure(TurnEndInfo info, string code)
@@ -178,7 +213,8 @@ public sealed class TurnEndMonitor : IDisposable
             }
         }
 
-        _log($"Jev {info.TaskKey}: failed ({code}); the built-in rules are unaffected");
+        _log($"Jev {info.TaskKey}: failed ({code}); the built-in rules decide");
         if (paused) _log($"Jev paused for {PauseFor.TotalMinutes:0} minutes after repeated failures");
+        Resolve(info, null);
     }
 }

@@ -221,6 +221,22 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
         return files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    /// <summary>Attaches the AI's answer (or null: rules decide) to the session whose finished turn it belongs to.</summary>
+    internal bool ApplyJudgment(string taskKey, string evidenceKey, StatusBar.Core.Judgment.TurnEndJudgment? judgment)
+    {
+        foreach (var entry in _entries.Values)
+        {
+            var state = entry.State;
+            if (state.IsSidechainOnly || state.FinalMessageAt is not DateTimeOffset at ||
+                !string.Equals("claude:" + ShortId(state), taskKey, StringComparison.Ordinal) ||
+                !string.Equals(StatusBar.Core.Judgment.TurnVerdictPolicy.EvidenceKeyFor(at), evidenceKey, StringComparison.Ordinal)) continue;
+            state.Verdict = new StatusBar.Core.Judgment.TurnVerdict(evidenceKey, judgment);
+            return true;
+        }
+
+        return false;
+    }
+
     void RaiseTurnEnded(ClaudeCodeSessionState state, DateTimeOffset? finalBefore)
     {
         if (state.IsSidechainOnly || state.FinalMessageAt is not DateTimeOffset at || at == finalBefore || state.FinalMessageTail is not { } text) return;
@@ -229,7 +245,7 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
             TurnEnded?.Invoke(new StatusBar.Core.Judgment.TurnEndInfo(
                 AgentProvider.Claude,
                 "claude:" + ShortId(state),
-                at.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                StatusBar.Core.Judgment.TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithQuestion ? "question" : "none",
                 text));
         }
