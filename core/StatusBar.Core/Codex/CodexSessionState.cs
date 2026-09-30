@@ -29,6 +29,8 @@ internal sealed class CodexSessionState
     internal string? FileKey { get; set; }
     internal string? Source { get; set; }
     internal string? ParentThreadId { get; set; }
+    /// <summary>The session is Codex's own approval-review ("guardian") run, not a task Steve started.</summary>
+    internal bool IsGuardianReview { get; set; }
     internal string? CwdLeaf { get; set; }
     internal DateTimeOffset? StartedAt { get; set; }
     internal string? ApprovalPolicy { get; set; }

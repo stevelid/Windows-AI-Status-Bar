@@ -166,6 +166,34 @@ public class CodexRolloutParserTests
     }
 
     [Fact]
+    public void Real_shape_spawned_subagent_records_its_parent()
+    {
+        var (state, _) = ReadFixture("provisional-subagent-spawned.jsonl");
+
+        Assert.Equal("sub-agent", state.Source);
+        Assert.Equal("thread-parent", state.ParentThreadId);
+        Assert.False(state.IsGuardianReview);
+    }
+
+    [Fact]
+    public void Guardian_review_session_is_recognised_and_is_not_a_subagent_of_anything()
+    {
+        var (state, _) = ReadFixture("provisional-guardian-review.jsonl");
+
+        Assert.True(state.IsGuardianReview);
+        Assert.Null(state.ParentThreadId);
+        Assert.Equal("thread-guardian", state.ThreadId);
+    }
+
+    [Fact]
+    public void Ordinary_desktop_session_is_not_a_guardian_review()
+    {
+        var (state, _) = ReadFixture("provisional-turn-running.jsonl");
+
+        Assert.False(state.IsGuardianReview);
+    }
+
+    [Fact]
     public void Missing_timestamp_uses_the_supplied_file_time()
     {
         var state = new CodexSessionState();
