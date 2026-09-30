@@ -38,6 +38,9 @@ public class Settings
     public int ApproachingBelowPercent { get; set; } = 30;
     public int LowBelowPercent { get; set; } = 10;
     public bool DemoTasks { get; set; } = false;
+    /// <summary>Saves the completed-task history, including short titles, so it survives a restart.</summary>
+    public bool KeepHistory { get; set; } = false;
+    public bool HistoryExpanded { get; set; } = false;
     [JsonIgnore]
     public bool DoNotPersist { get; set; }
 

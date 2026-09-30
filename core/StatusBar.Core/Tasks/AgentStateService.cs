@@ -13,6 +13,7 @@ public sealed class AgentStateService : IAsyncDisposable
     readonly HashSet<AgentProvider> _receivedFirstUpdate = new();
     readonly DismissalStore _dismissals;
     readonly NotificationGate _notifications;
+    readonly TaskHistory? _history;
     readonly TimeProvider _time;
     readonly StateServiceOptions _options;
     readonly ITimer _expiryTimer;
@@ -41,7 +42,8 @@ public sealed class AgentStateService : IAsyncDisposable
         TimeProvider time,
         StateServiceOptions options,
         DismissalStore? dismissalStore = null,
-        NotificationGate? notificationGate = null)
+        NotificationGate? notificationGate = null,
+        TaskHistory? history = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(time);
@@ -61,6 +63,7 @@ public sealed class AgentStateService : IAsyncDisposable
         _options = options;
         _dismissals = dismissalStore ?? new DismissalStore(time);
         _notifications = notificationGate ?? new NotificationGate(time);
+        _history = history;
         _expiryTimer = time.CreateTimer(
             OnExpiryTimer,
             null,
@@ -85,6 +88,7 @@ public sealed class AgentStateService : IAsyncDisposable
         {
             _current = BuildState(_time.GetUtcNow());
             _notifications.Seed(_current.Tasks);
+            ObserveHistory();
             ScheduleNextExpiry(_time.GetUtcNow());
         }
 
@@ -160,6 +164,24 @@ public sealed class AgentStateService : IAsyncDisposable
         if (changed is not null) RaiseStateChanged(changed);
     }
 
+    /// <summary>Hides every finished (complete or failed) task currently listed; they remain in the history.</summary>
+    public void DismissFinished()
+    {
+        StatusBarState? changed;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            foreach (var task in _current.Tasks.Where(task => task.Status is AgentTaskStatus.Complete or AgentTaskStatus.Failed))
+                _dismissals.Dismiss(task.Id, DismissalKeyFor(task));
+            changed = RebuildIfChanged(_time.GetUtcNow());
+        }
+
+        if (changed is not null) RaiseStateChanged(changed);
+    }
+
+    // Records finishes from the raw provider lists, so a task that was dismissed still reaches the history.
+    void ObserveHistory() => _history?.Observe(_snapshots.Values.SelectMany(snapshot => snapshot.Tasks));
+
     /// <summary>Cancels expiry timing and disposes every provider without allowing one failure to block another.</summary>
     public async ValueTask DisposeAsync()
     {
@@ -207,6 +229,7 @@ public sealed class AgentStateService : IAsyncDisposable
             {
                 _snapshots[expectedProvider] = UnavailableSnapshot(expectedProvider, "InvalidProviderSnapshot");
             }
+            ObserveHistory();
             var isInitialUpdate = _receivedFirstUpdate.Add(expectedProvider);
             changed = RebuildIfChanged(_time.GetUtcNow());
             if (isInitialUpdate)

@@ -38,9 +38,25 @@
                 <TextBlock x:Name="UnknownHeading" FontSize="11" FontWeight="Bold"
                            Margin="0,5,0,4" Visibility="Collapsed"/>
                 <StackPanel x:Name="UnknownRows"/>
-                <TextBlock x:Name="RecentHeading" FontSize="11" FontWeight="Bold"
-                           Margin="0,5,0,4" Visibility="Collapsed"/>
+                <Grid x:Name="RecentHeader" Margin="0,5,0,4" Visibility="Collapsed">
+                    <TextBlock x:Name="RecentHeading" FontSize="11" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="RecentClear" FontSize="10" HorizontalAlignment="Right"
+                               VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="OnClearFinishedClick"/>
+                </Grid>
                 <StackPanel x:Name="RecentRows"/>
+                <Border x:Name="HistoryHeader" Margin="0,8,0,3" Padding="0,3" Cursor="Hand"
+                        Background="Transparent" Visibility="Collapsed"
+                        MouseLeftButtonUp="OnHistoryToggleClick">
+                    <Grid>
+                        <TextBlock x:Name="HistoryHeading" FontSize="11" FontWeight="Bold"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock x:Name="HistoryClear" FontSize="10" HorizontalAlignment="Right"
+                                   VerticalAlignment="Center" Cursor="Hand" Visibility="Collapsed"
+                                   MouseLeftButtonUp="OnClearHistoryClick"/>
+                    </Grid>
+                </Border>
+                <StackPanel x:Name="HistoryRows" Visibility="Collapsed"/>
                 <TextBlock x:Name="EmptyTasks" FontSize="11" TextWrapping="Wrap"
                            Margin="0,7,0,0" Visibility="Collapsed"/>
             </StackPanel>
