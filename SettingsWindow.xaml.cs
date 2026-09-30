@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -43,6 +44,7 @@ public partial class SettingsWindow : Window
         FinishedNotificationsCheckBox.IsChecked = _settings.FinishedTaskNotificationsEnabled;
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
         KeepHistoryCheckBox.IsChecked = _settings.KeepHistory;
+        JevEnabledCheckBox.IsChecked = _settings.JevEnabled;
         RecentCompletedSlider.Value = _settings.RecentlyCompletedMinutes;
         AttentionLabelBox.Text = _settings.AttentionLabel;
         ApproachingSlider.Value = _settings.ApproachingBelowPercent;
@@ -93,6 +95,107 @@ public partial class SettingsWindow : Window
         if (_initializing) return;
         _settings.NotificationsEnabled = NotificationsCheckBox.IsChecked == true;
         SaveAndApply();
+    }
+
+    void OnJevEnabledChanged(object sender, RoutedEventArgs e)
+    {
+        if (_initializing) return;
+        var enabled = JevEnabledCheckBox.IsChecked == true;
+        if (enabled && !JevKeyStore.Exists)
+        {
+            _initializing = true;
+            JevEnabledCheckBox.IsChecked = false;
+            _initializing = false;
+            JevStatus.Text = L10n.T("settings_jev_need_key");
+            return;
+        }
+
+        _settings.JevEnabled = enabled;
+        SaveAndApply();
+    }
+
+    void OnJevSaveClick(object sender, RoutedEventArgs e)
+    {
+        var key = JevKeyBox.Password.Trim();
+        if (key.Length == 0) return;
+        try
+        {
+            JevKeyStore.Save(key);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Could not save the Jev API key", ex);
+            JevStatus.Text = L10n.F("settings_jev_test_failed", ex.GetType().Name);
+            return;
+        }
+
+        JevKeyBox.Clear();
+        RefreshJevStatus();
+        SaveAndApply();
+    }
+
+    void OnJevRemoveClick(object sender, RoutedEventArgs e)
+    {
+        JevKeyStore.Delete();
+        JevKeyBox.Clear();
+        if (_settings.JevEnabled)
+        {
+            _initializing = true;
+            JevEnabledCheckBox.IsChecked = false;
+            _initializing = false;
+            _settings.JevEnabled = false;
+        }
+
+        RefreshJevStatus();
+        SaveAndApply();
+    }
+
+    // Sends one made-up sentence, so the key and connection can be checked without using real text.
+    async void OnJevTestClick(object sender, RoutedEventArgs e)
+    {
+        var key = JevKeyBox.Password.Trim();
+        if (key.Length == 0) key = JevKeyStore.Load() ?? "";
+        if (key.Length == 0)
+        {
+            JevStatus.Text = L10n.T("settings_jev_need_key");
+            return;
+        }
+
+        JevTestButton.IsEnabled = false;
+        JevStatus.Text = L10n.T("settings_jev_testing");
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            var classifier = new StatusBar.Core.Judgment.JevTurnEndClassifier(http, key);
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var judgment = await classifier.ClassifyAsync(
+                "I've updated the report template and the checks pass. Shall I also refresh the appendix figures?",
+                CancellationToken.None);
+            JevStatus.Text = L10n.F(
+                "settings_jev_test_ok",
+                judgment.AsksUser.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                judgment.Finished.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                started.ElapsedMilliseconds);
+        }
+        catch (StatusBar.Core.Judgment.TurnEndClassifierException ex)
+        {
+            JevStatus.Text = L10n.F("settings_jev_test_failed", ex.Code);
+        }
+        catch (Exception ex)
+        {
+            JevStatus.Text = L10n.F("settings_jev_test_failed", ex.GetType().Name);
+        }
+        finally
+        {
+            JevTestButton.IsEnabled = true;
+        }
+    }
+
+    void RefreshJevStatus()
+    {
+        var saved = JevKeyStore.Exists;
+        JevStatus.Text = L10n.T(saved ? "settings_jev_key_saved" : "settings_jev_key_missing");
+        JevRemoveButton.Visibility = saved ? Visibility.Visible : Visibility.Collapsed;
     }
 
     void OnKeepHistoryChanged(object sender, RoutedEventArgs e)
@@ -316,6 +419,14 @@ public partial class SettingsWindow : Window
         FinishedNotificationsCheckBox.Content = L10n.T("settings_finished_notifications");
         DemoTasksCheckBox.Content = L10n.T("settings_demo_tasks");
         KeepHistoryCheckBox.Content = L10n.T("settings_keep_history");
+        JevHeading.Text = L10n.T("settings_section_jev");
+        JevEnabledCheckBox.Content = L10n.T("settings_jev_enabled");
+        JevHint.Text = L10n.T("settings_jev_hint");
+        JevKeyLabel.Text = L10n.T("settings_jev_key");
+        JevSaveButton.Content = L10n.T("settings_jev_save");
+        JevTestButton.Content = L10n.T("settings_jev_test");
+        JevRemoveButton.Content = L10n.T("settings_jev_remove");
+        RefreshJevStatus();
         KeepHistoryHint.Text = L10n.T("settings_keep_history_hint");
         RecentCompletedLabel.Text = L10n.T("settings_recent_completed");
         RecentCompletedValue.Text = ((int)Math.Round(RecentCompletedSlider.Value)).ToString();
@@ -348,16 +459,19 @@ public partial class SettingsWindow : Window
         FinishedNotificationsCheckBox.Foreground = fg;
         DemoTasksCheckBox.Foreground = fg;
         KeepHistoryCheckBox.Foreground = fg;
+        JevEnabledCheckBox.Foreground = fg;
+        JevKeyLabel.Foreground = fg;
+        JevStatus.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
         ClaudeHooksCheckBox.Foreground = fg;
         var subtle = ThemeManager.Brush(ThemeManager.SubtleText);
-        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint, KeepHistoryHint })
+        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint, KeepHistoryHint, JevHint })
             hint.Foreground = subtle;
 
         var accent = ThemeManager.Brush(ThemeManager.ColorForAllowance(StatusBar.Core.Usage.AllowanceLevel.Normal));
         var rule = ThemeManager.Brush(ThemeManager.IsLight ? Color.FromRgb(0xD8, 0xD9, 0xE0) : Color.FromRgb(0x3A, 0x3B, 0x46));
-        foreach (var heading in new[] { GeneralHeading, DisplayHeading, AlertsHeading, SourcesHeading })
+        foreach (var heading in new[] { GeneralHeading, DisplayHeading, AlertsHeading, JevHeading, SourcesHeading })
             heading.Foreground = accent;
-        foreach (var line in new[] { GeneralRule, DisplayRule, AlertsRule, SourcesRule })
+        foreach (var line in new[] { GeneralRule, DisplayRule, AlertsRule, JevRule, SourcesRule })
             line.Background = rule;
         ClaudeHooksPreviewLink.Foreground = accent;
         WindowTheming.ApplyTitleBar(this);

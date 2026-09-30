@@ -34,6 +34,9 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
     /// </summary>
     internal event Action<string>? Trace;
 
+    /// <summary>Raised when a live turn finishes and the AI check is on (see <see cref="StatusBar.Core.Judgment.FinalMessageCapture"/>).</summary>
+    internal event Action<StatusBar.Core.Judgment.TurnEndInfo>? TurnEnded;
+
     internal int TrackedFiles => _entries.Count;
     internal IReadOnlyList<(string SessionId, long Offset, long LastReadStartOffset)> ReaderPositions =>
         _entries.Values.Select(entry => (
@@ -104,9 +107,11 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
 
                 if (result.Lines.Count == 0) continue;
                 var before = Describe(entry.State);
+                var finalBefore = entry.State.FinalMessageAt;
                 foreach (var line in result.Lines)
                     ClaudeCodeTranscriptParser.Apply(entry.State, line, fallbackTime, _drift);
                 var after = Describe(entry.State);
+                RaiseTurnEnded(entry.State, finalBefore);
                 if (after != before)
                     Emit($"session {ShortId(entry.State)} {before} -> {after} ({result.Lines.Count} new records)");
             }
@@ -214,6 +219,24 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
         }
 
         return files.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    void RaiseTurnEnded(ClaudeCodeSessionState state, DateTimeOffset? finalBefore)
+    {
+        if (state.IsSidechainOnly || state.FinalMessageAt is not DateTimeOffset at || at == finalBefore || state.FinalMessageTail is not { } text) return;
+        try
+        {
+            TurnEnded?.Invoke(new StatusBar.Core.Judgment.TurnEndInfo(
+                AgentProvider.Claude,
+                "claude:" + ShortId(state),
+                at.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                state.EndedWithQuestion ? "question" : "none",
+                text));
+        }
+        catch (Exception)
+        {
+            // The optional check must never interrupt task collection.
+        }
     }
 
     void Emit(string message)

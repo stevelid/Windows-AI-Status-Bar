@@ -52,6 +52,7 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
         _watchFiles = watchFiles;
         _sessions = new CodexSessionReader(paths, time, _timings);
         _sessions.Trace += message => Trace?.Invoke(message);
+        _sessions.TurnEnded += info => TurnEnded?.Invoke(info);
         _current = Snapshot([], new ProviderHealth(ProviderHealthState.Starting, "NotStarted", null));
         _diagnostics = new CodexTaskDiagnostics(
             _current.Health,
@@ -75,6 +76,9 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
 
     /// <summary>Content-free debug lines about sessions and turns (see <c>CodexSessionReader.Trace</c>).</summary>
     public event Action<string>? Trace;
+
+    /// <summary>Raised when a live turn finishes and the optional AI check is on; carries the final message tail.</summary>
+    public event StatusBar.Core.Judgment.TurnEndHandler? TurnEnded;
 
     /// <inheritdoc />
     public ProviderTaskSnapshot Current

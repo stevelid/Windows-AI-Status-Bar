@@ -40,6 +40,8 @@ public class Settings
     public bool DemoTasks { get; set; } = false;
     /// <summary>Saves the completed-task history, including short titles, so it survives a restart.</summary>
     public bool KeepHistory { get; set; } = false;
+    /// <summary>Checks each finished turn's final message with Jev and logs how it compares with the built-in rules. Off by default; needs an API key.</summary>
+    public bool JevEnabled { get; set; } = false;
     public bool HistoryExpanded { get; set; } = false;
     [JsonIgnore]
     public bool DoNotPersist { get; set; }

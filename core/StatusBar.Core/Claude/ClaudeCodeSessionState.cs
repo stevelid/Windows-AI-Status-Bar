@@ -47,6 +47,12 @@ internal sealed class ClaudeCodeSessionState
     internal bool HasNonSidechainActivity { get; set; }
     internal bool IsSidechainOnly => HasSidechainActivity && !HasNonSidechainActivity;
     internal bool EndedWithQuestion { get; set; }
+
+    /// <summary>Tail of the last final message, only while the optional AI check is on. Never logged or persisted.</summary>
+    internal string? FinalMessageTail { get; set; }
+
+    /// <summary>When <see cref="FinalMessageTail"/> was captured; changes once per finished turn.</summary>
+    internal DateTimeOffset? FinalMessageAt { get; set; }
     internal ClaudeCodeTurnStatus Turn { get; set; }
     internal Dictionary<string, ClaudePendingTool> PendingTools { get; } = new(StringComparer.Ordinal);
 

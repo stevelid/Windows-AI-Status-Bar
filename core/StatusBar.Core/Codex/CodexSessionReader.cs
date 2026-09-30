@@ -1,5 +1,6 @@
 using StatusBar.Core.Diagnostics;
 using StatusBar.Core.IO;
+using StatusBar.Core.Judgment;
 using StatusBar.Core.Tasks;
 
 namespace StatusBar.Core.Codex;
@@ -37,6 +38,9 @@ internal sealed class CodexSessionReader : IDisposable
     /// prompts, paths or message text.
     /// </summary>
     internal event Action<string>? Trace;
+
+    /// <summary>Raised when a live turn finishes and the AI check is on (see <see cref="FinalMessageCapture"/>).</summary>
+    internal event Action<TurnEndInfo>? TurnEnded;
 
     internal int TrackedFiles => _entries.Count;
     internal int ReadFailureCount => Volatile.Read(ref _readFailureCount);
@@ -114,9 +118,11 @@ internal sealed class CodexSessionReader : IDisposable
 
                 if (result.Lines.Count == 0) continue;
                 var before = Describe(entry.State);
+                var finalBefore = entry.State.FinalMessageAt;
                 foreach (var line in result.Lines)
                     CodexRolloutParser.Apply(entry.State, line, fallbackTime, _drift);
                 var after = Describe(entry.State);
+                RaiseTurnEnded(entry.State, finalBefore);
                 if (after != before)
                     Emit($"session {ShortId(entry.State)} {before} -> {after} ({result.Lines.Count} new records)");
             }
@@ -155,6 +161,24 @@ internal sealed class CodexSessionReader : IDisposable
         var reader = new IncrementalJsonlReader(path);
         reader.StartAt(tail.Offset);
         return new SessionEntry(state, reader);
+    }
+
+    void RaiseTurnEnded(CodexSessionState state, DateTimeOffset? finalBefore)
+    {
+        if (state.FinalMessageAt is not DateTimeOffset at || at == finalBefore || state.FinalMessageTail is not { } text) return;
+        try
+        {
+            TurnEnded?.Invoke(new TurnEndInfo(
+                AgentProvider.Codex,
+                "codex:" + ShortId(state),
+                at.UtcTicks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "question" : "none",
+                text));
+        }
+        catch (Exception)
+        {
+            // The optional check must never interrupt task collection.
+        }
     }
 
     void Emit(string message)
