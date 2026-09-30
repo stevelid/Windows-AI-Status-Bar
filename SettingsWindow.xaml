@@ -74,6 +74,10 @@
                       Checked="OnKeepHistoryChanged" Unchecked="OnKeepHistoryChanged"/>
             <TextBlock x:Name="KeepHistoryHint" Style="{StaticResource Hint}" Margin="20,4,0,0"/>
 
+            <CheckBox x:Name="SaveUsageHistoryCheckBox" Margin="0,14,0,0"
+                      Checked="OnSaveUsageHistoryChanged" Unchecked="OnSaveUsageHistoryChanged"/>
+            <TextBlock x:Name="SaveUsageHistoryHint" Style="{StaticResource Hint}" Margin="20,4,0,0"/>
+
             <TextBlock x:Name="AttentionLabelText" Style="{StaticResource FieldLabel}"/>
             <TextBox x:Name="AttentionLabelBox" Padding="6,5" Margin="0,6,0,0"
                      LostFocus="OnAttentionLabelLostFocus"/>

@@ -21,6 +21,7 @@ public partial class DetailsPaneWindow : Window
 
     readonly Settings _settings;
     readonly TaskHistory? _history;
+    readonly UsageRateHistory? _rates;
     double? _anchorBottom;
     double _workAreaTop;
     readonly Dictionary<string, UsageRow> _usageRows = new(StringComparer.Ordinal);
@@ -45,11 +46,12 @@ public partial class DetailsPaneWindow : Window
     public event Action<AgentTask>? FocusTaskRequested;
 
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
-    public DetailsPaneWindow(Settings settings, TaskHistory? history = null)
+    public DetailsPaneWindow(Settings settings, TaskHistory? history = null, UsageRateHistory? rates = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         _history = history;
+        _rates = rates;
         if (_history is not null) _history.Changed += OnHistoryChanged;
         InitializeComponent();
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
@@ -76,6 +78,7 @@ public partial class DetailsPaneWindow : Window
         _tasks = tasks;
         RenderUsage(UsageSource.Codex, CodexUsageRows, CodexHealth);
         RenderUsage(UsageSource.Claude, ClaudeUsageRows, ClaudeHealth);
+        RenderRates();
         RenderTasks();
     }
 
@@ -383,6 +386,32 @@ public partial class DetailsPaneWindow : Window
             : countdown;
     }
 
+    // A compact burn-rate strip above each provider's session (five-hour) window. It is hidden until the
+    // provider has a session window, and shows "collecting usage" until readings arrive.
+    void RenderRates()
+    {
+        RenderRate(UsageSource.Codex, CodexRate);
+        RenderRate(UsageSource.Claude, ClaudeRate);
+    }
+
+    void RenderRate(UsageSource source, RateStrip strip)
+    {
+        strip.Visibility = Visibility.Collapsed;
+        if (_rates is null || !_usage.TryGetValue(source, out var snapshot)) return;
+        if (snapshot.Health is UsageHealth.SignedOut or UsageHealth.Loading) return;
+        var window = UsageSummary.Compact(snapshot.Windows);
+        if (window is not { Length: { } length } || length > UsageRateHistory.MaximumWindowLength) return;
+
+        var series = _rates.Series(source, window.Key);
+        var stale = snapshot.Health is UsageHealth.Stale or UsageHealth.Unavailable;
+        var level = UsageSummary.Level(window.RemainingPercent, _settings.ApproachingBelowPercent, _settings.LowBelowPercent);
+        strip.Update(series, stale ? ThemeManager.SubtleText : ThemeManager.ColorForAllowance(level));
+        strip.ToolTip = series is { HasData: true, PeakPerHour: double peak }
+            ? L10n.F("pane_rate_tooltip", Math.Round(peak), UsageRateHistory.EvenPacePerHour)
+            : L10n.T("pane_rate_collecting");
+        strip.Visibility = Visibility.Visible;
+    }
+
     void RenderTasks()
     {
         var panels = new[] { NeedsYouRows, WorkingRows, UnknownRows, RecentRows };
@@ -515,6 +544,7 @@ public partial class DetailsPaneWindow : Window
     {
         RenderUsage(UsageSource.Codex, CodexUsageRows, CodexHealth);
         RenderUsage(UsageSource.Claude, ClaudeUsageRows, ClaudeHealth);
+        RenderRates();
         RenderTasks();
     }
 
