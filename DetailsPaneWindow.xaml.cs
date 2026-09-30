@@ -20,6 +20,9 @@ public partial class DetailsPaneWindow : Window
     const double PaneGapDip = 8;
 
     readonly Settings _settings;
+    readonly TaskHistory? _history;
+    double? _anchorBottom;
+    double _workAreaTop;
     readonly Dictionary<string, UsageRow> _usageRows = new(StringComparer.Ordinal);
     readonly Dictionary<string, TaskRowView> _taskRows = new(StringComparer.Ordinal);
     readonly DispatcherTimer _countdownTimer;
@@ -32,20 +35,29 @@ public partial class DetailsPaneWindow : Window
     /// <summary>Raised when the user dismisses an inferred attention or unknown task row.</summary>
     public event Action<string>? DismissTaskRequested;
 
+    /// <summary>Raised when the user clears every finished task from the "recently completed" list.</summary>
+    public event Action? ClearFinishedRequested;
+
+    /// <summary>Raised when the user opens a finished task from the history.</summary>
+    public event Action<AgentTask>? OpenHistoryTaskRequested;
+
     /// <summary>Raised when the user clicks a task row to focus its owning desktop app.</summary>
     public event Action<AgentTask>? FocusTaskRequested;
 
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
-    public DetailsPaneWindow(Settings settings)
+    public DetailsPaneWindow(Settings settings, TaskHistory? history = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
+        _history = history;
+        if (_history is not null) _history.Changed += OnHistoryChanged;
         InitializeComponent();
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _countdownTimer.Tick += OnCountdownTick;
         _autoCollapseTimer = new DispatcherTimer();
         _autoCollapseTimer.Tick += OnAutoCollapseTick;
         IsVisibleChanged += OnVisibilityChanged;
+        SizeChanged += OnPaneSizeChanged;
         Closed += OnClosed;
         L10n.Changed += ApplyAppearance;
         ThemeManager.Changed += ApplyAppearance;
@@ -94,8 +106,19 @@ public partial class DetailsPaneWindow : Window
             PaneGapDip);
         Left = placed.X;
         Top = placed.Y;
+        // Remember where the pane's bottom edge sits above the strip, so it can grow upwards later.
+        _anchorBottom = placed.Y + ActualHeight;
+        _workAreaTop = workAreaDip.Y;
         Activate();
         Focus();
+    }
+
+    // The pane hangs off the strip: when its content grows (a task arrives, history expands) it must
+    // extend upwards, otherwise it slides down over the strip and the taskbar.
+    void OnPaneSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_anchorBottom is not double bottom || !e.HeightChanged) return;
+        Top = Math.Max(_workAreaTop, bottom - e.NewSize.Height);
     }
 
     /// <summary>Reapplies current language, theme and transparency settings.</summary>
@@ -128,7 +151,7 @@ public partial class DetailsPaneWindow : Window
         foreach (var heading in new[]
                  {
                      CodexHeading, ClaudeHeading, NeedsYouHeading,
-                     WorkingHeading, UnknownHeading, RecentHeading,
+                     WorkingHeading, UnknownHeading, RecentHeading, HistoryHeading,
                  })
         {
             heading.Foreground = headingBrush;
@@ -140,6 +163,11 @@ public partial class DetailsPaneWindow : Window
         WorkingHeading.Text = L10n.T("pane_working");
         UnknownHeading.Text = L10n.T("pane_unknown");
         RecentHeading.Text = L10n.T("pane_recent");
+        var linkBrush = ThemeManager.Brush(ThemeManager.SubtleText);
+        RecentClear.Text = L10n.T("pane_recent_clear");
+        RecentClear.Foreground = linkBrush;
+        HistoryClear.Text = L10n.T("pane_history_clear");
+        HistoryClear.Foreground = linkBrush;
         EmptyTasks.Text = L10n.T("pane_empty_tasks");
     }
 
@@ -384,9 +412,88 @@ public partial class DetailsPaneWindow : Window
         NeedsYouHeading.Visibility = SetSection(NeedsYouHeading, counts[0]);
         WorkingHeading.Visibility = SetSection(WorkingHeading, counts[1]);
         UnknownHeading.Visibility = SetSection(UnknownHeading, counts[2]);
-        RecentHeading.Visibility = SetSection(RecentHeading, counts[3]);
+        RecentHeader.Visibility = counts[3] > 0 ? Visibility.Visible : Visibility.Collapsed;
         TaskDivider.Visibility = _tasks.Tasks.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
-        EmptyTasks.Visibility = _tasks.Tasks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        RenderHistory();
+        EmptyTasks.Visibility = _tasks.Tasks.Count == 0 && HistoryHeader.Visibility != Visibility.Visible
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    // History is a collapsed "HISTORY ▸ n" row under the task list; it expands in place. Tasks that
+    // are still listed under "recently completed" are left out so nothing appears twice.
+    void RenderHistory()
+    {
+        HistoryRows.Children.Clear();
+        var listed = _tasks.Tasks
+            .Where(task => task.Status is AgentTaskStatus.Complete or AgentTaskStatus.Failed)
+            .Select(task => task.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var entries = (_history?.Entries ?? Array.Empty<HistoryEntry>())
+            .Where(entry => !listed.Contains(entry.TaskId))
+            .ToArray();
+        if (entries.Length == 0)
+        {
+            HistoryHeader.Visibility = Visibility.Collapsed;
+            HistoryRows.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var expanded = _settings.HistoryExpanded;
+        HistoryHeader.Visibility = Visibility.Visible;
+        HistoryHeading.Text = $"{(expanded ? "▾" : "▸")} {L10n.T("pane_history")} · {entries.Length}";
+        HistoryClear.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        HistoryRows.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+        if (!expanded) return;
+
+        var today = DateTime.Now.Date;
+        string? lastGroup = null;
+        foreach (var entry in entries)
+        {
+            var day = entry.FinishedAt.ToLocalTime().Date;
+            var group = day == today ? "pane_history_today" : day == today.AddDays(-1) ? "pane_history_yesterday" : "pane_history_earlier";
+            if (group != lastGroup)
+            {
+                HistoryRows.Children.Add(new TextBlock
+                {
+                    Text = L10n.T(group),
+                    FontSize = 10,
+                    Margin = new Thickness(2, lastGroup is null ? 2 : 8, 0, 3),
+                    Foreground = ThemeManager.Brush(ThemeManager.SubtleText),
+                });
+                lastGroup = group;
+            }
+
+            var row = new HistoryRowView(entry);
+            row.OpenRequested += item => OpenHistoryTaskRequested?.Invoke(item.ToTask());
+            row.RemoveRequested += taskId => _history?.Remove(taskId);
+            HistoryRows.Children.Add(row);
+        }
+    }
+
+    void OnHistoryChanged() => Dispatcher.BeginInvoke(() =>
+    {
+        if (IsVisible && !_closeRequested) RenderHistory();
+    });
+
+    void OnHistoryToggleClick(object sender, MouseButtonEventArgs e)
+    {
+        _settings.HistoryExpanded = !_settings.HistoryExpanded;
+        _settings.Save();
+        RenderHistory();
+        e.Handled = true;
+    }
+
+    void OnClearHistoryClick(object sender, MouseButtonEventArgs e)
+    {
+        _history?.Clear();
+        e.Handled = true;
+    }
+
+    void OnClearFinishedClick(object sender, MouseButtonEventArgs e)
+    {
+        ClearFinishedRequested?.Invoke();
+        e.Handled = true;
     }
 
     static Visibility SetSection(TextBlock heading, int count)
@@ -478,6 +585,7 @@ public partial class DetailsPaneWindow : Window
         _autoCollapseTimer.Stop();
         L10n.Changed -= ApplyAppearance;
         ThemeManager.Changed -= ApplyAppearance;
+        if (_history is not null) _history.Changed -= OnHistoryChanged;
     }
 
     sealed record UsageRow(

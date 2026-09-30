@@ -256,6 +256,28 @@ public sealed class AgentStateServiceTests
     }
 
     [Fact]
+    public async Task Finished_tasks_reach_the_history_even_when_dismissed_and_dismiss_finished_clears_the_list_only()
+    {
+        var time = new FakeTimeProvider(Now);
+        var provider = new TestProvider(AgentProvider.Codex);
+        var history = new TaskHistory(time, Path.Combine(Path.GetTempPath(), "statusbar-unused-history.json"));
+        await using var service = new AgentStateService(
+            [provider], time, StateServiceOptions.Default, history: history);
+        provider.Publish(TaskSnapshot(AgentProvider.Codex,
+        [
+            CreateTask("codex:done", AgentProvider.Codex, AgentTaskStatus.Complete, Now.AddMinutes(-2)),
+            CreateTask("codex:failed", AgentProvider.Codex, AgentTaskStatus.Failed, Now.AddMinutes(-1)),
+            CreateTask("codex:busy", AgentProvider.Codex, AgentTaskStatus.Working, Now),
+        ]));
+        Assert.Equal(3, service.Current.Tasks.Count);
+
+        service.DismissFinished();
+
+        Assert.Equal("codex:busy", Assert.Single(service.Current.Tasks).Id);
+        Assert.Equal(["codex:failed", "codex:done"], history.Entries.Select(entry => entry.TaskId).ToArray());
+    }
+
+    [Fact]
     public async Task Demo_provider_cycles_through_the_four_scripted_states()
     {
         var time = new FakeTimeProvider(Now);

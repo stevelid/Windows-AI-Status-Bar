@@ -23,6 +23,9 @@ public partial class App : System.Windows.Application
     ClaudeCodeTaskProvider? _claudeTaskProvider;
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
+    TaskHistory _history = null!;
+    TaskHistory? _demoHistory;
+    TaskHistory _activeHistory = null!;
     AttentionNotifier? _attentionNotifier;
     SystemEventsAdapter? _systemEvents;
     long? _detailsPaneClosedAtMs;
@@ -169,6 +172,7 @@ public partial class App : System.Windows.Application
     void StartupCore()
     {
         _settings = Settings.Load();
+        _history = new TaskHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "history.json"), _settings.KeepHistory);
         if (_settings.UseClaudeCodeHooks)
         {
             try
@@ -507,6 +511,7 @@ public partial class App : System.Windows.Application
         _widget.ApplyAppearance();
         if (_detailsPane?.IsVisible == true) _detailsPane.ApplyAppearance();
         _dockController?.Redock();
+        _history.SetPersistence(_settings.KeepHistory);
         ConfigureAgentTaskService();
         UpdateTray();
 
@@ -686,6 +691,10 @@ public partial class App : System.Windows.Application
         }
 
         var stateTime = TimeProvider.System;
+        // Demo tasks get their own in-memory history, so they never mix with (or get saved into) the real one.
+        _activeHistory = demoMode
+            ? _demoHistory ??= new TaskHistory(stateTime, Path.Combine(AppPaths.DataDir, "history-demo.json"))
+            : _history;
         _agentStateService = new AgentStateService(
             taskProviders,
             stateTime,
@@ -693,7 +702,8 @@ public partial class App : System.Windows.Application
                 TimeSpan.FromMinutes(_settings.RecentlyCompletedMinutes),
                 TaskTimings.Default.UnknownVisibleFor),
             new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")),
-            new NotificationGate(stateTime, Path.Combine(AppPaths.DataDir, "state.json")));
+            new NotificationGate(stateTime, Path.Combine(AppPaths.DataDir, "state.json")),
+            _activeHistory);
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
@@ -873,7 +883,9 @@ public partial class App : System.Windows.Application
         if (_detailsPaneClosedAtMs is long closedAt &&
             Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
-        _detailsPane = new DetailsPaneWindow(_settings);
+        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory);
+        _detailsPane.ClearFinishedRequested += () => _agentStateService?.DismissFinished();
+        _detailsPane.OpenHistoryTaskRequested += OnFocusTaskRequested;
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
         _detailsPane.FocusTaskRequested += OnFocusTaskRequested;
         _detailsPane.Closed += (_, _) =>

@@ -42,6 +42,7 @@ public partial class SettingsWindow : Window
         NotificationsCheckBox.IsChecked = _settings.NotificationsEnabled;
         FinishedNotificationsCheckBox.IsChecked = _settings.FinishedTaskNotificationsEnabled;
         DemoTasksCheckBox.IsChecked = _settings.DemoTasks;
+        KeepHistoryCheckBox.IsChecked = _settings.KeepHistory;
         RecentCompletedSlider.Value = _settings.RecentlyCompletedMinutes;
         AttentionLabelBox.Text = _settings.AttentionLabel;
         ApproachingSlider.Value = _settings.ApproachingBelowPercent;
@@ -91,6 +92,13 @@ public partial class SettingsWindow : Window
     {
         if (_initializing) return;
         _settings.NotificationsEnabled = NotificationsCheckBox.IsChecked == true;
+        SaveAndApply();
+    }
+
+    void OnKeepHistoryChanged(object sender, RoutedEventArgs e)
+    {
+        if (_initializing) return;
+        _settings.KeepHistory = KeepHistoryCheckBox.IsChecked == true;
         SaveAndApply();
     }
 
@@ -307,6 +315,8 @@ public partial class SettingsWindow : Window
         NotificationsCheckBox.Content = L10n.T("settings_notifications");
         FinishedNotificationsCheckBox.Content = L10n.T("settings_finished_notifications");
         DemoTasksCheckBox.Content = L10n.T("settings_demo_tasks");
+        KeepHistoryCheckBox.Content = L10n.T("settings_keep_history");
+        KeepHistoryHint.Text = L10n.T("settings_keep_history_hint");
         RecentCompletedLabel.Text = L10n.T("settings_recent_completed");
         RecentCompletedValue.Text = ((int)Math.Round(RecentCompletedSlider.Value)).ToString();
         PaneAutoCollapseLabel.Text = L10n.T("settings_pane_auto_collapse");
@@ -337,9 +347,10 @@ public partial class SettingsWindow : Window
         NotificationsCheckBox.Foreground = fg;
         FinishedNotificationsCheckBox.Foreground = fg;
         DemoTasksCheckBox.Foreground = fg;
+        KeepHistoryCheckBox.Foreground = fg;
         ClaudeHooksCheckBox.Foreground = fg;
         var subtle = ThemeManager.Brush(ThemeManager.SubtleText);
-        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint })
+        foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint, KeepHistoryHint })
             hint.Foreground = subtle;
 
         var accent = ThemeManager.Brush(ThemeManager.ColorForAllowance(StatusBar.Core.Usage.AllowanceLevel.Normal));

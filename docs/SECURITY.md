@@ -8,6 +8,7 @@
 | ChatGPT/Codex tokens | Codex-managed storage | Owned by official Codex | Official Codex process only |
 | Widget settings | `%APPDATA%\WindowsAIStatusBar\settings.json` | Normal user file permissions | Never |
 | Widget log | `%APPDATA%\WindowsAIStatusBar\log.txt` | Normal user file permissions | Never automatically |
+| Completed-task history (only if "Keep completed history after restart" is on) | `%APPDATA%\WindowsAIStatusBar\history.json`: short task titles, provider, finish time and the session reference used to reopen the task, kept 7 days | Normal user file permissions; deleted when the setting is turned off | Never |
 
 On first launch, the app copies only the existing DPAPI-encrypted `tokens.dat`
 from `%APPDATA%\ClaudeUsageWidget` when the new token file is absent. It does
