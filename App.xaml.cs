@@ -28,6 +28,7 @@ public partial class App : System.Windows.Application
     TaskHistory _history = null!;
     TurnEndMonitor? _turnEnds;
     UsageRateHistory _usageRates = null!;
+    readonly TaskActivityLog _activity = new(TimeProvider.System);
     HttpClient? _jevHttp;
     JevTurnEndClassifier? _jevClassifier;
     string? _jevKeyInUse;
@@ -723,7 +724,8 @@ public partial class App : System.Windows.Application
                 TaskTimings.Default.UnknownVisibleFor),
             new DismissalStore(stateTime, Path.Combine(AppPaths.DataDir, "state.json")),
             new NotificationGate(stateTime, Path.Combine(AppPaths.DataDir, "state.json")),
-            _activeHistory);
+            _activeHistory,
+            demoMode ? null : _activity);
         _agentStateRetentionMinutes = _settings.RecentlyCompletedMinutes;
         _agentStateDemoMode = demoMode;
         _agentStateCodexHomeOverride = codexHomeOverride;
@@ -942,7 +944,7 @@ public partial class App : System.Windows.Application
         if (_detailsPaneClosedAtMs is long closedAt &&
             Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
-        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory, _usageRates);
+        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory, _usageRates, _activity);
         _detailsPane.ClearFinishedRequested += () => _agentStateService?.DismissFinished();
         _detailsPane.OpenHistoryTaskRequested += OnFocusTaskRequested;
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;

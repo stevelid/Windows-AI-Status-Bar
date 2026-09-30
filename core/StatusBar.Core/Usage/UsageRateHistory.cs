@@ -130,6 +130,18 @@ public sealed class UsageRateHistory
         }
     }
 
+    /// <summary>The recent readings of one window (oldest first), for attributing use to conversations; empty when none.</summary>
+    public IReadOnlyList<(DateTimeOffset At, double Remaining)> Readings(UsageSource source, string windowKey)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(windowKey);
+        lock (_gate)
+        {
+            return _readings.TryGetValue((source, windowKey), out var list)
+                ? list.Select(reading => (reading.At, reading.Remaining)).ToArray()
+                : Array.Empty<(DateTimeOffset, double)>();
+        }
+    }
+
     /// <summary>The burn-rate series for one window, ending now; null when the window has never been recorded.</summary>
     public UsageRateSeries? Series(UsageSource source, string windowKey)
     {

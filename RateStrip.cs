@@ -1,10 +1,15 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using StatusBar.Core.Usage;
 using Color = System.Windows.Media.Color;
+using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Pen = System.Windows.Media.Pen;
 using Point = System.Windows.Point;
+using ToolTip = System.Windows.Controls.ToolTip;
 
 namespace ClaudeUsageWidget;
 
@@ -20,6 +25,20 @@ internal sealed class RateStrip : FrameworkElement
 
     UsageRateSeries? _series;
     Color _color = Colors.Gray;
+    int _hover = -1;
+    readonly ToolTip _tip = new() { Placement = PlacementMode.Relative, StaysOpen = true, Padding = new Thickness(8, 5, 8, 6) };
+    readonly TextBlock _tipText = new() { FontSize = 11, LineHeight = 15 };
+
+    /// <summary>Describes one slice for the hover tooltip (time, rate, what was running); null turns the hover off.</summary>
+    public Func<RatePoint, string>? Describe { get; set; }
+
+    public RateStrip()
+    {
+        _tip.Content = _tipText;
+        _tip.BorderThickness = new Thickness(1);
+        MouseLeave += (_, _) => EndHover();
+        Unloaded += (_, _) => EndHover();
+    }
 
     /// <summary>Sets the series and the colour of the calm part; redraws.</summary>
     public void Update(UsageRateSeries? series, Color color)
@@ -29,11 +48,47 @@ internal sealed class RateStrip : FrameworkElement
         InvalidateVisual();
     }
 
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        var series = _series;
+        if (series is null || !series.HasData || Describe is null || ActualWidth < 20) return;
+        var position = e.GetPosition(this);
+        var index = Math.Clamp((int)(position.X / ActualWidth * series.Points.Count), 0, series.Points.Count - 1);
+        if (index != _hover)
+        {
+            _hover = index;
+            InvalidateVisual();
+        }
+
+        // Match the pane's own colours rather than the system tooltip's.
+        var surface = ThemeManager.IsLight ? Color.FromRgb(0xFA, 0xFA, 0xFC) : Color.FromRgb(0x2A, 0x2A, 0x34);
+        _tip.Background = ThemeManager.Brush(surface);
+        _tip.BorderBrush = ThemeManager.Brush(ThemeManager.IsLight ? Color.FromRgb(0xB8, 0xB9, 0xC3) : Color.FromRgb(0x5A, 0x5B, 0x67));
+        _tipText.Foreground = ThemeManager.Brush(ThemeManager.TitleText);
+        _tipText.Text = Describe(series.Points[index]);
+        _tip.PlacementTarget = this;
+        _tip.HorizontalOffset = Math.Min(position.X + 10, Math.Max(0, ActualWidth - 200));
+        _tip.VerticalOffset = ActualHeight + 4;
+        _tip.IsOpen = true;
+    }
+
+    void EndHover()
+    {
+        _tip.IsOpen = false;
+        if (_hover < 0) return;
+        _hover = -1;
+        InvalidateVisual();
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         var width = ActualWidth;
         var height = ActualHeight;
         if (width < 20 || height < 10) return;
+
+        // A transparent fill so the hover works over the whole strip, not only where something is drawn.
+        dc.DrawRectangle(System.Windows.Media.Brushes.Transparent, null, new Rect(0, 0, width, height));
 
         var subtle = ThemeManager.SubtleText;
         var baseline = height - 0.5;
@@ -113,6 +168,12 @@ internal sealed class RateStrip : FrameworkElement
             new Pen(ThemeManager.Brush(Color.FromArgb(0xB0, subtle.R, subtle.G, subtle.B)), 0.7) { DashStyle = new DashStyle([3, 3], 0) },
             new Point(0, evenY),
             new Point(width, evenY));
+
+        if (_hover >= 0 && _hover < points.Count)
+        {
+            var x = XOf(_hover);
+            dc.DrawLine(new Pen(ThemeManager.Brush(Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)), 0.8), new Point(x, TopPadding), new Point(x, baseline));
+        }
 
         if (series.PeakPerHour is double peak)
             DrawLabel(dc, L10n.F("pane_rate_peak", Math.Round(peak).ToString("0", CultureInfo.CurrentCulture)), width, height, subtle, alignRight: true);
