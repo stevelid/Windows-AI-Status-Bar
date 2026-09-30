@@ -31,6 +31,15 @@ internal sealed class CodexSessionState
     internal string? ParentThreadId { get; set; }
     /// <summary>The session is Codex's own approval-review ("guardian") run, not a task Steve started.</summary>
     internal bool IsGuardianReview { get; set; }
+
+    /// <summary>Tail of the last final message, only while the optional AI check is on. Never logged or persisted.</summary>
+    internal string? FinalMessageTail { get; set; }
+
+    /// <summary>When <see cref="FinalMessageTail"/> was captured; changes once per finished turn.</summary>
+    internal DateTimeOffset? FinalMessageAt { get; set; }
+
+    /// <summary>The AI's answer for the current finished turn, once it arrives.</summary>
+    internal StatusBar.Core.Judgment.TurnVerdict? Verdict { get; set; }
     internal string? CwdLeaf { get; set; }
     internal DateTimeOffset? StartedAt { get; set; }
     internal string? ApprovalPolicy { get; set; }

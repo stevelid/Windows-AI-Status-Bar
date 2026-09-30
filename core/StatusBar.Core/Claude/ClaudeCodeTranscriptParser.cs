@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using StatusBar.Core.Common;
 using StatusBar.Core.Diagnostics;
+using StatusBar.Core.Judgment;
 
 namespace StatusBar.Core.Claude;
 
@@ -169,6 +170,9 @@ internal static class ClaudeCodeTranscriptParser
         state.Turn = ClaudeCodeTurnStatus.Running;
         state.TurnEndedAt = null;
         state.EndedWithQuestion = false;
+        state.FinalMessageTail = null;
+        state.FinalMessageAt = null;
+        state.Verdict = null;
         state.PendingTools.Clear();
         // A notification wakes Claude for a new turn, but its wrapper is not something Steve typed.
         if (state.FirstPromptTitleCandidate is null && !isTaskNotification)
@@ -249,6 +253,9 @@ internal static class ClaudeCodeTranscriptParser
         state.Turn = ClaudeCodeTurnStatus.Running;
         state.TurnEndedAt = null;
         state.EndedWithQuestion = false;
+        state.FinalMessageTail = null;
+        state.FinalMessageAt = null;
+        state.Verdict = null;
         var stopReason = ReadString(message, "stop_reason");
         if (string.Equals(stopReason, "end_turn", StringComparison.Ordinal))
         {
@@ -256,6 +263,10 @@ internal static class ClaudeCodeTranscriptParser
             state.Turn = ClaudeCodeTurnStatus.Completed;
             state.TurnEndedAt = state.LastActivity;
             state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(lastText);
+            // Only when the user has switched the AI check on: keep the tail in memory for that check.
+            state.FinalMessageTail = FinalMessageCapture.Tail(lastText);
+            state.FinalMessageAt = state.FinalMessageTail is null ? null : state.LastActivity;
+            state.Verdict = null;
             state.PendingTools.Clear();
         }
     }

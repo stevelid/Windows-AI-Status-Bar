@@ -1,10 +1,12 @@
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Security.Principal;
 using ClaudeUsageWidget.Providers;
 using StatusBar.Core.Claude;
 using StatusBar.Core.Codex;
 using StatusBar.Core.Diagnostics;
+using StatusBar.Core.Judgment;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
@@ -24,6 +26,10 @@ public partial class App : System.Windows.Application
     DockController? _dockController;
     DetailsPaneWindow? _detailsPane;
     TaskHistory _history = null!;
+    TurnEndMonitor? _turnEnds;
+    HttpClient? _jevHttp;
+    JevTurnEndClassifier? _jevClassifier;
+    string? _jevKeyInUse;
     TaskHistory? _demoHistory;
     TaskHistory _activeHistory = null!;
     AttentionNotifier? _attentionNotifier;
@@ -173,6 +179,13 @@ public partial class App : System.Windows.Application
     {
         _settings = Settings.Load();
         _history = new TaskHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "history.json"), _settings.KeepHistory);
+        _turnEnds = new TurnEndMonitor(
+            () => _jevClassifier,
+            Log.Write,
+            TimeProvider.System,
+            (info, judgment) => _ = ApplyTurnJudgmentAsync(info, _settings.JevAffectsState ? judgment : null),
+            () => _settings.JevAffectsState);
+        ApplyJevSettings();
         if (_settings.UseClaudeCodeHooks)
         {
             try
@@ -429,7 +442,8 @@ public partial class App : System.Windows.Application
                 typeof(App).Assembly.GetName().Version ?? new Version(0, 0, 0),
                 providers,
                 DiagnosticsService.InspectCodex(_settings.CodexExecutablePath),
-                _codexTaskProvider?.Diagnostics);
+                _codexTaskProvider?.Diagnostics,
+                _settings.JevEnabled ? _turnEnds?.Stats : null);
             System.Windows.Clipboard.SetText(report);
             _trayController.ShowBalloonTip(
                 3500,
@@ -512,6 +526,7 @@ public partial class App : System.Windows.Application
         if (_detailsPane?.IsVisible == true) _detailsPane.ApplyAppearance();
         _dockController?.Redock();
         _history.SetPersistence(_settings.KeepHistory);
+        ApplyJevSettings();
         ConfigureAgentTaskService();
         UpdateTray();
 
@@ -572,6 +587,7 @@ public partial class App : System.Windows.Application
         _exitStarted = true;
         Log.Write("使用者選擇結束");
         _systemEvents?.Dispose();
+        _turnEnds?.Dispose();
         _systemEvents = null;
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
@@ -800,6 +816,7 @@ public partial class App : System.Windows.Application
             _codexTaskProvider.Trace -= OnCodexTrace;
         }
         var provider = new CodexTaskProvider(codexHome);
+        provider.TurnEnded += OnTurnEnded;
         provider.WatcherOverflowed += OnCodexWatcherOverflow;
         provider.Trace += OnCodexTrace;
         _codexTaskProvider = provider;
@@ -812,6 +829,7 @@ public partial class App : System.Windows.Application
         if (_claudeTaskProvider is not null) _claudeTaskProvider.Trace -= OnClaudeTrace;
         var provider = new ClaudeCodeTaskProvider(claudeHome, hookPath);
         provider.Trace += OnClaudeTrace;
+        provider.TurnEnded += OnTurnEnded;
         _claudeTaskProvider = provider;
         return provider;
     }
@@ -837,6 +855,43 @@ public partial class App : System.Windows.Application
     static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
 
     static void OnClaudeTrace(string message) => Log.Write("Claude: " + message);
+
+    void OnTurnEnded(TurnEndInfo info)
+    {
+        _turnEnds?.Observe(info);
+        // Log-only mode: the built-in rules apply at once instead of waiting for the answer.
+        if (!_settings.JevAffectsState) _ = ApplyTurnJudgmentAsync(info, null);
+    }
+
+    // Returns the AI's answer (null: rules decide) to the provider that owns the finished turn.
+    async Task ApplyTurnJudgmentAsync(TurnEndInfo info, TurnEndJudgment? judgment)
+    {
+        try
+        {
+            if (info.Provider == AgentProvider.Codex && _codexTaskProvider is { } codex)
+                await codex.ApplyTurnJudgmentAsync(info, judgment);
+            else if (info.Provider == AgentProvider.Claude && _claudeTaskProvider is { } claude)
+                await claude.ApplyTurnJudgmentAsync(info, judgment);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Applying a turn judgment failed", ex);
+        }
+    }
+
+    // The AI check is opt-in and needs a saved key. Final-message text is only kept in memory while it is on.
+    void ApplyJevSettings()
+    {
+        var key = _settings.JevEnabled ? JevKeyStore.Load() : null;
+        if (!string.Equals(key, _jevKeyInUse, StringComparison.Ordinal))
+        {
+            _jevKeyInUse = key;
+            _jevClassifier = key is null
+                ? null
+                : new JevTurnEndClassifier(_jevHttp ??= new HttpClient { Timeout = TimeSpan.FromSeconds(8) }, key);
+        }
+        FinalMessageCapture.Enabled = _jevClassifier is not null;
+    }
 
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
 

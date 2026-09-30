@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
 using StatusBar.Core.Codex;
+using StatusBar.Core.Judgment;
 using StatusBar.Core.Usage;
 
 namespace ClaudeUsageWidget;
@@ -29,7 +30,8 @@ public static class DiagnosticsService
         Version appVersion,
         IEnumerable<ProviderDiagnostic> providers,
         CodexDiagnostic codex,
-        CodexTaskDiagnostics? codexTasks = null)
+        CodexTaskDiagnostics? codexTasks = null,
+        TurnEndStats? turnEnds = null)
     {
         var report = new StringBuilder();
         report.AppendLine("AI Usage Widget diagnostics (redacted)");
@@ -53,6 +55,18 @@ public static class DiagnosticsService
         report.AppendLine($"Codex.Executable: {codex.ExecutableName}");
         report.AppendLine($"Codex.Version: {codex.Version}");
         AppendCodexTaskDiagnostics(report, codexTasks);
+        if (turnEnds is not null)
+        {
+            // Counts only: the side-by-side check of Jev against the built-in rules (see the log for each decision).
+            report.AppendLine($"Jev.Judged: {turnEnds.Judged}");
+            report.AppendLine($"Jev.AgreedWithRules: {turnEnds.Agreed}");
+            report.AppendLine($"Jev.DisagreedWithRules: {turnEnds.Disagreed}");
+            report.AppendLine($"Jev.StructuredQuestions: {turnEnds.StructuredQuestions}");
+            report.AppendLine($"Jev.Failed: {turnEnds.Failed}");
+            report.AppendLine($"Jev.SkippedWhilePaused: {turnEnds.Skipped}");
+            report.AppendLine($"Jev.AverageLatencyMs: {turnEnds.AverageLatencyMs:0}");
+            report.AppendLine($"Jev.Tokens: {turnEnds.InputTokens} in, {turnEnds.OutputTokens} out");
+        }
         report.AppendLine("Privacy: no tokens, account data, usage values, log contents, or full paths included.");
         return report.ToString();
     }

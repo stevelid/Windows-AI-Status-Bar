@@ -136,12 +136,15 @@ internal sealed class TaskRowView : Border
         {
             AgentTaskStatus.NeedsAttention => task.AttentionReason,
             AgentTaskStatus.Failed => task.StatusDetail,
+            AgentTaskStatus.Complete when task.StatusDetail is StatusBar.Core.Judgment.TurnVerdictPolicy.ReviewDetail
+                or StatusBar.Core.Judgment.TurnVerdictPolicy.FollowUpDetail => task.StatusDetail,
             _ => null,
         };
         _reason.Text = reason ?? "";
-        _reason.Foreground = ThemeManager.Brush(task.Status == AgentTaskStatus.NeedsAttention
-            ? iconColor
-            : ThemeManager.SubtleText);
+        _reason.Foreground = ThemeManager.Brush(
+            task.Status == AgentTaskStatus.NeedsAttention || task.StatusDetail == StatusBar.Core.Judgment.TurnVerdictPolicy.ReviewDetail
+                ? (ThemeManager.IsLight ? Color.FromRgb(0x9A, 0x62, 0x10) : Color.FromRgb(0xFF, 0xD0, 0x75))
+                : ThemeManager.SubtleText);
         _reason.Visibility = string.IsNullOrWhiteSpace(reason) ? Visibility.Collapsed : Visibility.Visible;
         var providerName = L10n.T(task.Provider == AgentProvider.Codex
             ? "pane_provider_codex"

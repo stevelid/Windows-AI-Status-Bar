@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using StatusBar.Core.Common;
 using StatusBar.Core.Diagnostics;
+using StatusBar.Core.Judgment;
 
 namespace StatusBar.Core.Codex;
 
@@ -293,6 +294,9 @@ internal static class CodexRolloutParser
         state.TurnEndedAt = null;
         state.TurnId = null;
         state.AbortReason = null;
+        state.FinalMessageTail = null;
+        state.FinalMessageAt = null;
+        state.Verdict = null;
         state.PendingCalls.Clear();
     }
 
@@ -313,7 +317,12 @@ internal static class CodexRolloutParser
         {
             state.Turn = CodexTurnStatus.Completed;
             // D15: reduce the terminal message to one boolean and discard the text with this JSON record.
-            state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(ReadString(payload, "last_agent_message"));
+            var finalMessage = ReadString(payload, "last_agent_message");
+            state.EndedWithQuestion = QuestionDetector.EndsWithQuestion(finalMessage);
+            // Only when the user has switched the AI check on: keep the tail in memory for that check.
+            state.FinalMessageTail = FinalMessageCapture.Tail(finalMessage);
+            state.FinalMessageAt = state.FinalMessageTail is null ? null : state.LastActivity;
+            state.Verdict = null;
             state.EndedWithStructuredQuestion = state.AskedStructuredQuestion;
         }
         state.AskedStructuredQuestion = false;

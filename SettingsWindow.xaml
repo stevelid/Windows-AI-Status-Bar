@@ -115,6 +115,29 @@
             <CheckBox x:Name="FinishedNotificationsCheckBox" Margin="0,8,0,0"
                       Checked="OnFinishedNotificationsChanged" Unchecked="OnFinishedNotificationsChanged"/>
 
+            <!-- AI check (Jev) -->
+            <TextBlock x:Name="JevHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
+            <Border x:Name="JevRule" Style="{StaticResource SectionRule}"/>
+
+            <CheckBox x:Name="JevEnabledCheckBox" Margin="0,8,0,0"
+                      Checked="OnJevEnabledChanged" Unchecked="OnJevEnabledChanged"/>
+            <TextBlock x:Name="JevHint" Style="{StaticResource Hint}" Margin="20,4,0,0"/>
+            <CheckBox x:Name="JevAffectsCheckBox" Margin="20,8,0,0"
+                      Checked="OnJevAffectsChanged" Unchecked="OnJevAffectsChanged"/>
+
+            <TextBlock x:Name="JevKeyLabel" Style="{StaticResource FieldLabel}"/>
+            <DockPanel Margin="0,6,0,0">
+                <Button x:Name="JevSaveButton" DockPanel.Dock="Right" Margin="8,0,0,0" Padding="10,5"
+                        Click="OnJevSaveClick"/>
+                <PasswordBox x:Name="JevKeyBox" Padding="6,5" VerticalContentAlignment="Center"/>
+            </DockPanel>
+            <DockPanel Margin="0,8,0,0">
+                <Button x:Name="JevTestButton" DockPanel.Dock="Left" Padding="10,5" Click="OnJevTestClick"/>
+                <Button x:Name="JevRemoveButton" DockPanel.Dock="Right" Padding="10,5" Click="OnJevRemoveClick"/>
+                <TextBlock x:Name="JevStatus" VerticalAlignment="Center" Margin="10,0" TextWrapping="Wrap"
+                           FontSize="11"/>
+            </DockPanel>
+
             <!-- Data sources -->
             <TextBlock x:Name="SourcesHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
             <Border x:Name="SourcesRule" Style="{StaticResource SectionRule}"/>
