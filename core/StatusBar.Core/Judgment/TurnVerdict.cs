@@ -36,6 +36,12 @@ public static class TurnVerdictPolicy
     /// <summary>Probability at or above which a waiting assistant counts as blocked mid-task (urgent) rather than offering a further step.</summary>
     public const double UrgentThreshold = 0.5;
 
+    /// <summary>
+    /// Probability at or above which the second-opinion "cannot go on until the user replies" answer agrees the assistant is
+    /// blocked (D28). A finished deliverable that notes an optional follow-up scored high on alert and urgent yet low here.
+    /// </summary>
+    public const double BlockedThreshold = 0.5;
+
     /// <summary>Row detail for finished work where the assistant only asks whether to take a further step: Steve's call, not urgent.</summary>
     public const string GoAheadDetail = "Ready for your go-ahead";
 
@@ -60,11 +66,18 @@ public static class TurnVerdictPolicy
         // No captured text: the AI check is off, or this turn was already over when the app started.
         if (finalMessageAt is not DateTimeOffset at) return rulesSayQuestion;
         if (verdict is not null && Matches(verdict, at))
-            return verdict.Judgment is { } judgment ? judgment.Alert >= AskThreshold && judgment.Urgent >= UrgentThreshold : rulesSayQuestion;
+            return verdict.Judgment is { } judgment ? IsUrgentAlert(judgment) : rulesSayQuestion;
         // A turn recovered at start-up finished long ago, so the wait is measured from when its answer was asked for.
         var waitingSince = judgmentRequestedAt is { } requested && requested > at ? requested : at;
         return now - waitingSince < Grace ? null : rulesSayQuestion;
     }
+
+    /// <summary>
+    /// The one rule for the urgent alert: waiting, held up mid-task and confirmed blocked by the second opinion. Any
+    /// waiting answer that fails the last two is a calm go-ahead instead. Used by the state and by the monitor log.
+    /// </summary>
+    public static bool IsUrgentAlert(TurnEndJudgment judgment) =>
+        judgment.Alert >= AskThreshold && judgment.Urgent >= UrgentThreshold && judgment.Blocked >= BlockedThreshold;
 
     /// <summary>
     /// The turns to judge among those found already finished at start-up: recent enough, newest first, capped so a
@@ -103,7 +116,7 @@ public static class TurnVerdictPolicy
         if (finalMessageAt is not DateTimeOffset at || verdict is null || !Matches(verdict, at)) return null;
         if (verdict.Judgment is not { } judgment) return null;
         // Waiting but not blocked: the work is done and the assistant asks about a further step.
-        if (judgment.Alert >= AskThreshold) return judgment.Urgent < UrgentThreshold ? GoAheadDetail : null;
+        if (judgment.Alert >= AskThreshold) return IsUrgentAlert(judgment) ? null : GoAheadDetail;
         if (judgment.Report >= HintThreshold) return NextStepsDetail;
         return judgment.Offer >= HintThreshold ? FollowUpDetail : null;
     }

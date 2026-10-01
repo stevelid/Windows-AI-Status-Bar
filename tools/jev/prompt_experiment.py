@@ -5,12 +5,12 @@ Usage (needs the JEV_AI_API_KEY environment variable; the key is never printed):
     python tools/jev/prompt_experiment.py set2 "kind2 (choice)" "blocked_on_user (v2)"
     python tools/jev/prompt_experiment.py set3 "kind2 (choice)"
     python tools/jev/prompt_experiment.py set4 "kind2 (choice)" "urgency (choice)"   # urgency tier (D25)
-    python tools/jev/prompt_experiment.py set1 ship        # shorthand: the two shipped questions, with the combined outcome
+    python tools/jev/prompt_experiment.py set1 ship        # shorthand: the three shipped questions, with the combined outcome
 
 Set 4 (13 messages) tests the urgency tier: each is labelled urgent (blocked mid-task), go-ahead (work done, asks
 about a further step) or quiet. When both "kind2 (choice)" and "urgency (choice)" are run, the last column is the
 shipped decision (TurnVerdictPolicy): alert mass >= 0.5 and P(blocked_mid_task) >= 0.5 -> URGENT; alert >= 0.5
-and urgency < 0.5 -> GOAHEAD; otherwise QUIET. For sets 1-3 an expected "ALERT" means URGENT or GOAHEAD is fine.
+and either of the other two below 0.5 -> GOAHEAD; otherwise QUIET. For sets 1-3 an expected "ALERT" means URGENT or GOAHEAD is fine.
 
 Sets 1-3 are 30 made-up messages, each labelled with whether it should raise an alert (a stopped assistant)
 or stay quiet. None of the text is real. The "kind2" choice and "blocked_on_user (v2)" wording match
@@ -170,8 +170,10 @@ def shipped(answers, ids):
     k = answers[ids["kind2 (choice)"]]["probabilities"]
     alert = min(1.0, sum(k.get(x, 0) for x in ALERT_KINDS))
     urgent = answers[ids["urgency (choice)"]]["probabilities"].get("blocked_mid_task", 0)
-    outcome = "QUIET" if alert < 0.5 else ("URGENT" if urgent >= 0.5 else "GOAHEAD")
-    return outcome, alert, urgent
+    # D28: the second opinion must also agree the assistant is blocked, or the alert is only a go-ahead.
+    blocked = answers[ids["blocked_on_user (v2)"]]["noul"]
+    outcome = "QUIET" if alert < 0.5 else ("URGENT" if urgent >= 0.5 and blocked >= 0.5 else "GOAHEAD")
+    return outcome, alert, urgent, blocked
 
 def expected_ok(expected, outcome):
     if expected is True: return outcome in ("URGENT", "GOAHEAD")   # sets 1-3: just "not quiet"
@@ -186,13 +188,13 @@ def main():
         args = args[1:]
     elif args and args[0] == "set1":
         args = args[1:]
-    if args == ["ship"]: args = ["kind2 (choice)", "urgency (choice)"]
+    if args == ["ship"]: args = ["kind2 (choice)", "urgency (choice)", "blocked_on_user (v2)"]
     which = args or list(QUESTIONS)
     qs = {k: QUESTIONS[k] for k in which}
     names = list(qs)
     ids = {k: f"q{i}" for i, k in enumerate(names)}
     payload_questions = {ids[k]: qs[k] for k in names}
-    both = "kind2 (choice)" in names and "urgency (choice)" in names
+    both = all(n in names for n in ("kind2 (choice)", "urgency (choice)", "blocked_on_user (v2)"))
     print("expect | " + " | ".join(names) + (" | shipped" if both else ""))
     tokens = right = 0
     for label, (expected, text) in messages.items():
@@ -202,11 +204,11 @@ def main():
         exp = ("ALERT" if expected else "quiet") if isinstance(expected, bool) else expected
         extra = ""
         if both:
-            outcome, alert, urgent = shipped(res["answers"], ids)
+            outcome, alert, urgent, blocked = shipped(res["answers"], ids)
             ok = expected_ok(expected, outcome)
             right += ok
             border = " BORDERLINE" if 0.35 <= urgent <= 0.65 and alert >= 0.5 else ""
-            extra = f' | {"ok " if ok else "BAD"} {outcome} alert={alert:.2f} urgent={urgent:.2f}{border}'
+            extra = f' | {"ok " if ok else "BAD"} {outcome} alert={alert:.2f} urgent={urgent:.2f} blocked={blocked:.2f}{border}'
         print(f'{exp} | {label} | ' + " | ".join(cells) + extra)
     if both: print(f"shipped decision right: {right}/{len(messages)}")
     print("total tokens:", tokens)
