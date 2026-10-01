@@ -59,6 +59,9 @@ internal sealed class ClaudeCodeSessionState
 
     /// <summary>The AI's answer for the current finished turn, once it arrives.</summary>
     internal StatusBar.Core.Judgment.TurnVerdict? Verdict { get; set; }
+
+    /// <summary>When the AI was asked about the current finished turn; the quiet wait for its answer counts from here (D26).</summary>
+    internal DateTimeOffset? JudgmentRequestedAt { get; set; }
     internal ClaudeCodeTurnStatus Turn { get; set; }
     internal Dictionary<string, ClaudePendingTool> PendingTools { get; } = new(StringComparer.Ordinal);
 

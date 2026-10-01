@@ -12,6 +12,15 @@ public static class TurnVerdictPolicy
     /// <summary>How long a turn with a captured final message waits for the AI before the rules take over.</summary>
     public static readonly TimeSpan Grace = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// How recent a turn that was already finished when the app started must be to still be judged (D26). Older
+    /// ones barely matter and would cost AI calls for nothing.
+    /// </summary>
+    public static readonly TimeSpan StartupJudgmentWindow = TimeSpan.FromMinutes(30);
+
+    /// <summary>Most already-finished turns judged per provider at start-up; the rest use the built-in rules.</summary>
+    public const int MaximumStartupJudgments = 10;
+
     /// <summary>Probability at or above which "the assistant is stopped waiting for the user" counts as yes.</summary>
     public const double AskThreshold = 0.5;
 
@@ -46,14 +55,27 @@ public static class TurnVerdictPolicy
     /// Whether the finished turn is blocked waiting for the user: true or false once decided, or null while the
     /// AI's answer is still awaited (the caller then shows the turn quietly, so a false alert never fires).
     /// </summary>
-    public static bool? AsksUser(bool rulesSayQuestion, DateTimeOffset? finalMessageAt, TurnVerdict? verdict, DateTimeOffset now)
+    public static bool? AsksUser(bool rulesSayQuestion, DateTimeOffset? finalMessageAt, TurnVerdict? verdict, DateTimeOffset now, DateTimeOffset? judgmentRequestedAt = null)
     {
         // No captured text: the AI check is off, or this turn was already over when the app started.
         if (finalMessageAt is not DateTimeOffset at) return rulesSayQuestion;
         if (verdict is not null && Matches(verdict, at))
             return verdict.Judgment is { } judgment ? judgment.Alert >= AskThreshold && judgment.Urgent >= UrgentThreshold : rulesSayQuestion;
-        return now - at < Grace ? null : rulesSayQuestion;
+        // A turn recovered at start-up finished long ago, so the wait is measured from when its answer was asked for.
+        var waitingSince = judgmentRequestedAt is { } requested && requested > at ? requested : at;
+        return now - waitingSince < Grace ? null : rulesSayQuestion;
     }
+
+    /// <summary>
+    /// The turns to judge among those found already finished at start-up: recent enough, newest first, capped so a
+    /// restart with many sessions cannot flood the AI. Returns indexes into <paramref name="finalMessageTimes"/>.
+    /// </summary>
+    public static IReadOnlyList<int> SelectStartupJudgments(IReadOnlyList<DateTimeOffset> finalMessageTimes, DateTimeOffset now) =>
+        Enumerable.Range(0, finalMessageTimes.Count)
+            .Where(i => now - finalMessageTimes[i] < StartupJudgmentWindow)
+            .OrderByDescending(i => finalMessageTimes[i])
+            .Take(MaximumStartupJudgments)
+            .ToArray();
 
     /// <summary>The alert wording for a turn the AI reads as stopped; the rules' wording when it has not decided.</summary>
     public static string AttentionReason(DateTimeOffset? finalMessageAt, TurnVerdict? verdict)

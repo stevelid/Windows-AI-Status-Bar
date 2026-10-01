@@ -79,7 +79,7 @@ internal static class CodexTaskMapper
         // Optional AI check: once it has answered for this turn it decides whether a finished turn asked a
         // question; while its answer is awaited the turn is shown quietly, and the rules are the fallback.
         var asksUser = StatusBar.Core.Judgment.TurnVerdictPolicy.AsksUser(
-            state.EndedWithQuestion, state.FinalMessageAt, state.Verdict, now) == true;
+            state.EndedWithQuestion, state.FinalMessageAt, state.Verdict, now, state.JudgmentRequestedAt) == true;
         return state.Turn switch
         {
             // ⚠️ A-X4 The answer to a question card is expected to start a new turn, which clears this.

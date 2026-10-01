@@ -43,6 +43,9 @@ internal sealed class CodexSessionState
 
     /// <summary>The AI's answer for the current finished turn, once it arrives.</summary>
     internal StatusBar.Core.Judgment.TurnVerdict? Verdict { get; set; }
+
+    /// <summary>When the AI was asked about the current finished turn; the quiet wait for its answer counts from here (D26).</summary>
+    internal DateTimeOffset? JudgmentRequestedAt { get; set; }
     internal string? CwdLeaf { get; set; }
     internal DateTimeOffset? StartedAt { get; set; }
     internal string? ApprovalPolicy { get; set; }
