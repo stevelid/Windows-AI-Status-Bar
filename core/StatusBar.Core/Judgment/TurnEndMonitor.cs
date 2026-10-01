@@ -148,7 +148,8 @@ public sealed class TurnEndMonitor : IDisposable
 
     void Record(TurnEndInfo info, TurnEndJudgment judgment, double elapsedMs)
     {
-        var jevAsks = judgment.Alert >= Threshold;
+        // The final urgent decision, so agree= measures what the strip would actually do (D28).
+        var jevAsks = TurnVerdictPolicy.IsUrgentAlert(judgment);
         string verdict;
         lock (_gate)
         {

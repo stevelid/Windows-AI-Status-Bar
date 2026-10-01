@@ -54,7 +54,8 @@ public sealed class TurnEndMonitorTests
     public async Task Compares_the_rules_with_the_half_probability_line(string rules, double asks, string expected)
     {
         var log = new LogSink();
-        var classifier = new StubClassifier(Judge(alert: asks));
+        // Blocked follows alert here: D28 compares the rules with the final urgent decision, which needs both.
+        var classifier = new StubClassifier(Judge(alert: asks, blocked: asks));
         using var monitor = new TurnEndMonitor(() => classifier, log.Write, new FakeTimeProvider());
 
         monitor.Observe(Info("claude:aaaaaaaa", "t1", rules));
@@ -64,6 +65,18 @@ public sealed class TurnEndMonitorTests
         Assert.Equal(expected == "yes" ? 1 : 0, stats.Agreed);
         Assert.Equal(expected == "NO" ? 1 : 0, stats.Disagreed);
         Assert.Equal(expected.StartsWith("n/a", StringComparison.Ordinal) ? 1 : 0, stats.StructuredQuestions);
+    }
+
+    [Fact]
+    public async Task A_waiting_answer_the_second_opinion_does_not_confirm_agrees_with_rules_that_saw_no_question()
+    {
+        var log = new LogSink();
+        var classifier = new StubClassifier(Judge(alert: 0.57, blocked: 0.37, urgent: 0.7));
+        using var monitor = new TurnEndMonitor(() => classifier, log.Write, new FakeTimeProvider());
+
+        monitor.Observe(Info("claude:aaaaaaaa", "t1", "none"));
+
+        Assert.Contains("agree=yes", await log.NextAsync(), StringComparison.Ordinal);
     }
 
     [Fact]

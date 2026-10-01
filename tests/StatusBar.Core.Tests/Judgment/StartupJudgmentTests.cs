@@ -67,7 +67,7 @@ public sealed class StartupJudgmentProviderTests : IDisposable
     static string Stamp(DateTimeOffset at) => at.UtcDateTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ", System.Globalization.CultureInfo.InvariantCulture);
 
     static TurnEndJudgment Judgment(double alert, double urgent = 1) =>
-        new(TurnEndKind.Finished, TurnEndKind.WaitingForAnswer, alert, 0, 0, 0, 0, urgent, 1, 1);
+        new(TurnEndKind.Finished, TurnEndKind.WaitingForAnswer, alert, 0, 0, 1, 0, urgent, 1, 1);
 
     string WriteCodex(DateTimeOffset now, string id, DateTimeOffset finishedAt)
     {

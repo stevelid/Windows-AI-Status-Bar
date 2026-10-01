@@ -60,6 +60,7 @@ public sealed class JevLiveTests
         (Outcome.GoAhead, "The report is finished and saved. Should I also send a copy to the client folder, or leave that for you?"),
         (Outcome.GoAhead, "Done: the three config files are updated and the checks pass. Do you want me to push the commit now, or will you review it first?"),
         (Outcome.GoAhead, "I've built the chart and checked it on your machine. Should I go ahead with the second part tomorrow, or wait until you've tried this one?"),
+        (Outcome.NotUrgent, "The summary note is finished and saved as note.docx. One optional follow-up if you want it: I could add a short appendix with the raw figures. The note stands without it."),
         (Outcome.Quiet, "Finished. The report is saved as summary.docx with the three charts embedded. No open issues."),
         (Outcome.Quiet, "Things to sort before it goes in the report: the tolerance rows, the edge path and the missing high bands. Next steps: send me the geometry and I can write the assumptions paragraph."),
     ];
@@ -87,7 +88,7 @@ public sealed class JevLiveTests
                 Outcome.NotUrgent => !urgent,
                 _ => !urgent && !goAhead,
             };
-            if (!ok) wrong.Add($"expected {expected} but alert={judgment.Alert:0.00} urgent={judgment.Urgent:0.00}: {text[..Math.Min(50, text.Length)]}");
+            if (!ok) wrong.Add($"expected {expected} but alert={judgment.Alert:0.00} urgent={judgment.Urgent:0.00} blocked={judgment.Blocked:0.00}: {text[..Math.Min(50, text.Length)]}");
         }
 
         Assert.True(wrong.Count == 0, string.Join(Environment.NewLine, wrong));

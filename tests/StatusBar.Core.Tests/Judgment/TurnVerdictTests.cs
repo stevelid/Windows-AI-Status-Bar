@@ -9,9 +9,9 @@ public sealed class TurnVerdictPolicyTests
 {
     static readonly DateTimeOffset At = DateTimeOffset.Parse("2030-01-01T12:00:00Z");
 
-    // Urgent defaults to 1 so a waiting verdict is a blocked one unless a test says otherwise.
-    static TurnVerdict Verdict(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer, double urgent = 1) =>
-        new(TurnVerdictPolicy.EvidenceKeyFor(At), new TurnEndJudgment(TurnEndKind.Finished, alertKind, alert, report, offer, 0, 0, urgent, 1, 1));
+    // Urgent and Blocked default to 1 so a waiting verdict is a blocked one unless a test says otherwise.
+    static TurnVerdict Verdict(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer, double urgent = 1, double blocked = 1) =>
+        new(TurnVerdictPolicy.EvidenceKeyFor(At), new TurnEndJudgment(TurnEndKind.Finished, alertKind, alert, report, offer, blocked, 0, urgent, 1, 1));
 
     [Theory]
     [InlineData(true, false)]
@@ -71,6 +71,27 @@ public sealed class TurnVerdictPolicyTests
 
         Assert.Equal(urgentAlert, TurnVerdictPolicy.AsksUser(false, At, verdict, At.AddSeconds(1)));
         Assert.Equal(detail, TurnVerdictPolicy.Detail(At, verdict));
+    }
+
+    // D28: the urgent alert also needs the second opinion (blocked) to agree; otherwise it is a go-ahead.
+    [Theory]
+    [InlineData(0.57, 0.70, 0.37, false, TurnVerdictPolicy.GoAheadDetail)] // the finished report with an optional follow-up
+    [InlineData(0.57, 0.70, 0.57, true, null)]                            // a real blocker still alerts
+    [InlineData(0.9, 0.9, 0.5, true, null)]                               // at the threshold counts
+    [InlineData(0.9, 0.9, 0.49, false, TurnVerdictPolicy.GoAheadDetail)]
+    [InlineData(0.9, 0.1, 0.9, false, TurnVerdictPolicy.GoAheadDetail)]
+    [InlineData(0.9, 0.1, 0.1, false, TurnVerdictPolicy.GoAheadDetail)]
+    [InlineData(0.49, 0.9, 0.9, false, null)]
+    [InlineData(0.49, 0.9, 0.1, false, null)]
+    public void The_urgent_alert_needs_alert_urgent_and_blocked_together(double alert, double urgent, double blocked, bool urgentAlert, string? detail)
+    {
+        var verdict = Verdict(alert, urgent: urgent, blocked: blocked);
+
+        Assert.Equal(urgentAlert, TurnVerdictPolicy.IsUrgentAlert(verdict.Judgment!));
+        Assert.Equal(urgentAlert, TurnVerdictPolicy.AsksUser(false, At, verdict, At.AddSeconds(1)));
+        Assert.Equal(detail, TurnVerdictPolicy.Detail(At, verdict));
+        // A turn is never both an alert and a go-ahead.
+        Assert.False(urgentAlert && TurnVerdictPolicy.Detail(At, verdict) is not null);
     }
 
     [Fact]
