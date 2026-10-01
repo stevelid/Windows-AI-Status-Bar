@@ -138,14 +138,18 @@ internal sealed class TaskRowView : Border
             AgentTaskStatus.Failed => task.StatusDetail,
             AgentTaskStatus.Complete when task.StatusDetail is StatusBar.Core.Judgment.TurnVerdictPolicy.NextStepsDetail
                 or StatusBar.Core.Judgment.TurnVerdictPolicy.FollowUpDetail => task.StatusDetail,
+            AgentTaskStatus.Complete when task.StatusDetail is StatusBar.Core.Judgment.TurnVerdictPolicy.GoAheadDetail =>
+                L10n.T("pane_goahead"),
             _ => null,
         };
         _reason.Text = reason ?? "";
-        // Next-step and follow-up hints stay grey: only a stopped assistant is amber.
-        _reason.Foreground = ThemeManager.Brush(
-            task.Status == AgentTaskStatus.NeedsAttention
-                ? (ThemeManager.IsLight ? Color.FromRgb(0x9A, 0x62, 0x10) : Color.FromRgb(0xFF, 0xD0, 0x75))
-                : ThemeManager.SubtleText);
+        // Next-step and follow-up hints stay grey: only a stopped assistant is amber. "Ready for your go-ahead"
+        // is the app's normal blue: Steve's call, but nothing is held up.
+        _reason.Foreground = task.Status == AgentTaskStatus.NeedsAttention
+            ? ThemeManager.Brush(ThemeManager.IsLight ? Color.FromRgb(0x9A, 0x62, 0x10) : Color.FromRgb(0xFF, 0xD0, 0x75))
+            : task.Status == AgentTaskStatus.Complete && task.StatusDetail == StatusBar.Core.Judgment.TurnVerdictPolicy.GoAheadDetail
+                ? ThemeManager.Brush(ThemeManager.ColorForAllowance(AllowanceLevel.Normal))
+                : ThemeManager.Brush(ThemeManager.SubtleText);
         _reason.Visibility = string.IsNullOrWhiteSpace(reason) ? Visibility.Collapsed : Visibility.Visible;
         var providerName = L10n.T(task.Provider == AgentProvider.Codex
             ? "pane_provider_codex"

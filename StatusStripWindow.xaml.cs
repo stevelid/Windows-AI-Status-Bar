@@ -89,7 +89,7 @@ public partial class StatusStripWindow : Window
     public void SetPaneOpen(bool open)
     {
         // ToolTipService.IsEnabled is not inherited, so each element with its own tooltip is set.
-        foreach (DependencyObject element in new DependencyObject[] { this, CodexText, ClaudeText, WorkingText, DoneText, AttentionPill })
+        foreach (DependencyObject element in new DependencyObject[] { this, CodexText, ClaudeText, WorkingText, DoneText, GoAheadText, AttentionPill })
             ToolTipService.SetIsEnabled(element, !open);
     }
 
@@ -132,6 +132,7 @@ public partial class StatusStripWindow : Window
         WorkingText.Foreground = ThemeManager.Brush(ThemeManager.LabelText);
         WorkingText.ToolTip = L10n.F("strip_working_tooltip", _tasks.WorkingCount);
         RenderDone();
+        RenderGoAhead();
 
         if (_tasks.AttentionCount > 0)
         {
@@ -170,6 +171,7 @@ public partial class StatusStripWindow : Window
         {
             var tip = $"{CodexText.ToolTip}\n{ClaudeText.ToolTip}\n{WorkingText.ToolTip}";
             if (DoneText.Visibility == Visibility.Visible) tip += $"\n{DoneText.ToolTip}";
+            if (GoAheadText.Visibility == Visibility.Visible) tip += $"\n{GoAheadText.ToolTip}";
             ToolTip = tip;
         }
     }
@@ -197,6 +199,23 @@ public partial class StatusStripWindow : Window
             ? L10n.F("strip_done_failed_tooltip", done, failed, _settings.RecentlyCompletedMinutes)
             : L10n.F("strip_done_tooltip", done, _settings.RecentlyCompletedMinutes);
         DoneText.Visibility = Visibility.Visible;
+    }
+
+    // Finished work where the assistant only asks about a further step: "? 1" in the app's normal blue.
+    // Calm by design: no pill, no animation, no notification, and not counted in the tick count.
+    void RenderGoAhead()
+    {
+        var count = _tasks.GoAheadCount;
+        if (count == 0)
+        {
+            GoAheadText.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        GoAheadText.Text = $"? {count}";
+        GoAheadText.Foreground = ThemeManager.Brush(ThemeManager.ColorForAllowance(AllowanceLevel.Normal));
+        GoAheadText.ToolTip = L10n.F("strip_goahead_tooltip", count);
+        GoAheadText.Visibility = Visibility.Visible;
     }
 
     void AnimateAttention(Color target)

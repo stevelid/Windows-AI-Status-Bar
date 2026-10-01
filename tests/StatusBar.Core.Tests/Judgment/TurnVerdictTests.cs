@@ -9,8 +9,9 @@ public sealed class TurnVerdictPolicyTests
 {
     static readonly DateTimeOffset At = DateTimeOffset.Parse("2030-01-01T12:00:00Z");
 
-    static TurnVerdict Verdict(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer) =>
-        new(TurnVerdictPolicy.EvidenceKeyFor(At), new TurnEndJudgment(TurnEndKind.Finished, alertKind, alert, report, offer, 0, 0, 1, 1));
+    // Urgent defaults to 1 so a waiting verdict is a blocked one unless a test says otherwise.
+    static TurnVerdict Verdict(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer, double urgent = 1) =>
+        new(TurnVerdictPolicy.EvidenceKeyFor(At), new TurnEndJudgment(TurnEndKind.Finished, alertKind, alert, report, offer, 0, 0, urgent, 1, 1));
 
     [Theory]
     [InlineData(true, false)]
@@ -52,10 +53,34 @@ public sealed class TurnVerdictPolicyTests
     {
         var reportWithNextSteps = new TurnVerdict(
             TurnVerdictPolicy.EvidenceKeyFor(At),
-            new TurnEndJudgment(TurnEndKind.ReportWithNextSteps, TurnEndKind.WaitingForAnswer, Alert: 0.14, Report: 0.9, Offer: 0.02, Blocked: 0.29, Asks: 0.92, 1, 1));
+            new TurnEndJudgment(TurnEndKind.ReportWithNextSteps, TurnEndKind.WaitingForAnswer, Alert: 0.14, Report: 0.9, Offer: 0.02, Blocked: 0.29, Asks: 0.92, Urgent: 0.1, 1, 1));
 
         Assert.False(TurnVerdictPolicy.AsksUser(false, At, reportWithNextSteps, At.AddSeconds(1)));
         Assert.Equal(TurnVerdictPolicy.NextStepsDetail, TurnVerdictPolicy.Detail(At, reportWithNextSteps));
+    }
+
+    [Theory]
+    [InlineData(0.9, 0.9, true, null)]
+    [InlineData(0.9, 0.1, false, TurnVerdictPolicy.GoAheadDetail)]
+    [InlineData(0.9, 0.49, false, TurnVerdictPolicy.GoAheadDetail)]
+    [InlineData(0.49, 0.9, false, null)]
+    [InlineData(0.1, 0.1, false, null)]
+    public void Urgency_is_consulted_only_once_the_assistant_is_waiting(double alert, double urgent, bool urgentAlert, string? detail)
+    {
+        var verdict = Verdict(alert, urgent: urgent);
+
+        Assert.Equal(urgentAlert, TurnVerdictPolicy.AsksUser(false, At, verdict, At.AddSeconds(1)));
+        Assert.Equal(detail, TurnVerdictPolicy.Detail(At, verdict));
+    }
+
+    [Fact]
+    public void A_go_ahead_does_not_fall_back_to_the_rules_but_a_missing_answer_still_does()
+    {
+        // The rules say "question" yet the AI read it as finished work with a further step: not urgent.
+        Assert.False(TurnVerdictPolicy.AsksUser(true, At, Verdict(0.9, urgent: 0.1), At.AddSeconds(1)));
+        var fellBack = new TurnVerdict(TurnVerdictPolicy.EvidenceKeyFor(At), null);
+        Assert.True(TurnVerdictPolicy.AsksUser(true, At, fellBack, At.AddSeconds(1)));
+        Assert.Null(TurnVerdictPolicy.Detail(At, fellBack));
     }
 
     [Theory]
@@ -113,8 +138,8 @@ public sealed class TurnVerdictProviderTests : IDisposable
 
     static string Now() => DateTimeOffset.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ");
 
-    static TurnEndJudgment Judgment(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer) =>
-        new(TurnEndKind.Finished, alertKind, alert, report, offer, alert, alert, 1, 1);
+    static TurnEndJudgment Judgment(double alert, double report = 0, double offer = 0, TurnEndKind alertKind = TurnEndKind.WaitingForAnswer, double urgent = 1) =>
+        new(TurnEndKind.Finished, alertKind, alert, report, offer, alert, alert, urgent, 1, 1);
 
     [Theory]
     [InlineData(Question, 0.95, AgentTaskStatus.NeedsAttention)]
@@ -167,6 +192,61 @@ public sealed class TurnVerdictProviderTests : IDisposable
         Assert.Equal(AgentTaskStatus.Complete, task.Status);
         Assert.Equal(TurnVerdictPolicy.NextStepsDetail, task.StatusDetail);
         await provider.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Codex_shows_a_go_ahead_instead_of_an_alert_and_counts_it_apart_from_done()
+    {
+        var (provider, file, seen) = await StartCodexAsync();
+        Append(file, CodexComplete(Question));
+        await provider.ReconcileAsync();
+
+        await provider.ApplyTurnJudgmentAsync(Assert.Single(seen), Judgment(alert: 0.9, urgent: 0.1));
+
+        var task = Assert.Single(provider.Current.Tasks);
+        Assert.Equal(AgentTaskStatus.Complete, task.Status);
+        Assert.Equal(TurnVerdictPolicy.GoAheadDetail, task.StatusDetail);
+        Assert.Equal(0, Counts(provider).AttentionCount);
+        Assert.Equal(1, Counts(provider).GoAheadCount);
+        Assert.Equal(0, Counts(provider).DoneCount);
+        await provider.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Codex_keeps_a_blocked_assistant_as_an_alert_and_a_structured_question_card_stays_urgent()
+    {
+        var (provider, file, seen) = await StartCodexAsync();
+        Append(file, CodexComplete(Question));
+        await provider.ReconcileAsync();
+
+        await provider.ApplyTurnJudgmentAsync(Assert.Single(seen), Judgment(alert: 0.9, urgent: 0.9));
+
+        Assert.Equal(AgentTaskStatus.NeedsAttention, Assert.Single(provider.Current.Tasks).Status);
+        Assert.Equal(1, Counts(provider).AttentionCount);
+        Assert.Equal(0, Counts(provider).GoAheadCount);
+        await provider.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Claude_shows_a_go_ahead_instead_of_an_alert()
+    {
+        var paths = ClaudeCodePaths.Resolve(overrideHome: _root);
+        var file = Path.Combine(paths.ProjectsDirectory, "project-folder", "0199a000-0000-7000-8000-00000000dcbb.jsonl");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        Append(file, "{\"type\":\"user\",\"sessionId\":\"0199a000-0000-7000-8000-00000000dcbb\",\"timestamp\":\"" + Now() + "\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Sample request\"}]}}");
+        var seen = new List<TurnEndInfo>();
+        await using var provider = new ClaudeCodeTaskProvider(paths, null, TimeProvider.System, watchFiles: false);
+        provider.TurnEnded += seen.Add;
+        await provider.ReconcileAsync();
+        Append(file, "{\"type\":\"assistant\",\"sessionId\":\"0199a000-0000-7000-8000-00000000dcbb\",\"timestamp\":\"" + Now() + "\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" + Question + "\"}],\"stop_reason\":\"end_turn\"}}");
+        await provider.ReconcileAsync();
+
+        await provider.ApplyTurnJudgmentAsync(Assert.Single(seen), Judgment(alert: 0.9, urgent: 0.1));
+
+        var task = Assert.Single(provider.Current.Tasks);
+        Assert.Equal(AgentTaskStatus.Complete, task.Status);
+        Assert.Equal(TurnVerdictPolicy.GoAheadDetail, task.StatusDetail);
+        Assert.Equal(1, Counts(provider).GoAheadCount);
     }
 
     [Fact]
@@ -224,6 +304,11 @@ public sealed class TurnVerdictProviderTests : IDisposable
 
     static string CodexComplete(string text) =>
         "{\"timestamp\":\"" + Now() + "\",\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\",\"last_agent_message\":\"" + text + "\"}}";
+
+    // The strip's counts come from StatusBarState, so build one over the provider's tasks.
+    static StatusBarState Counts(IAgentTaskProvider provider) =>
+        new(provider.Current.Tasks, 0, provider.Current.Tasks.Count(t => t.Status == AgentTaskStatus.NeedsAttention),
+            new Dictionary<AgentProvider, ProviderHealth>());
 
     static void Append(string file, string line) => File.AppendAllText(file, line + "\n");
 }

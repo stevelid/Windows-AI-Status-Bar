@@ -26,6 +26,8 @@
                        VerticalAlignment="Center"/>
             <TextBlock x:Name="DoneText" FontSize="11" FontWeight="SemiBold"
                        Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+            <TextBlock x:Name="GoAheadText" FontSize="11" FontWeight="SemiBold"
+                       Margin="8,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
             <Border x:Name="AttentionPill" CornerRadius="6" Padding="5,1"
                     Margin="6,0,0,0" Visibility="Collapsed">
                 <TextBlock x:Name="AttentionText" FontSize="10" FontWeight="Bold"

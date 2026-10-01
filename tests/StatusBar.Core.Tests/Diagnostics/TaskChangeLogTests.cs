@@ -42,7 +42,7 @@ public class TaskChangeLogTests
         Assert.Contains("Task codex:7728950e Working/Confirmed -> NeedsAttention/Confirmed (Asked you a question)", lines);
         Assert.Contains("Task codex:55555555 added: Working/Confirmed", lines);
         Assert.Contains("Task codex:c1f90ae7 removed (was Complete)", lines);
-        Assert.Contains("Counts: working 1 -> 1, attention 0 -> 1, done 1 -> 0, failed 0 -> 0", lines);
+        Assert.Contains("Counts: working 1 -> 1, attention 0 -> 1, done 1 -> 0, go-ahead 0 -> 0, failed 0 -> 0", lines);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class TaskChangeLogTests
             State(Task(id, AgentTaskStatus.Working)),
             State(Task(id, AgentTaskStatus.Complete)));
 
-        Assert.Contains("Counts: working 1 -> 0, attention 0 -> 0, done 0 -> 1, failed 0 -> 0", lines);
+        Assert.Contains("Counts: working 1 -> 0, attention 0 -> 0, done 0 -> 1, go-ahead 0 -> 0, failed 0 -> 0", lines);
     }
 
     [Fact]

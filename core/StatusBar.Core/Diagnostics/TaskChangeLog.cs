@@ -32,11 +32,13 @@ public static class TaskChangeLog
         if (previous.WorkingCount != next.WorkingCount ||
             previous.AttentionCount != next.AttentionCount ||
             previous.DoneCount != next.DoneCount ||
+            previous.GoAheadCount != next.GoAheadCount ||
             previous.FailedCount != next.FailedCount)
         {
             lines.Add($"Counts: working {previous.WorkingCount} -> {next.WorkingCount}, " +
                       $"attention {previous.AttentionCount} -> {next.AttentionCount}, " +
                       $"done {previous.DoneCount} -> {next.DoneCount}, " +
+                      $"go-ahead {previous.GoAheadCount} -> {next.GoAheadCount}, " +
                       $"failed {previous.FailedCount} -> {next.FailedCount}");
         }
 

@@ -215,11 +215,12 @@ internal static class CodexRolloutParser
             case "ghost_snapshot":
                 return;
             case "message":
-                if (state.TitleCandidate is null &&
-                    string.Equals(ReadString(payload, "role"), "user", StringComparison.Ordinal))
-                {
-                    state.TitleCandidate = ReadTitleCandidate(payload, "content");
-                }
+                if (!string.Equals(ReadString(payload, "role"), "user", StringComparison.Ordinal)) return;
+                // ⚠️ A-X4 Recon 2026-10-01: an answer to a question card (or any reply Steve types while the
+                // turn runs) arrives as a user message inside the same turn, and the turn carries on. Once he
+                // has replied, the card is no longer waiting on him.
+                if (state.Turn == CodexTurnStatus.Running) state.AskedStructuredQuestion = false;
+                state.TitleCandidate ??= ReadTitleCandidate(payload, "content");
                 return;
             default:
                 drift.RecordUnknown(GetSignature(recordType, itemType));

@@ -19,7 +19,8 @@ public sealed class TurnEndClassifierException(string code, HttpStatusCode? stat
 
 /// <summary>
 /// Asks TypeSafe's Jev model, in one request, what kind of ending a final message is (which drives the alert)
-/// and two yes/no questions that are kept as second opinions for the log. The wording was chosen by trying
+/// a second choice that splits a blocked assistant from a finished one asking about a further step, and two
+/// yes/no questions that are kept as second opinions for the log. The wording was chosen by trying
 /// alternatives on made-up messages of the shapes seen in real use; see docs/PROGRESS.md (D22).
 /// </summary>
 public sealed class JevTurnEndClassifier : ITurnEndClassifier
@@ -28,7 +29,7 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
     public static readonly Uri Endpoint = new("https://api.typesafe.ai/v1/systemone");
 
     /// <summary>Which wording of the questions is in use; logged with each decision so results can be compared across changes.</summary>
-    public const int PromptVersion = 3;
+    public const int PromptVersion = 4;
 
     const string Model = "jev-latest";
     const int MaximumAttempts = 2;
@@ -162,6 +163,26 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
                 "message itself answers, do not count.",
                 "The message ends by waiting for the user's answer, decision or approval.",
                 "The message reports results or status and does not wait for an answer."),
+
+            // Consulted only when "kind" has already said the assistant is waiting. It tells a blocker apart from
+            // finished work that merely asks about a further step ("shall I merge it?"), which Steve wants as a
+            // calm "your call". On its own it re-introduced a false alarm on a report with next steps (0.72), so
+            // it is never used alone. See D25 in docs/PROGRESS.md.
+            ["urgency"] = new JsonObject
+            {
+                ["type"] = "choice",
+                ["instructions"] =
+                    "The state holds the final message an AI assistant sent when it stopped working. Which kind of ending is it? " +
+                    "Decide by what happens if the user does not reply for a few hours, not by whether the message contains a question.",
+                ["criteria"] = new JsonObject
+                {
+                    ["blocked_mid_task"] = "The work the user asked for is not finished and cannot be finished until the user answers a question, makes a choice, gives permission or fixes something. Waiting holds the task up.",
+                    ["next_step_offer"] = "The work the user asked for is done (or handed over for review). The assistant asks whether to take a further step, such as merging, sending, publishing or doing a follow-on part. Nothing is lost if the user answers later.",
+                    ["carrying_on"] = "The assistant chose a way forward and is continuing by itself; it only invites the user to object if they disagree.",
+                    ["report_with_next_steps"] = "The assistant delivered a review, findings or a result and lists next steps or inputs that would help later; nothing is blocked.",
+                    ["finished"] = "The work is done with nothing further proposed or asked.",
+                },
+            },
         },
     };
 
@@ -198,6 +219,9 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
             var alertKind = KindOptions.Take(3).MaxBy(option => P(option.Id)).Kind;
             var alert = Math.Min(1, P("waiting_for_answer") + P("waiting_for_approval") + P("stuck"));
 
+            var urgency = answers["urgency"]?["probabilities"]?.AsObject() ?? throw new JsonException();
+            var urgent = Math.Clamp(urgency["blocked_mid_task"]?.GetValue<double>() ?? 0, 0, 1);
+
             var usage = root["usage"]?.AsObject();
             return new TurnEndJudgment(
                 top.Kind,
@@ -207,6 +231,7 @@ public sealed class JevTurnEndClassifier : ITurnEndClassifier
                 P("finished_with_offer"),
                 Noul("blocked_on_user"),
                 Noul("asks_user"),
+                urgent,
                 usage?["input_tokens"]?.GetValue<int>() ?? 0,
                 usage?["output_tokens"]?.GetValue<int>() ?? 0);
         }
