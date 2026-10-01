@@ -14,12 +14,15 @@ public sealed class JevTurnEndClassifierTests
                                    "carrying_on":0.01,"report_with_next_steps":0.01,"finished_with_offer":0.005,"finished":0.005},
                   "confidence":0.8},
           "blocked_on_user":{"type":"noul","noul":0.91},
-          "asks_user":{"type":"noul","noul":0.97}},
+          "asks_user":{"type":"noul","noul":0.97},
+          "urgency":{"type":"choice","choice":"blocked_mid_task",
+                     "probabilities":{"blocked_mid_task":0.88,"next_step_offer":0.07,"carrying_on":0.02,
+                                      "report_with_next_steps":0.02,"finished":0.01}}},
          "usage":{"input_tokens":304,"output_tokens":18}}
         """;
 
     [Fact]
-    public async Task Sends_one_request_with_the_kind_choice_and_two_noul_second_opinions()
+    public async Task Sends_one_request_with_the_kind_and_urgency_choices_and_two_noul_second_opinions()
     {
         var handler = new ScriptedHandler(_ => Json(SampleResponse));
         var classifier = new JevTurnEndClassifier(new HttpClient(handler), "  sample-key  ");
@@ -36,11 +39,17 @@ public sealed class JevTurnEndClassifierTests
         Assert.Equal("Placeholder final message.", (string?)body["state"]!["assistant_final_message"]);
         Assert.Null(body["state"]!["assistant_message_start"]);
         var questions = body["questions"]!.AsObject();
-        Assert.Equal(["kind", "blocked_on_user", "asks_user"], questions.Select(pair => pair.Key).ToArray());
+        Assert.Equal(["kind", "blocked_on_user", "asks_user", "urgency"], questions.Select(pair => pair.Key).ToArray());
         Assert.Equal("choice", (string?)questions["kind"]!["type"]);
         Assert.Equal(
             ["waiting_for_answer", "waiting_for_approval", "stuck", "carrying_on", "report_with_next_steps", "finished_with_offer", "finished"],
             questions["kind"]!["criteria"]!.AsObject().Select(pair => pair.Key).ToArray());
+        Assert.Equal("choice", (string?)questions["urgency"]!["type"]);
+        Assert.Equal(
+            ["blocked_mid_task", "next_step_offer", "carrying_on", "report_with_next_steps", "finished"],
+            questions["urgency"]!["criteria"]!.AsObject().Select(pair => pair.Key).ToArray());
+        Assert.Contains("a few hours", (string)questions["urgency"]!["instructions"]!, StringComparison.Ordinal);
+        Assert.Equal(4, JevTurnEndClassifier.PromptVersion);
         foreach (var name in new[] { "blocked_on_user", "asks_user" })
         {
             Assert.Equal("noul", (string?)questions[name]!["type"]);
@@ -56,6 +65,7 @@ public sealed class JevTurnEndClassifierTests
         Assert.Equal(0.005, judgment.Offer, precision: 6);
         Assert.Equal(0.91, judgment.Blocked);
         Assert.Equal(0.97, judgment.Asks);
+        Assert.Equal(0.88, judgment.Urgent, precision: 6);
         Assert.Equal(304, judgment.InputTokens);
         Assert.Equal(18, judgment.OutputTokens);
     }
@@ -87,7 +97,8 @@ public sealed class JevTurnEndClassifierTests
             {"answers":{"kind":{"type":"choice","choice":"report_with_next_steps",
                "probabilities":{"waiting_for_answer":0.20,"waiting_for_approval":0.30,"stuck":0.05,"carrying_on":0.0,
                                 "report_with_next_steps":0.40,"finished_with_offer":0.05,"finished":0.0}},
-             "blocked_on_user":{"type":"noul","noul":0.4},"asks_user":{"type":"noul","noul":0.9}}}
+             "blocked_on_user":{"type":"noul","noul":0.4},"asks_user":{"type":"noul","noul":0.9},
+             "urgency":{"type":"choice","probabilities":{"blocked_mid_task":0.2,"next_step_offer":0.7}}}}
             """;
         var classifier = new JevTurnEndClassifier(new HttpClient(new ScriptedHandler(_ => Json(response))), "key");
 
@@ -97,6 +108,7 @@ public sealed class JevTurnEndClassifierTests
         Assert.Equal(TurnEndKind.WaitingForApproval, judgment.AlertKind);
         Assert.Equal(0.55, judgment.Alert, precision: 6);
         Assert.Equal(0.40, judgment.Report, precision: 6);
+        Assert.Equal(0.2, judgment.Urgent, precision: 6);
     }
 
     [Fact]
@@ -134,7 +146,8 @@ public sealed class JevTurnEndClassifierTests
     [InlineData("not json")]
     [InlineData("{\"answers\":{}}")]
     [InlineData("{\"answers\":{\"kind\":{\"type\":\"choice\",\"choice\":\"finished\"},\"blocked_on_user\":{\"noul\":0},\"asks_user\":{\"noul\":0}}}")]
-    [InlineData("{\"answers\":{\"kind\":{\"probabilities\":{\"finished\":1}},\"blocked_on_user\":{\"noul\":\"high\"},\"asks_user\":{\"noul\":0}}}")]
+    [InlineData("{\"answers\":{\"kind\":{\"probabilities\":{\"finished\":1}},\"blocked_on_user\":{\"noul\":0},\"asks_user\":{\"noul\":0}}}")]
+    [InlineData("{\"answers\":{\"kind\":{\"probabilities\":{\"finished\":1}},\"blocked_on_user\":{\"noul\":\"high\"},\"asks_user\":{\"noul\":0},\"urgency\":{\"probabilities\":{\"blocked_mid_task\":0}}}}")]
     public async Task A_response_without_the_expected_answers_is_a_bad_response(string json)
     {
         var handler = new ScriptedHandler(_ => Json(json));

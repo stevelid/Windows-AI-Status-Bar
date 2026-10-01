@@ -180,10 +180,10 @@ public sealed class TurnEndMonitor : IDisposable
         var applied = info.Heuristic != "card" && (_affectsState?.Invoke() ?? false) ? "jev" : "rules";
         _log(string.Format(
             CultureInfo.InvariantCulture,
-            "Jev v{0} {1}: rules={2} | kind={3} alert={4:0.00} report={5:0.00} offer={6:0.00} | blocked={7:0.00} asks={8:0.00} | agree={9} | applied={10} | {11:0} ms, {12}+{13} tokens",
+            "Jev v{0} {1}: rules={2} | kind={3} alert={4:0.00} report={5:0.00} offer={6:0.00} | blocked={7:0.00} asks={8:0.00} urgent={14:0.00} | agree={9} | applied={10} | {11:0} ms, {12}+{13} tokens",
             JevTurnEndClassifier.PromptVersion, info.TaskKey, info.Heuristic, KindName(judgment.Kind), judgment.Alert,
             judgment.Report, judgment.Offer, judgment.Blocked, judgment.Asks, verdict, applied, elapsedMs,
-            judgment.InputTokens, judgment.OutputTokens));
+            judgment.InputTokens, judgment.OutputTokens, judgment.Urgent));
         Resolve(info, judgment);
     }
 

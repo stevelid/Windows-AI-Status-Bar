@@ -24,6 +24,12 @@ public static class TurnVerdictPolicy
     /// <summary>Row detail for finished work that offers more.</summary>
     public const string FollowUpDetail = "Follow-up offered";
 
+    /// <summary>Probability at or above which a waiting assistant counts as blocked mid-task (urgent) rather than offering a further step.</summary>
+    public const double UrgentThreshold = 0.5;
+
+    /// <summary>Row detail for finished work where the assistant only asks whether to take a further step: Steve's call, not urgent.</summary>
+    public const string GoAheadDetail = "Ready for your go-ahead";
+
     /// <summary>Alert wording when the AI reads the assistant as waiting for an answer, or as not waiting.</summary>
     public const string RulesQuestionReason = "Asked you a question";
 
@@ -37,7 +43,7 @@ public static class TurnVerdictPolicy
     public const string AnswerReason = "Waiting for your answer";
 
     /// <summary>
-    /// Whether the finished turn is stopped waiting for the user: true or false once decided, or null while the
+    /// Whether the finished turn is blocked waiting for the user: true or false once decided, or null while the
     /// AI's answer is still awaited (the caller then shows the turn quietly, so a false alert never fires).
     /// </summary>
     public static bool? AsksUser(bool rulesSayQuestion, DateTimeOffset? finalMessageAt, TurnVerdict? verdict, DateTimeOffset now)
@@ -45,7 +51,7 @@ public static class TurnVerdictPolicy
         // No captured text: the AI check is off, or this turn was already over when the app started.
         if (finalMessageAt is not DateTimeOffset at) return rulesSayQuestion;
         if (verdict is not null && Matches(verdict, at))
-            return verdict.Judgment is { } judgment ? judgment.Alert >= AskThreshold : rulesSayQuestion;
+            return verdict.Judgment is { } judgment ? judgment.Alert >= AskThreshold && judgment.Urgent >= UrgentThreshold : rulesSayQuestion;
         return now - at < Grace ? null : rulesSayQuestion;
     }
 
@@ -69,11 +75,13 @@ public static class TurnVerdictPolicy
     public static bool IsQuestionReason(string? reason) =>
         reason is RulesQuestionReason or ApprovalReason or StuckReason or AnswerReason;
 
-    /// <summary>A short label for a finished, not-waiting turn, or null.</summary>
+    /// <summary>A short label for a finished turn that is not urgent (including the calm go-ahead case), or null.</summary>
     public static string? Detail(DateTimeOffset? finalMessageAt, TurnVerdict? verdict)
     {
         if (finalMessageAt is not DateTimeOffset at || verdict is null || !Matches(verdict, at)) return null;
-        if (verdict.Judgment is not { } judgment || judgment.Alert >= AskThreshold) return null;
+        if (verdict.Judgment is not { } judgment) return null;
+        // Waiting but not blocked: the work is done and the assistant asks about a further step.
+        if (judgment.Alert >= AskThreshold) return judgment.Urgent < UrgentThreshold ? GoAheadDetail : null;
         if (judgment.Report >= HintThreshold) return NextStepsDetail;
         return judgment.Offer >= HintThreshold ? FollowUpDetail : null;
     }

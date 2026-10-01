@@ -4,10 +4,17 @@ Usage (needs the JEV_AI_API_KEY environment variable; the key is never printed):
     python tools/jev/prompt_experiment.py                      # set 1, every question
     python tools/jev/prompt_experiment.py set2 "kind2 (choice)" "blocked_on_user (v2)"
     python tools/jev/prompt_experiment.py set3 "kind2 (choice)"
+    python tools/jev/prompt_experiment.py set4 "kind2 (choice)" "urgency (choice)"   # urgency tier (D25)
+    python tools/jev/prompt_experiment.py set1 ship        # shorthand: the two shipped questions, with the combined outcome
+
+Set 4 (13 messages) tests the urgency tier: each is labelled urgent (blocked mid-task), go-ahead (work done, asks
+about a further step) or quiet. When both "kind2 (choice)" and "urgency (choice)" are run, the last column is the
+shipped decision (TurnVerdictPolicy): alert mass >= 0.5 and P(blocked_mid_task) >= 0.5 -> URGENT; alert >= 0.5
+and urgency < 0.5 -> GOAHEAD; otherwise QUIET. For sets 1-3 an expected "ALERT" means URGENT or GOAHEAD is fine.
 
 Sets 1-3 are 30 made-up messages, each labelled with whether it should raise an alert (a stopped assistant)
 or stay quiet. None of the text is real. The "kind2" choice and "blocked_on_user (v2)" wording match
-JevTurnEndClassifier (PromptVersion 3); the other questions are the alternatives that lost (see D22 in
+JevTurnEndClassifier (PromptVersion 4, with "urgency (choice)"); the other questions are the alternatives that lost (see D22 in
 docs/PROGRESS.md). Change wording here first, compare, then update the classifier and bump PromptVersion.
 """
 import json, os, sys, urllib.request
@@ -30,6 +37,35 @@ MESSAGES = {
  "11 rhetorical": (False, "Why does this matter? Because the cache key ignored the locale, so every French user saw English text. I've fixed it and added a test."),
  "12 placeholder, send data later": (False, "I've drafted the section using placeholder figures. When you have the final measurements, send them over and I'll swap them in. Everything else is complete."),
 }
+
+# Set 4: the urgency tier. Expected is "urgent", "goahead" or "quiet". All text is made up.
+MESSAGES4 = {
+ "41 urgent: two migration options": ("urgent", "I found two ways to migrate the settings file and they give different results for existing users. Which option would you like me to take?"),
+ "42 urgent: permission to delete": ("urgent", "The cleanup needs to delete 14 old log folders. I haven't touched them yet. Do you want me to go ahead and delete them?"),
+ "43 urgent: credentials rejected": ("urgent", "I couldn't finish: the build server rejected my credentials and I have no other way in. I need a valid token from you before I can push."),
+ "44 urgent: clarify scope": ("urgent", "Before I start: do you want this for the Windows app only, or for the web version too? The approach differs, so I'd rather not guess."),
+ "45 urgent: plan approval": ("urgent", "Here is the plan: split the parser, add tests, update the docs. Let me know if you'd like me to start, or change anything first."),
+ "46 urgent: half done, decision": ("urgent", "The analysis is half done, but the export has duplicate order IDs and keeping or dropping them changes the totals. Which should I do?"),
+ "47 goahead: merge and install": ("goahead", "The fix is on the pull request. It isn't merged or installed yet. CI hasn't reported yet. Shall I merge and install it once it passes?"),
+ "48 goahead: release notes": ("goahead", "All 42 tests pass and the release build is clean. I've bumped the version. Want me to also draft the release notes?"),
+ "49 goahead: copy to client folder": ("goahead", "The report is finished and saved. Should I also send a copy to the client folder, or leave that for you?"),
+ "50 goahead: push the commit": ("goahead", "Done: the three config files are updated and the checks pass. Do you want me to push the commit now, or will you review it first?"),
+ "51 goahead: second part": ("goahead", "I've built the chart and checked it on your machine. Should I go ahead with the second part tomorrow, or wait until you've tried this one?"),
+ "52 quiet: finished": ("quiet", "Finished. The report is saved as summary.docx with the three charts embedded. No open issues."),
+ "53 quiet: report + next steps": ("quiet", "Things to sort before it goes in the report: the tolerance rows, the edge path and the missing high bands. Next steps: send me the geometry and I can write the assumptions paragraph."),
+}
+
+# The urgency tier: consulted only after "kind" says the assistant is waiting. Tried alone it gave a false alarm
+# on a report with next steps (0.72), so it is a second question, never the only one.
+QUESTIONS_URGENCY = {"type": "choice",
+  "instructions": "The state holds the final message an AI assistant sent when it stopped working. Which kind of ending is it? Decide by what happens if the user does not reply for a few hours, not by whether the message contains a question.",
+  "criteria": {
+   "blocked_mid_task": "The work the user asked for is not finished and cannot be finished until the user answers a question, makes a choice, gives permission or fixes something. Waiting holds the task up.",
+   "next_step_offer": "The work the user asked for is done (or handed over for review). The assistant asks whether to take a further step, such as merging, sending, publishing or doing a follow-on part. Nothing is lost if the user answers later.",
+   "carrying_on": "The assistant chose a way forward and is continuing by itself; it only invites the user to object if they disagree.",
+   "report_with_next_steps": "The assistant delivered a review, findings or a result and lists next steps or inputs that would help later; nothing is blocked.",
+   "finished": "The work is done with nothing further proposed or asked.",
+  }}
 
 STATE_KEY = "assistant_final_message"
 
@@ -110,6 +146,8 @@ MESSAGES3 = {
  "38 long deliverable, ends with a question about optional": (False, "I've written the full onboarding guide (eight sections, about 3,000 words) and saved it as onboarding.md. It covers accounts, tooling, the first-week checklist, and who to ask for what. I also added a short glossary at the end. If you'd like, I can make a one-page version as well."),
 }
 
+QUESTIONS["urgency (choice)"] = QUESTIONS_URGENCY
+
 def ask(text, questions):
     body = json.dumps({"model": "jev-latest", "state": {STATE_KEY: text}, "questions": questions}).encode()
     req = urllib.request.Request(URL, body, {"Content-Type": "application/json", "Authorization": "Bearer " + KEY})
@@ -120,29 +158,57 @@ ALERT_KINDS = ("waiting_for_answer", "waiting_for_approval", "stuck")
 
 def cell(ans):
     if ans["type"] == "noul": return f'{ans["noul"]:.2f}'
+    if ans["type"] == "choice" and "blocked_mid_task" in ans["probabilities"]:
+        return f'{ans["choice"]} (blocked_mid_task {ans["probabilities"]["blocked_mid_task"]:.2f})'
     if ans["type"] == "choice":
         mass = sum(ans["probabilities"].get(k, 0) for k in ALERT_KINDS)
         return f'{ans["choice"]} (alert mass {mass:.2f})'
     return f'{ans["score"]:.2f}'
 
+def shipped(answers, ids):
+    """The decision TurnVerdictPolicy makes from the two shipped choices."""
+    k = answers[ids["kind2 (choice)"]]["probabilities"]
+    alert = min(1.0, sum(k.get(x, 0) for x in ALERT_KINDS))
+    urgent = answers[ids["urgency (choice)"]]["probabilities"].get("blocked_mid_task", 0)
+    outcome = "QUIET" if alert < 0.5 else ("URGENT" if urgent >= 0.5 else "GOAHEAD")
+    return outcome, alert, urgent
+
+def expected_ok(expected, outcome):
+    if expected is True: return outcome in ("URGENT", "GOAHEAD")   # sets 1-3: just "not quiet"
+    if expected is False: return outcome == "QUIET"
+    return outcome == expected.upper()
+
 def main():
     args = sys.argv[1:]
     messages = MESSAGES
-    if args and args[0] in ("set2", "set3"):
-        messages = MESSAGES2 if args[0] == "set2" else MESSAGES3
+    if args and args[0] in ("set2", "set3", "set4"):
+        messages = {"set2": MESSAGES2, "set3": MESSAGES3, "set4": MESSAGES4}[args[0]]
         args = args[1:]
+    elif args and args[0] == "set1":
+        args = args[1:]
+    if args == ["ship"]: args = ["kind2 (choice)", "urgency (choice)"]
     which = args or list(QUESTIONS)
     qs = {k: QUESTIONS[k] for k in which}
     names = list(qs)
     ids = {k: f"q{i}" for i, k in enumerate(names)}
     payload_questions = {ids[k]: qs[k] for k in names}
-    print("expect | " + " | ".join(names))
-    tokens = 0
-    for label, (alert, text) in messages.items():
+    both = "kind2 (choice)" in names and "urgency (choice)" in names
+    print("expect | " + " | ".join(names) + (" | shipped" if both else ""))
+    tokens = right = 0
+    for label, (expected, text) in messages.items():
         res = ask(text, payload_questions)
         tokens += res["usage"]["input_tokens"] + res["usage"]["output_tokens"]
         cells = [cell(res["answers"][ids[k]]) for k in names]
-        print(f'{"ALERT" if alert else "quiet"} | {label} | ' + " | ".join(cells))
+        exp = ("ALERT" if expected else "quiet") if isinstance(expected, bool) else expected
+        extra = ""
+        if both:
+            outcome, alert, urgent = shipped(res["answers"], ids)
+            ok = expected_ok(expected, outcome)
+            right += ok
+            border = " BORDERLINE" if 0.35 <= urgent <= 0.65 and alert >= 0.5 else ""
+            extra = f' | {"ok " if ok else "BAD"} {outcome} alert={alert:.2f} urgent={urgent:.2f}{border}'
+        print(f'{exp} | {label} | ' + " | ".join(cells) + extra)
+    if both: print(f"shipped decision right: {right}/{len(messages)}")
     print("total tokens:", tokens)
 
 main()

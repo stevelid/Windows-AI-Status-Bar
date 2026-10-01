@@ -174,9 +174,10 @@ public sealed class TurnEndMonitorTests
         double offer = 0,
         double blocked = 0,
         double asks = 0,
+        double urgent = 1,
         int input = 1,
         int output = 1) =>
-        new(kind, alert >= 0.5 ? TurnEndKind.WaitingForAnswer : TurnEndKind.Stuck, alert, report, offer, blocked, asks, input, output);
+        new(kind, alert >= 0.5 ? TurnEndKind.WaitingForAnswer : TurnEndKind.Stuck, alert, report, offer, blocked, asks, urgent, input, output);
 
     static TurnEndInfo Info(string key, string evidence, string rules) =>
         new(key.StartsWith("codex", StringComparison.Ordinal) ? AgentProvider.Codex : AgentProvider.Claude, key, evidence, rules, SecretText);

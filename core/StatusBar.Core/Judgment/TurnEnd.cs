@@ -48,7 +48,9 @@ public enum TurnEndKind
 /// <summary>
 /// The AI's reading of a final message. <c>Alert</c> (the probability that the assistant is stopped waiting
 /// for the user, by any of the first three kinds) is what raises an alert; <c>Blocked</c> and <c>Asks</c>
-/// are two other wordings of the same question, kept only so the log can compare them.
+/// are two other wordings of the same question, kept only so the log can compare them. <c>Urgent</c> separates
+/// an assistant blocked mid-task from one that finished and only asks about a further step; it is consulted
+/// only once <c>Alert</c> has fired.
 /// </summary>
 /// <param name="Kind">The most likely kind of ending.</param>
 /// <param name="AlertKind">The most likely of the three waiting kinds, used for the alert's wording.</param>
@@ -57,6 +59,7 @@ public enum TurnEndKind
 /// <param name="Offer">Probability that the work is done and more is offered.</param>
 /// <param name="Blocked">Second opinion: probability the assistant cannot go on until the user replies.</param>
 /// <param name="Asks">First wording: probability the message asks for input at all. Over-alerts; logged only.</param>
+/// <param name="Urgent">Probability the requested work is unfinished and held up until the user replies (as opposed to done, with a further step offered).</param>
 public sealed record TurnEndJudgment(
     TurnEndKind Kind,
     TurnEndKind AlertKind,
@@ -65,6 +68,7 @@ public sealed record TurnEndJudgment(
     double Offer,
     double Blocked,
     double Asks,
+    double Urgent,
     int InputTokens,
     int OutputTokens);
 
