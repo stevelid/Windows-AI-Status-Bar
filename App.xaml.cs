@@ -28,7 +28,7 @@ public partial class App : System.Windows.Application
     TaskHistory _history = null!;
     TurnEndMonitor? _turnEnds;
     UsageRateHistory _usageRates = null!;
-    readonly TaskActivityLog _activity = new(TimeProvider.System);
+    TaskActivityLog _activity = null!;
     HttpClient? _jevHttp;
     JevTurnEndClassifier? _jevClassifier;
     string? _jevKeyInUse;
@@ -182,6 +182,7 @@ public partial class App : System.Windows.Application
         _settings = Settings.Load();
         _history = new TaskHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "history.json"), _settings.KeepHistory);
         _usageRates = new UsageRateHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "usage-history.json"), _settings.SaveUsageHistory);
+        _activity = new TaskActivityLog(TimeProvider.System, Path.Combine(AppPaths.DataDir, "activity-history.json"), _settings.SaveUsageHistory);
         _turnEnds = new TurnEndMonitor(
             () => _jevClassifier,
             Log.Write,
@@ -531,6 +532,7 @@ public partial class App : System.Windows.Application
         _dockController?.Redock();
         _history.SetPersistence(_settings.KeepHistory);
         _usageRates.SetPersistence(_settings.SaveUsageHistory);
+        _activity.SetPersistence(_settings.SaveUsageHistory);
         ApplyJevSettings();
         ConfigureAgentTaskService();
         UpdateTray();

@@ -426,15 +426,35 @@ public partial class DetailsPaneWindow : Window
         var running = _activity?.RunningBetween(ProviderOf(source), from, to) ?? Array.Empty<ActivityInterval>();
         if (running.Count == 0)
         {
-            lines.Add(L10n.T(rate >= 1 ? "pane_rate_hover_untracked" : "pane_rate_hover_idle"));
+            // A stretch from before the app was running says nothing about what was working, so it must not
+            // claim that nothing was.
+            var watched = _activity is null || _activity.WasWatching(from, to);
+            lines.Add(L10n.T(!watched ? "pane_rate_hover_not_tracked" : rate >= 1 ? "pane_rate_hover_untracked" : "pane_rate_hover_idle"));
         }
         else
         {
-            lines.AddRange(running.Take(3).Select(interval => "● " + interval.Title));
+            lines.AddRange(running.Take(3).Select(interval => "● " + TitleOf(interval)));
             if (running.Count > 3) lines.Add(L10n.F("pane_rate_hover_more", running.Count - 3));
         }
 
         return string.Join("\n", lines);
+    }
+
+    // Intervals loaded from the activity file carry no title (titles are never saved), so look the
+    // conversation up in the live task list and the history, then fall back to a short id.
+    string TitleOf(ActivityInterval interval)
+    {
+        if (!string.IsNullOrWhiteSpace(interval.Title)) return interval.Title;
+        var task = _tasks.Tasks.FirstOrDefault(candidate => string.Equals(candidate.Id, interval.TaskId, StringComparison.Ordinal));
+        if (task is not null && !string.IsNullOrWhiteSpace(task.Title)) return task.Title;
+        var entry = _history?.Entries.FirstOrDefault(candidate => string.Equals(candidate.TaskId, interval.TaskId, StringComparison.Ordinal));
+        if (entry is not null && !string.IsNullOrWhiteSpace(entry.Title)) return entry.Title;
+
+        var id = interval.TaskId;
+        var colon = id.IndexOf(':');
+        if (colon >= 0) id = id[(colon + 1)..];
+        var shortId = id.Length > 8 ? id[^8..] : id;
+        return L10n.F(interval.Provider == AgentProvider.Codex ? "pane_activity_codex_conversation" : "pane_activity_claude_conversation", shortId);
     }
 
     static AgentProvider ProviderOf(UsageSource source) => source == UsageSource.Codex ? AgentProvider.Codex : AgentProvider.Claude;
