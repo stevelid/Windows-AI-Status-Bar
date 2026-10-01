@@ -77,7 +77,7 @@ internal static class ClaudeCodeTaskMapper
         // Optional AI check: once it has answered for this turn it decides whether a finished turn asked a
         // question; while its answer is awaited the turn is shown quietly, and the rules are the fallback.
         var asksUser = StatusBar.Core.Judgment.TurnVerdictPolicy.AsksUser(
-            state.EndedWithQuestion, state.FinalMessageAt, state.Verdict, now) == true;
+            state.EndedWithQuestion, state.FinalMessageAt, state.Verdict, now, state.JudgmentRequestedAt) == true;
         var waitingOnBackground = state.Turn == ClaudeCodeTurnStatus.Completed &&
             !(asksUser && inactivity < timings.QuestionAttentionExpiry) &&
             inactivity < timings.ClaudeCodeWorkingUnknownAfter &&

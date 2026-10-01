@@ -59,6 +59,7 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
         if (forceDiscovery || !_hasDiscovery || now - _lastDiscovery >= _timings.ReconcileInterval)
         {
             var discovered = DiscoverFiles(now);
+            var recovered = new List<ClaudeCodeSessionState>();
             foreach (var path in discovered)
             {
                 if (_entries.ContainsKey(path)) continue;
@@ -66,6 +67,7 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                 {
                     var created = CreateEntry(path, now);
                     _entries[path] = created;
+                    recovered.Add(created.State);
                     Emit($"session {ShortId(created.State)} tracked: {Describe(created.State)}");
                 }
                 catch (IOException ex)
@@ -79,6 +81,8 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                     Emit($"session read failed on discovery ({ex.GetType().Name})");
                 }
             }
+
+            RaiseRecoveredTurns(recovered, now);
 
             var discoveredSet = new HashSet<string>(discovered, StringComparer.OrdinalIgnoreCase);
             foreach (var stale in _entries.Keys.Where(path => !discoveredSet.Contains(path)).ToArray())
@@ -111,7 +115,7 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                 foreach (var line in result.Lines)
                     ClaudeCodeTranscriptParser.Apply(entry.State, line, fallbackTime, _drift);
                 var after = Describe(entry.State);
-                RaiseTurnEnded(entry.State, finalBefore);
+                RaiseTurnEnded(entry.State, finalBefore, now);
                 if (after != before)
                     Emit($"session {ShortId(entry.State)} {before} -> {after} ({result.Lines.Count} new records)");
             }
@@ -237,9 +241,23 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
         return false;
     }
 
-    void RaiseTurnEnded(ClaudeCodeSessionState state, DateTimeOffset? finalBefore)
+    /// <summary>
+    /// Turns that had already finished when their session was first read never raise TurnEnded themselves, so after a
+    /// restart they would fall back to the rules and re-raise alerts the AI had judged calm (D26). The recent ones,
+    /// capped, are judged now.
+    /// </summary>
+    void RaiseRecoveredTurns(List<ClaudeCodeSessionState> recovered, DateTimeOffset now)
+    {
+        var candidates = recovered.Where(state => state.FinalMessageAt is not null && state.FinalMessageTail is not null).ToList();
+        var chosen = StatusBar.Core.Judgment.TurnVerdictPolicy.SelectStartupJudgments(candidates.Select(state => state.FinalMessageAt!.Value).ToArray(), now);
+        foreach (var index in chosen) RaiseTurnEnded(candidates[index], null, now);
+    }
+
+    void RaiseTurnEnded(ClaudeCodeSessionState state, DateTimeOffset? finalBefore, DateTimeOffset now)
     {
         if (state.IsSidechainOnly || state.FinalMessageAt is not DateTimeOffset at || at == finalBefore || state.FinalMessageTail is not { } text) return;
+        // The quiet wait for the answer counts from now, not from a final message that may be minutes old (D26).
+        state.JudgmentRequestedAt = now;
         try
         {
             TurnEnded?.Invoke(new StatusBar.Core.Judgment.TurnEndInfo(
