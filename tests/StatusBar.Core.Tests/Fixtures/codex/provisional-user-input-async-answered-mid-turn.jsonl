@@ -1,0 +1,9 @@
+{"timestamp":"2026-01-01T12:00:00Z","type":"event_msg","payload":{"type":"task_started","turn_id":"turn-card"}}
+{"timestamp":"2026-01-01T12:00:00Z","type":"turn_context","payload":{"approval_policy":"never"}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-card","name":"request_user_input_async","arguments":"{\"questions\":[{\"question\":\"Which drive should hold the folder?\",\"options\":[{\"label\":\"Work drive\"},{\"label\":\"Personal drive\"}]}]}"}}
+{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-card","output":"{\"accepted\":true}"}}
+{"timestamp":"2026-01-01T12:00:05Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-exec","name":"exec","input":"placeholder"}}
+{"timestamp":"2026-01-01T12:00:06Z","type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-exec","output":"placeholder"}}
+{"timestamp":"2026-01-01T12:00:18Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Work drive"}]}}
+{"timestamp":"2026-01-01T12:00:30Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Created the folder in the work drive. Refresh the tablet."}]}}
+{"timestamp":"2026-01-01T12:00:31Z","type":"event_msg","payload":{"type":"task_complete","turn_id":"turn-card","last_agent_message":"Created the folder in the work drive. Refresh the tablet."}}
