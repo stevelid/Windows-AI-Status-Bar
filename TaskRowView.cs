@@ -154,6 +154,7 @@ internal sealed class TaskRowView : Border
         var providerName = L10n.T(task.Provider == AgentProvider.Codex
             ? "pane_provider_codex"
             : "pane_provider_claude");
+        if (task.IsCloud) providerName += " · " + L10n.T("task_cloud");
         var cost = costPoints is >= 0.5 ? " · " + L10n.F("pane_cost", Math.Round(costPoints.Value)) : "";
         _provider.Text = $"{providerName} · {FormatAge(task.LastActivity)}{cost}";
         _provider.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);

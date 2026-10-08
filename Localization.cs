@@ -24,6 +24,8 @@ public static class L10n
 
     static readonly Dictionary<string, (string zh, string en)> Table = new()
     {
+        ["task_cloud"] = ("Cloud", "Cloud"),
+        ["task_codex_cloud"] = ("Codex Cloud", "Codex Cloud"),
         // widget
         ["widget_title"] = ("AI 用量", "AI Usage"),
         ["provider_claude"] = ("Claude", "Claude"),

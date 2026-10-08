@@ -4,7 +4,9 @@ These limits describe the current Codex and Claude Code task collectors. Recon n
 
 ## Codex tasks
 
-- The collector reads local Codex session files. Cloud tasks started on chatgpt.com are not visible.
+- Local tasks use session files; Codex Cloud tasks use `codex cloud list --json` every 30 seconds with the existing CLI sign-in. Cloud rows are labelled Cloud and open their task page when clicked. The experimental CLI must support cloud listing; failures degrade cloud health without stopping local collectors.
+- Cloud Pending means queued or running, Ready/Applied means finished, and Error means failed (A-X9). Cloud questions and approval waits are not exposed by this list and do not trigger attention alerts. ChatGPT Work cloud chats are separate and remain outside coverage. Completion age uses the backend's update time, so applying or editing a cloud task can update its displayed age.
+- Cloud pagination is limited to 50 pages per refresh and a 60-second timeout. An incomplete or malformed response keeps the previous snapshot with stale confidence; recovery replaces it with fresh evidence.
 - A Codex process that stops or crashes without writing a completion record remains Working, then becomes Stale after 20 minutes and Unknown after two hours. Unknown rows eventually expire from the pane.
 - Waiting for approval is inferred from pending tool calls. Codex does not write a direct approval event in the observed setup, so some approvals may not be detected. In particular, the `request_user_input` function-call shape remains unverified (A-X4).
 - “Asked you a question” checks whether the last assistant message ends with a question mark. It can miss a question followed by more text or flag a rhetorical question. This state is Inferred, can be dismissed, and expires after four hours.

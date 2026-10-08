@@ -65,4 +65,7 @@ public sealed record AgentTask
 
     /// <summary>Opaque provider reference used to focus or open the session. Never shown to the user.</summary>
     public string? SessionReference { get; init; }
+
+    /// <summary>Whether this task runs in Codex Cloud rather than the local desktop host.</summary>
+    public bool IsCloud { get; init; }
 }

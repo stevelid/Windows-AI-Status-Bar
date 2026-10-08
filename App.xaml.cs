@@ -710,7 +710,9 @@ public partial class App : System.Windows.Application
                 TimeProvider.System);
             codex.Supervision += OnProviderSupervision;
             claude.Supervision += OnProviderSupervision;
-            taskProviders = [codex, claude];
+            var cloudClient = new CodexCloudTaskClient(() => _settings.CodexExecutablePath, codexHome);
+            var cloud = new CodexCloudTaskProvider(cloudClient.ReadPageAsync, TimeProvider.System);
+            taskProviders = [new CombinedTaskProvider(AgentProvider.Codex, codex, cloud), claude];
         }
 
         var stateTime = TimeProvider.System;

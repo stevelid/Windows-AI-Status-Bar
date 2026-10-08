@@ -1,0 +1,10 @@
+{
+  "tasks": [
+    {"id":"task_queued","title":"Example queued work","status":"pending","updated_at":"2030-01-01T12:00:00Z","url":"https://chatgpt.com/codex/tasks/task_queued","summary":{"text":"Fabricated summary ignored"}},
+    {"id":"task_finished","title":"Example finished work","status":"ready","updated_at":"2030-01-01T11:59:00Z"},
+    {"id":"task_applied","title":"Example applied work","status":"applied","updated_at":"2030-01-01T11:58:00Z"},
+    {"id":"task_failed","title":"Example failed work","status":"error","updated_at":"2030-01-01T11:57:00Z"},
+    {"id":"task_unknown","title":"Example future state","status":"future-state","updated_at":"2030-01-01T11:56:00Z"}
+  ],
+  "cursor": "example-next-page"
+}

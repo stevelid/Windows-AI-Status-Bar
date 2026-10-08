@@ -7,6 +7,10 @@ public static class TaskNavigation
     public static Uri? CreateLink(AgentTask task, string? claudeDesktopSessionId = null)
     {
         ArgumentNullException.ThrowIfNull(task);
+        if (task.Provider == AgentProvider.Codex && task.Id.StartsWith("codex-cloud:", StringComparison.Ordinal) &&
+            Codex.CodexCloudTaskParser.IsTaskId(task.SessionReference))
+            // ⚠️ A-X9: cloud task URLs use a separate identity from local thread UUIDs.
+            return new Uri("https://chatgpt.com/codex/tasks/" + Uri.EscapeDataString(task.SessionReference!));
         // IDs are data, never caller-supplied URLs, commands, paths or query parameters.
         if (!Guid.TryParseExact(task.SessionReference, "D", out _)) return null;
         var session = Uri.EscapeDataString(task.SessionReference!);

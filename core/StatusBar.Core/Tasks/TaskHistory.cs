@@ -31,6 +31,7 @@ public sealed record HistoryEntry(
         LastActivity = FinishedAt,
         StatusDetail = Outcome == HistoryOutcome.Stopped ? "Stopped" : null,
         SessionReference = SessionReference,
+        IsCloud = TaskId.StartsWith("codex-cloud:", StringComparison.Ordinal),
     };
 }
 
@@ -235,7 +236,8 @@ public sealed class TaskHistory
             {
                 TaskId = entry.TaskId,
                 Provider = entry.Provider,
-                Title = entry.Title,
+                // Cloud titles originate from a remote task and remain memory-only.
+                Title = entry.TaskId.StartsWith("codex-cloud:", StringComparison.Ordinal) ? "Codex Cloud" : entry.Title,
                 Outcome = entry.Outcome,
                 FinishedAt = entry.FinishedAt,
                 SessionReference = entry.SessionReference,
