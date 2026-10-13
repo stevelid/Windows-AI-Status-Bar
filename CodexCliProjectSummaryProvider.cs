@@ -19,19 +19,21 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
     static readonly string[] DisabledFeatures =
     [
         "features.shell_tool=false", "features.unified_exec=false", "features.apps=false",
-        "features.plugins=false", "features.remote_plugins=false", "features.mcp_elicitation=false",
-        "features.browser=false", "features.computer=false", "features.image_gen=false",
-        "features.skill_search=false", "features.hooks=false", "features.multi_agent=false",
-        "features.sleep=false", "features.worktree=false", "features.automation=false", "features.code_mode=false",
+        "features.plugins=false",
+        "features.browser_use=false", "features.computer_use=false", "features.image_generation=false",
+        "features.hooks=false", "features.multi_agent=false", "features.code_mode=false",
     ];
 
     readonly string _dataDirectory;
+    readonly Func<string?> _resolveExecutable;
     readonly SemaphoreSlim _preflightGate = new(1, 1);
     bool _preflightPassed;
+    string? _verifiedExecutable;
 
-    internal CodexCliProjectSummaryProvider(string dataDirectory)
+    internal CodexCliProjectSummaryProvider(string dataDirectory, Func<string?>? resolveExecutable = null)
     {
         _dataDirectory = Path.GetFullPath(dataDirectory);
+        _resolveExecutable = resolveExecutable ?? (() => null);
     }
 
     public async Task<ProjectSummaryResult?> SummarizeAsync(ProjectSummaryRequest request, CancellationToken cancellationToken)
@@ -44,9 +46,12 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
         Directory.CreateDirectory(_dataDirectory);
         using var neutral = new TemporaryWorkerDirectory();
         var neutralDirectory = neutral.Path;
-        var executable = CodexLocator.Resolve(null);
-        await EnsureSafeCliAsync(executable, neutralDirectory, cancellationToken);
+        var candidates = _resolveExecutable() is { Length: > 0 } injectedExecutable
+            ? [injectedExecutable]
+            : CodexCliSummaryLocator.GetCandidates();
+        var executable = await EnsureSafeCliAsync(candidates, neutralDirectory, cancellationToken);
         var schemaPath = Path.Combine(_dataDirectory, "summary-worker", "output-schema.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(schemaPath)!);
         await File.WriteAllTextAsync(schemaPath, OutputSchema, new UTF8Encoding(false), cancellationToken);
 
         if (!string.Equals(Path.GetExtension(executable), ".exe", StringComparison.OrdinalIgnoreCase))
@@ -82,14 +87,16 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
         {
             if (!process.Start()) throw new InvalidOperationException("SummaryWorkerStartFailed");
             var outputTask = ReadBoundedAsync(process.StandardOutput, MaximumOutputCharacters, timeout.Token);
-            var errorTask = DrainAsync(process.StandardError, timeout.Token);
+            var errorTask = ReadBoundedAsync(process.StandardError, 4096, timeout.Token);
             await process.StandardInput.WriteAsync(prompt.AsMemory(), timeout.Token);
             process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token);
             var (outputText, outputTooLarge) = await outputTask;
-            await errorTask;
+            var (errorText, _) = await errorTask;
             if (outputTooLarge) throw new InvalidOperationException("SummaryWorkerOutputTooLarge");
-            if (process.ExitCode != 0) throw new InvalidOperationException("SummaryWorkerFailed");
+            if (process.ExitCode != 0)
+                throw new ProjectSummaryWorkerException(
+                    ClassifyFailure(outputText, errorText, process.ExitCode), SanitizeDiagnostic(errorText));
             var result = ReadFinalResult(outputText) ?? throw new InvalidDataException("SummaryWorkerOutputInvalid");
             if (!ProjectSummaryValidator.TryValidate(request, result)) throw new InvalidDataException("SummaryOutputInvalid");
             return result;
@@ -108,23 +115,30 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
         throw new InvalidOperationException("SummaryWorkerFailed");
     }
 
-    async Task EnsureSafeCliAsync(string executable, string neutralDirectory, CancellationToken cancellationToken)
+    async Task<string> EnsureSafeCliAsync(IReadOnlyList<string> candidates, string neutralDirectory, CancellationToken cancellationToken)
     {
         await _preflightGate.WaitAsync(cancellationToken);
         try
         {
-            if (_preflightPassed) return;
-            if (!string.Equals(Path.GetExtension(executable), ".exe", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("CodexExecutableUnavailable");
-            var version = await RunSmallCommandAsync(executable, neutralDirectory, ["--version"], cancellationToken);
-            if (version.ExitCode != 0 || !string.Equals(version.Output.Trim(), "codex-cli " + VerifiedCliVersion, StringComparison.Ordinal))
-                throw new InvalidOperationException("CodexCliVersionUnverified");
-            var authentication = await RunSmallCommandAsync(executable, neutralDirectory, ["login", "status"], cancellationToken);
-            if (authentication.ExitCode != 0 ||
-                !authentication.Output.Contains("chatgpt", StringComparison.OrdinalIgnoreCase) ||
-                !authentication.Output.Contains("logged in", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("ChatGptSubscriptionAuthUnavailable");
-            _preflightPassed = true;
+            if (_preflightPassed && _verifiedExecutable is not null) return _verifiedExecutable;
+            foreach (var executable in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!File.Exists(executable) || !string.Equals(Path.GetExtension(executable), ".exe", StringComparison.OrdinalIgnoreCase)) continue;
+                (int ExitCode, string Output) version;
+                try { version = await RunSmallCommandAsync(executable, neutralDirectory, ["--version"], cancellationToken); }
+                catch (Exception exception) when (exception is not OperationCanceledException) { continue; }
+                var versionLine = version.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+                if (version.ExitCode != 0 || !string.Equals(versionLine, "codex-cli " + VerifiedCliVersion, StringComparison.Ordinal)) continue;
+                var authentication = await RunSmallCommandAsync(executable, neutralDirectory, ["login", "status"], cancellationToken);
+                if (authentication.ExitCode != 0 ||
+                    !authentication.Output.Contains("chatgpt", StringComparison.OrdinalIgnoreCase) ||
+                    !authentication.Output.Contains("logged in", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("ChatGptSubscriptionAuthUnavailable");
+                _preflightPassed = true;
+                _verifiedExecutable = executable;
+                return executable;
+            }
+            throw new InvalidOperationException("CodexCliVersionUnverified");
         }
         finally { _preflightGate.Release(); }
     }
@@ -147,12 +161,12 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
         try
         {
             var outputTask = ReadBoundedAsync(process.StandardOutput, 4096, timeout.Token);
-            var errorTask = DrainAsync(process.StandardError, timeout.Token);
+            var errorTask = ReadBoundedAsync(process.StandardError, 4096, timeout.Token);
             await process.WaitForExitAsync(timeout.Token);
             var (output, tooLarge) = await outputTask;
-            await errorTask;
-            if (tooLarge) throw new InvalidOperationException("CodexCliPreflightFailed");
-            return (process.ExitCode, output);
+            var (error, errorTooLarge) = await errorTask;
+            if (tooLarge || errorTooLarge) throw new InvalidOperationException("CodexCliPreflightFailed");
+            return (process.ExitCode, output + "\n" + error);
         }
         catch (OperationCanceledException)
         {
@@ -188,6 +202,7 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
 
     internal static ProjectSummaryResult? ReadFinalResult(string output)
     {
+        string? finalMessage = null;
         foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             try
@@ -196,11 +211,20 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
                 var root = json.RootElement;
                 var type = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("type", out var typeElement) && typeElement.ValueKind == JsonValueKind.String
                     ? typeElement.GetString() : null;
-                string? text = null;
-                if (type == "turn.completed" && root.TryGetProperty("last_agent_message", out var finalText) && finalText.ValueKind == JsonValueKind.String)
-                    text = finalText.GetString();
-                if (!string.IsNullOrWhiteSpace(text))
-                    return JsonSerializer.Deserialize<ProjectSummaryResult>(text, JsonOptions);
+                if (type == "turn.started") finalMessage = null;
+                if (type == "item.completed" && root.TryGetProperty("item", out var item) &&
+                    item.ValueKind == JsonValueKind.Object && item.TryGetProperty("type", out var itemType) &&
+                    itemType.ValueKind == JsonValueKind.String && itemType.GetString() == "agent_message" &&
+                    item.TryGetProperty("text", out var messageText) && messageText.ValueKind == JsonValueKind.String)
+                    finalMessage = messageText.GetString();
+                if (type == "turn.completed")
+                {
+                    if (root.TryGetProperty("last_agent_message", out var finalText) && finalText.ValueKind == JsonValueKind.String)
+                        finalMessage = finalText.GetString();
+                    if (!string.IsNullOrWhiteSpace(finalMessage))
+                        return JsonSerializer.Deserialize<ProjectSummaryResult>(finalMessage, JsonOptions);
+                    return null;
+                }
             }
             catch (JsonException) { }
         }
@@ -254,10 +278,46 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
         return (output.ToString(), tooLarge);
     }
 
-    static async Task DrainAsync(StreamReader reader, CancellationToken token)
+    internal static string ClassifyFailure(string output, string error, int exitCode)
     {
-        var buffer = new char[2048];
-        while (await reader.ReadAsync(buffer.AsMemory(), token) > 0) { }
+        var diagnostic = (output + "\n" + error).ToLowerInvariant();
+        if (diagnostic.Contains("unknown config", StringComparison.Ordinal) ||
+            diagnostic.Contains("unrecognized config", StringComparison.Ordinal) ||
+            diagnostic.Contains("invalid config", StringComparison.Ordinal) ||
+            diagnostic.Contains("failed to parse config", StringComparison.Ordinal))
+        {
+            var keyMatch = System.Text.RegularExpressions.Regex.Match(diagnostic,
+                @"(?:features\.[a-z_]+|model_reasoning_effort|project_doc_max_bytes|web_search)");
+            var knownKeys = DisabledFeatures.Select(feature => feature[..feature.IndexOf('=')]).Append("model_reasoning_effort")
+                .Append("project_doc_max_bytes").Append("web_search").ToHashSet(StringComparer.Ordinal);
+            return keyMatch.Success && knownKeys.Contains(keyMatch.Value)
+                ? "SummaryWorkerConfigRejected_" + keyMatch.Value.Replace('.', '_')
+                : "SummaryWorkerConfigRejected";
+        }
+        if (diagnostic.Contains("invalid json schema", StringComparison.Ordinal) ||
+            diagnostic.Contains("invalid output schema", StringComparison.Ordinal) ||
+            diagnostic.Contains("schema validation failed", StringComparison.Ordinal)) return "SummaryWorkerSchemaRejected";
+        if (diagnostic.Contains("model not found", StringComparison.Ordinal) ||
+            diagnostic.Contains("model is not available", StringComparison.Ordinal)) return "SummaryWorkerModelUnavailable";
+        if (diagnostic.Contains("not logged in", StringComparison.Ordinal) ||
+            diagnostic.Contains("authentication required", StringComparison.Ordinal) ||
+            diagnostic.Contains("unauthorized", StringComparison.Ordinal)) return "SummaryWorkerAuthenticationFailed";
+        return $"SummaryWorkerFailedExit{Math.Clamp(exitCode, 0, 255)}";
+    }
+
+    static string SanitizeDiagnostic(string diagnostic)
+    {
+        var candidate = diagnostic.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .FirstOrDefault(line => new[] { "error", "failed", "invalid", "unknown", "unsupported", "denied", "requires", "unavailable" }
+                .Any(marker => line.Contains(marker, StringComparison.OrdinalIgnoreCase)));
+        if (string.IsNullOrWhiteSpace(candidate)) return string.Empty;
+        candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"(?i)(?:[a-z]:\\|\\\\)[^\r\n]*", "[path]");
+        candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", "[id]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"(?i)\bBearer\s+\S+|\b(?:sk|sess|key)-[A-Za-z0-9_-]{8,}", "[credential]");
+        candidate = System.Text.RegularExpressions.Regex.Replace(candidate, @"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", "[account]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        candidate = new string(candidate.Where(character => !char.IsControl(character)).Take(240).ToArray());
+        return candidate;
     }
 
     static void Kill(Process process)
@@ -270,4 +330,49 @@ internal sealed class CodexCliProjectSummaryProvider : IProjectSummaryProvider
     const string OutputSchema = """
     {"type":"object","additionalProperties":false,"properties":{"suggestedProjectName":{"type":["string","null"]},"latestAction":{"type":"string"},"progress":{"type":"array","items":{"type":"string"},"maxItems":4},"sourceEvidenceIds":{"type":"array","items":{"type":"string"},"maxItems":12}},"required":["suggestedProjectName","latestAction","progress","sourceEvidenceIds"]}
     """;
+}
+
+internal sealed class ProjectSummaryWorkerException(string code, string diagnostic) : InvalidOperationException(code)
+{
+    internal string Code { get; } = code;
+    internal string SafeDiagnostic { get; } = diagnostic;
+}
+
+/// <summary>Finds the supported native Codex executable without changing normal app-server resolution.</summary>
+internal static class CodexCliSummaryLocator
+{
+    internal static IReadOnlyList<string> GetCandidates()
+    {
+        var candidates = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return;
+            try
+            {
+                var full = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')));
+                if (File.Exists(full) && seen.Add(full)) candidates.Add(full);
+            }
+            catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException) { }
+        }
+
+        Add(Environment.GetEnvironmentVariable("CODEX_PATH"));
+        Add(CodexLocator.FindChatGptDesktopCodex(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)));
+        var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+        foreach (var directory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var bin = directory.Trim().Trim('"');
+            Add(Path.Combine(bin, "codex.exe"));
+            // npm's Windows shim lives beside node_modules; run only its packaged native executable.
+            // The exact version and ChatGPT authentication are checked before any summary request.
+            var package = Path.Combine(bin, "node_modules", "@openai", "codex");
+            try
+            {
+                if (Directory.Exists(package))
+                    foreach (var executable in Directory.EnumerateFiles(package, "codex.exe", SearchOption.AllDirectories)) Add(executable);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { }
+        }
+        return candidates;
+    }
 }

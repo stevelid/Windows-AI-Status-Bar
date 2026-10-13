@@ -80,10 +80,10 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 
 ## Phase 7 — Project overview (new feature)
 
-- [ ] P7.1 Core project projection, memberships, updates and revision acknowledgements
-- [ ] P7.2 Isolated Codex CLI summariser with worker self-exclusion
-- [ ] P7.3 DPAPI-encrypted durable summaries and consistent recovery/deletion
-- [ ] P7.4 Projects/Conversations pane and hover detail card
+- [x] P7.1 Core project projection, memberships, updates and revision acknowledgements
+- [x] P7.2 Isolated Codex CLI summariser with worker self-exclusion
+- [x] P7.3 DPAPI-encrypted durable summaries and consistent recovery/deletion
+- [x] P7.4 Projects/Conversations pane and hover detail card
 - [ ] P7.5 Acceptance checks and Windows interaction review
 
 ### Runner feasibility (2026-10-13)
@@ -91,6 +91,8 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - Installed Codex CLI `0.159.0` completed a fictional stdin summary using saved ChatGPT authentication, `gpt-6-luna`, low reasoning, `--ephemeral`, `--no-daemon`, `--ignore-user-config`, `--ignore-rules`, `--strict-config`, a custom `--thread-source windows_ai_status_bar_summary`, read-only sandbox and schema-constrained JSON.
 - Verified isolation controls from the current official config reference: `features.shell_tool=false`, `features.apps=false`, `features.hooks=false`, `features.multi_agent=false`, and `web_search="disabled"`. MCP/project configuration is absent by using `--ignore-user-config` and an empty neutral working directory; `project_doc_max_bytes=0` will prevent project instructions from being read. This is a runner feasibility result only; the implementation still needs a history/index check for both test thread IDs and an end-to-end exclusion test.
 - The first test used the generic `exec` source before the custom worker marker was validated. Both inputs were entirely fictional. Do not classify ordinary `exec` conversations as workers.
+- Implementation is in `P7.1 Implement project overview and summary pipeline`; follow-up runner fixes verify the packaged native `codex-cli 0.159.0` executable, confirm ChatGPT subscription login from either output stream, and parse the final `item.completed` agent message at `turn.completed`. A synthetic `CodexCliProjectSummaryProvider.SummarizeAsync` call succeeded with the installed CLI. Config overrides were aligned with the installed feature names after two strict-config failures; no transcript or diagnostic content was persisted.
+- Verification: `dotnet build WindowsAIStatusBar.slnx` succeeded with 0 warnings/errors, Core tests passed 407/407, and the Windows smoke harness passed with the mock executable. P7.5 remains open for the focused Windows interaction/acceptance review.
 
 ### Decisions and deviations
 

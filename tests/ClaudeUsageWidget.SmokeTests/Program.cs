@@ -25,6 +25,9 @@ Require(CodexCliProjectSummaryProvider.ReadFinalResult("{\"type\":\"item.complet
     "An intermediate assistant item must not be accepted as the final summary.");
 Require(CodexCliProjectSummaryProvider.ReadFinalResult("{\"type\":17}") is null,
     "Malformed event types must fail closed.");
+Require(CodexCliProjectSummaryProvider.ClassifyFailure("", "invalid config in a fictional probe", 1) == "SummaryWorkerConfigRejected" &&
+    CodexCliProjectSummaryProvider.ClassifyFailure("", "private diagnostic withheld", 23) == "SummaryWorkerFailedExit23",
+    "Worker failures should retain only a bounded content-free category.");
 
 // The strip shows the session window, identified by the length the adapters attach.
 Require(
@@ -296,8 +299,68 @@ if (args.Length == 1 && string.Equals(args[0], "--live", StringComparison.Ordina
     return;
 }
 
+if (args.Length == 1 && string.Equals(args[0], "--live-summary", StringComparison.OrdinalIgnoreCase))
+{
+    var liveSummaryData = Path.Combine(Path.GetTempPath(), "ClaudeUsageWidget.LiveSummaryProbe", Guid.NewGuid().ToString("N"));
+    try
+    {
+        var liveSummaryProvider = new CodexCliProjectSummaryProvider(liveSummaryData);
+        var liveRequest = new ProjectSummaryRequest(
+            ThreadId: "codex:fictional-probe-thread",
+            EvidenceId: "fictional-probe-turn",
+            DisplayTitle: "Fictional sample conversation",
+            UserRequest: "Please prepare one fictional example for a summary pipeline test.",
+            AssistantFinal: "Prepared one fictional example. No real project or user data is involved.",
+            CandidateProjectNames: [],
+            PartialCoverage: true,
+            OccurredAt: DateTimeOffset.Parse("2030-01-01T00:00:00Z"));
+        var liveResult = await liveSummaryProvider.SummarizeAsync(liveRequest, CancellationToken.None);
+        Console.WriteLine(liveResult is not null && ProjectSummaryValidator.TryValidate(liveRequest, liveResult)
+            ? "Project summary runner: success"
+            : "Project summary runner: error/invalid-result");
+    }
+    catch (Exception exception)
+    {
+        var code = System.Text.RegularExpressions.Regex.IsMatch(exception.Message, "^[A-Za-z0-9_-]{1,64}$")
+            ? exception.Message
+            : exception.GetType().Name;
+        var cause = exception is ProjectSummaryWorkerException workerFailure ? workerFailure.SafeDiagnostic : string.Empty;
+        Console.WriteLine(string.IsNullOrWhiteSpace(cause)
+            ? $"Project summary runner: error/{code}"
+            : $"Project summary runner: error/{code}; cause/{cause}");
+    }
+    finally
+    {
+        try { if (Directory.Exists(liveSummaryData)) Directory.Delete(liveSummaryData, recursive: true); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+    return;
+}
+
 var mockPath = args.FirstOrDefault()
     ?? throw new ArgumentException("Pass the CodexAppServerMock executable path as the first argument.");
+var summaryDataDirectory = Path.Combine(Path.GetTempPath(), "ClaudeUsageWidget.SummaryWorkerTests", Guid.NewGuid().ToString("N"));
+try
+{
+    var summaryProvider = new CodexCliProjectSummaryProvider(summaryDataDirectory, () => mockPath);
+    var summaryResult = await summaryProvider.SummarizeAsync(new ProjectSummaryRequest(
+        ThreadId: "codex:fictional-thread",
+        EvidenceId: "sample-run-turn",
+        DisplayTitle: "Fictional conversation",
+        UserRequest: "Please prepare a fictional sample.",
+        AssistantFinal: "Prepared a fictional sample.",
+        CandidateProjectNames: [],
+        PartialCoverage: true,
+        OccurredAt: DateTimeOffset.Parse("2030-01-01T00:00:00Z")), CancellationToken.None);
+    Require(summaryResult?.LatestAction == "Prepared a fictional sample" &&
+        File.Exists(Path.Combine(summaryDataDirectory, "summary-worker", "output-schema.json")),
+        "The summary provider should create its schema directory and accept a completed agent_message event.");
+}
+finally
+{
+    if (Directory.Exists(summaryDataDirectory)) Directory.Delete(summaryDataDirectory, recursive: true);
+}
 using var service = new ChatGptUsageService(() => mockPath);
 var chatGpt = await service.GetUsageAsync();
 Require(chatGpt.Count == 2, "ChatGPT rate limits should produce two rows.");

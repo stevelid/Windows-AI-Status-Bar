@@ -1025,10 +1025,10 @@ public partial class App : System.Windows.Application
                     }
                     catch (Exception exception)
                     {
-                        // Never include worker output, source text, paths, or subprocess diagnostics.
+                        // Log only a fixed failure category; never include worker text, paths or raw diagnostics.
                         _projectSummaryQueue.RecordFailure();
                         _detailsPane?.UpdateProjectSummaryStatus(true, unavailable: true);
-                        Log.Write($"Project summary worker: {exception.GetType().Name}");
+                        Log.Write($"Project summary worker: {(exception is ProjectSummaryWorkerException workerFailure ? workerFailure.Code : exception.GetType().Name)}");
                     }
                     finally
                     {

@@ -1,5 +1,46 @@
 using System.Text.Json;
 
+if (args.Contains("--version", StringComparer.Ordinal))
+{
+    Console.WriteLine("codex-cli 0.159.0");
+    return;
+}
+
+if (args.Length >= 2 && args[0] == "login" && args[1] == "status")
+{
+    Console.Error.WriteLine("Logged in with ChatGPT");
+    return;
+}
+
+if (args.Contains("exec", StringComparer.Ordinal))
+{
+    _ = await Console.In.ReadToEndAsync();
+    var schemaIndex = Array.IndexOf(args, "--output-schema");
+    if (schemaIndex < 0 || schemaIndex + 1 >= args.Length || !File.Exists(args[schemaIndex + 1]) ||
+        Environment.GetEnvironmentVariable("OPENAI_API_KEY") is not null ||
+        Environment.GetEnvironmentVariable("CODEX_API_KEY") is not null ||
+        Environment.GetEnvironmentVariable("OPENAI_BASE_URL") is not null)
+    {
+        Environment.ExitCode = 23;
+        return;
+    }
+
+    var result = JsonSerializer.Serialize(new
+    {
+        suggestedProjectName = "Fictional sample project",
+        latestAction = "Prepared a fictional sample",
+        progress = Array.Empty<string>(),
+        sourceEvidenceIds = new[] { "sample-run-turn:assistant" },
+    });
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        type = "item.completed",
+        item = new { type = "agent_message", text = result },
+    }));
+    Console.WriteLine(JsonSerializer.Serialize(new { type = "turn.completed", usage = new { input_tokens = 1 } }));
+    return;
+}
+
 while (Console.ReadLine() is { } line)
 {
     using var document = JsonDocument.Parse(line);
