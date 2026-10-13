@@ -78,6 +78,24 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [ ] P6.3 🧑 Manual test matrix — 12 of 14 pass (several simulated), Cowork N/A, network-off left for Steve; see `docs/TEST_MATRIX.md`
 - [ ] P6.4 Release 3.0.0 — prepared (version, README, tag-triggered release workflow); tag `v3.0.0` after P6.3 passes
 
+## Phase 7 — Project overview (new feature)
+
+- [ ] P7.1 Core project projection, memberships, updates and revision acknowledgements
+- [ ] P7.2 Isolated Codex CLI summariser with worker self-exclusion
+- [ ] P7.3 DPAPI-encrypted durable summaries and consistent recovery/deletion
+- [ ] P7.4 Projects/Conversations pane and hover detail card
+- [ ] P7.5 Acceptance checks and Windows interaction review
+
+### Runner feasibility (2026-10-13)
+
+- Installed Codex CLI `0.159.0` completed a fictional stdin summary using saved ChatGPT authentication, `gpt-6-luna`, low reasoning, `--ephemeral`, `--no-daemon`, `--ignore-user-config`, `--ignore-rules`, `--strict-config`, a custom `--thread-source windows_ai_status_bar_summary`, read-only sandbox and schema-constrained JSON.
+- Verified isolation controls from the current official config reference: `features.shell_tool=false`, `features.apps=false`, `features.hooks=false`, `features.multi_agent=false`, and `web_search="disabled"`. MCP/project configuration is absent by using `--ignore-user-config` and an empty neutral working directory; `project_doc_max_bytes=0` will prevent project instructions from being read. This is a runner feasibility result only; the implementation still needs a history/index check for both test thread IDs and an end-to-end exclusion test.
+- The first test used the generic `exec` source before the custom worker marker was validated. Both inputs were entirely fictional. Do not classify ordinary `exec` conversations as workers.
+
+### Decisions and deviations
+
+- Project overview starts from a clean `d963314` base in a separate worktree; the original checkout's unrelated staged/unstaged Jev edits remain untouched. The Jev classifier remains the attention authority.
+
 ## Waiting on Steve
 
 ### Task dismissal and conversation navigation follow-up (P3.5 / P5.1)
@@ -205,3 +223,5 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 - Added A-X9 and revised cloud coverage limitations. No new NuGet packages. Verified: full solution build (0 warnings/errors), all 382 Core tests, and Windows smoke harness pass. The first build hit a synced-Drive apphost file lock; a safe retry using local build outputs passed. Self-contained Windows preview built and launched, label 3.0.0+cloud01. Initial preview included the existing working tree; main release is built from a clean committed source snapshot, preserving unrelated working/staged changes.
 - Steve can test: start a Codex Cloud task, check the Cloud row appears within 30 seconds, wait for completion, click the row, and check local tasks keep updating during a cloud network/sign-in failure. ChatGPT Work cloud chats are not included.
 - Live startup verified on 2026-10-08: the running preview reports build 3.0.0+cloud01 and combined Codex health reached Ok after the initial cloud fetch. Cloud task click/navigation and a newly running cloud task remain manual acceptance checks.
+
+- 2026-10-13 — P7 project overview — Added encrypted, recoverable derived-state storage; bounded isolated Codex subscription summaries over final-turn evidence; project assignment, coverage, acknowledgement, queue coalescing, backoff and retention in Core; and Projects/Conversations views with compact rows, hover details and restart-safe task references. Core tests (407), full solution build (0 warnings/errors), localization-key scan and Windows smoke harness pass. Manual visual interaction remains for Steve's acceptance; source coverage is recent/bounded and clearly marked partial. Original checkout edits were preserved in a separate clean-base worktree.

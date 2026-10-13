@@ -150,6 +150,8 @@ internal static class ClaudeCodeTranscriptParser
 
         if (hasToolResult || string.IsNullOrWhiteSpace(firstText)) return;
 
+        state.SummaryContextText = FinalMessageCapture.Context(firstText);
+
         var text = firstText.TrimStart();
         if (text.StartsWith(InterruptedPrefix, StringComparison.Ordinal))
         {
@@ -173,6 +175,9 @@ internal static class ClaudeCodeTranscriptParser
         state.FinalMessageTail = null;
         state.FinalMessageStart = null;
         state.FinalMessageAt = null;
+        state.SummaryFinalMessageTail = null;
+        state.SummaryFinalMessageStart = null;
+        state.SummaryFinalMessageAt = null;
         state.Verdict = null;
         state.PendingTools.Clear();
         // A notification wakes Claude for a new turn, but its wrapper is not something Steve typed.
@@ -269,6 +274,9 @@ internal static class ClaudeCodeTranscriptParser
             state.FinalMessageTail = FinalMessageCapture.Tail(lastText);
             state.FinalMessageStart = FinalMessageCapture.Start(lastText);
             state.FinalMessageAt = state.FinalMessageTail is null ? null : state.LastActivity;
+            state.SummaryFinalMessageTail = FinalMessageCapture.SummaryTail(lastText);
+            state.SummaryFinalMessageStart = FinalMessageCapture.SummaryStart(lastText);
+            state.SummaryFinalMessageAt = state.SummaryFinalMessageTail is null ? null : state.LastActivity;
             state.Verdict = null;
             state.PendingTools.Clear();
         }

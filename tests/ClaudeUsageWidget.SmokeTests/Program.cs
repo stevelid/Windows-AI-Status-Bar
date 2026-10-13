@@ -2,6 +2,7 @@ using ClaudeUsageWidget;
 using StatusBar.Core.Codex;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Usage;
+using StatusBar.Core.Projects;
 
 static void Require(bool condition, string message)
 {
@@ -9,6 +10,21 @@ static void Require(bool condition, string message)
 }
 
 L10n.Init(UiLanguage.En);
+var finalSummaryOutput = System.Text.Json.JsonSerializer.Serialize(new
+{
+    type = "turn.completed",
+    last_agent_message = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        suggestedProjectName = "Sample project", latestAction = "Prepared a sample", progress = Array.Empty<string>(),
+        sourceEvidenceIds = new[] { "sample-turn:assistant" },
+    }),
+});
+Require(CodexCliProjectSummaryProvider.ReadFinalResult(finalSummaryOutput)?.LatestAction == "Prepared a sample",
+    "The summary worker must parse only the final assistant result.");
+Require(CodexCliProjectSummaryProvider.ReadFinalResult("{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"not final\"}}") is null,
+    "An intermediate assistant item must not be accepted as the final summary.");
+Require(CodexCliProjectSummaryProvider.ReadFinalResult("{\"type\":17}") is null,
+    "Malformed event types must fail closed.");
 
 // The strip shows the session window, identified by the length the adapters attach.
 Require(
@@ -205,6 +221,40 @@ const string claudePayload = """
 var claude = UsageParser.Parse(claudePayload);
 Require(claude.Count == 3, "Claude limits array should produce three rows.");
 Require(claude[2].Label == "Weekly (Opus)", "Claude scoped model label wasn't preserved.");
+
+var projectStorePath = Path.Combine(Path.GetTempPath(), "WindowsAIStatusBar.ProjectStore", Guid.NewGuid().ToString("N"));
+var projectStore = new ProjectOverviewRepository(projectStorePath);
+var projectDocument = new ProjectOverviewDocument
+{
+    Projects = [new ProjectDefinition { Id = "fake-project", Name = "Fictional project", CurrentSummary = "Prepared the sample" }],
+    Memberships = [new ProjectMembership("fake-project", "codex:fake-thread", ProjectMembershipSource.Manual)],
+    Updates = [new ProjectUpdate { Id = "fake-update", ProjectId = "fake-project", ThreadId = "codex:fake-thread", Revision = 1, OccurredAt = DateTimeOffset.UtcNow, LatestAction = "Prepared fictional sample" }],
+    Coverage = [new ProjectCoverageCheckpoint("fake-project", "codex:fake-thread", "fake-turn", DateTimeOffset.UtcNow, "1", "test", "test-model")],
+};
+try
+{
+    projectStore.Save(projectDocument);
+    var firstCiphertext = File.ReadAllBytes(Path.Combine(projectStorePath, "projects.dat"));
+    Require(!System.Text.Encoding.UTF8.GetString(firstCiphertext).Contains("Prepared the sample", StringComparison.Ordinal),
+        "The project store must not expose summary text in plaintext.");
+    projectStore.Save(projectDocument with { Projects = [projectDocument.Projects[0] with { CurrentSummary = "Revised fictional sample" }] });
+    var primaryFile = Path.Combine(projectStorePath, "projects.dat");
+    var primaryBytes = File.ReadAllBytes(primaryFile);
+    primaryBytes[0] ^= 0xFF;
+    File.WriteAllBytes(primaryFile, primaryBytes);
+    var recovered = projectStore.Load();
+    Require(recovered.Source == ProjectOverviewLoadSource.Recovery && recovered.Document.Projects[0].CurrentSummary == "Prepared the sample",
+        "The encrypted recovery snapshot should load when the primary is damaged.");
+    projectStore.Save(recovered.Document);
+    Require(File.Exists(Path.Combine(projectStorePath, "projects.unreadable.dat")),
+        "Unreadable primary bytes should be preserved in encrypted quarantine before replacement.");
+    projectStore.Clear();
+    Require(!Directory.EnumerateFiles(projectStorePath).Any(), "Clear should purge primary, recovery and quarantine files.");
+}
+finally
+{
+    if (Directory.Exists(projectStorePath)) Directory.Delete(projectStorePath, recursive: true);
+}
 
 var fakeLocalAppData = Path.Combine(Path.GetTempPath(), "ClaudeUsageWidget.SmokeTests", Guid.NewGuid().ToString("N"));
 try

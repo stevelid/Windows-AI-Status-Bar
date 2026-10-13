@@ -53,6 +53,12 @@ internal sealed class ClaudeCodeSessionState
 
     /// <summary>Start of the last final message when it was longer than the tail; same handling as the tail.</summary>
     internal string? FinalMessageStart { get; set; }
+    /// <summary>Last bounded visible user request for project summaries; memory only.</summary>
+    internal string? SummaryContextText { get; set; }
+    internal string? SummaryFinalMessageTail { get; set; }
+    internal string? SummaryFinalMessageStart { get; set; }
+    internal DateTimeOffset? SummaryFinalMessageAt { get; set; }
+    internal DateTimeOffset? SummaryTurnEndedReportedAt { get; set; }
 
     /// <summary>When <see cref="FinalMessageTail"/> was captured; changes once per finished turn.</summary>
     internal DateTimeOffset? FinalMessageAt { get; set; }

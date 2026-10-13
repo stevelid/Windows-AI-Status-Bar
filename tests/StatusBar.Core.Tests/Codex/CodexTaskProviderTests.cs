@@ -198,6 +198,33 @@ public sealed class CodexTaskProviderTests
         Assert.Equal(AgentTaskStatus.Working, task.Status);
     }
 
+    [Fact]
+    public async Task Exact_summary_worker_source_is_excluded_before_task_history_and_turn_events()
+    {
+        using var temp = new TempRoot();
+        var time = new FakeTimeProvider(Now);
+        var paths = CodexPaths.Resolve(overrideHome: temp.Path);
+        WriteSession(SessionPath(paths, time, "user-session.jsonl"), "thread-user", Now);
+        var workerPath = SessionPath(paths, time, "worker-session.jsonl");
+        WriteRealShapeSession(workerPath, "\"exec\"", "windows_ai_status_bar_summary", Now);
+        AppendRecord(workerPath, JsonSerializer.Serialize(new
+        {
+            timestamp = Now.AddSeconds(1),
+            type = "event_msg",
+            payload = new { type = "task_complete", last_agent_message = "Fictional summary result." },
+        }));
+
+        await using var provider = new CodexTaskProvider(paths, time, watchFiles: false);
+        var turnEvents = 0;
+        provider.TurnEnded += _ => turnEvents++;
+        await provider.ReconcileAsync();
+
+        Assert.Equal("codex:thread-user", Assert.Single(provider.Current.Tasks).Id);
+        Assert.Equal(1, provider.TrackedFiles);
+        Assert.Equal(1, provider.Diagnostics.SessionsTracked);
+        Assert.Equal(0, turnEvents);
+    }
+
     static void WriteRealShapeSession(string path, string sourceJson, string threadSource, DateTimeOffset timestamp)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);

@@ -8,6 +8,7 @@
         WindowStartupLocation="Manual" SizeToContent="Height" Width="390" MaxHeight="640"
         Deactivated="OnDeactivated" PreviewKeyDown="OnPreviewKeyDown"
         PreviewMouseDown="OnActivity" PreviewMouseMove="OnActivity">
+    <Grid>
     <Border x:Name="RootBorder" CornerRadius="12" BorderThickness="1"
             Padding="14" Background="#F21B1B24">
         <Border.Effect>
@@ -31,7 +32,19 @@
                 <TextBlock x:Name="ClaudeHealth" FontSize="10" TextWrapping="Wrap"
                            Margin="0,0,0,6"/>
 
-                <Separator x:Name="TaskDivider" Margin="0,5,0,8"/>
+                <Grid Margin="0,7,0,5">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Button x:Name="ProjectsTab" Grid.Column="0" Padding="7,4" Margin="0,0,3,0"
+                            Click="OnProjectsTabClick"/>
+                    <Button x:Name="ConversationsTab" Grid.Column="1" Padding="7,4" Margin="3,0,0,0"
+                            Click="OnConversationsTabClick"/>
+                </Grid>
+                <Separator x:Name="TaskDivider" Margin="0,3,0,6"/>
+                <StackPanel x:Name="ProjectOverviewRows" Visibility="Collapsed"/>
+                <StackPanel x:Name="ConversationTasks">
                 <TextBlock x:Name="NeedsYouHeading" FontSize="11" FontWeight="Bold"
                            Margin="0,0,0,4" Visibility="Collapsed"/>
                 <StackPanel x:Name="NeedsYouRows"/>
@@ -62,7 +75,27 @@
                 <StackPanel x:Name="HistoryRows" Visibility="Collapsed"/>
                 <TextBlock x:Name="EmptyTasks" FontSize="11" TextWrapping="Wrap"
                            Margin="0,7,0,0" Visibility="Collapsed"/>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Border>
+        <Popup x:Name="ProjectPeekPopup" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
+            <Border x:Name="ProjectPeekCard" Width="310" MaxHeight="560" CornerRadius="10" BorderThickness="1"
+                    Padding="12" Background="#F21B1B24" BorderBrush="#5A5B67"
+                    MouseEnter="OnProjectPeekEnter" MouseLeave="OnProjectPeekLeave">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="530">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,7">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <TextBlock x:Name="ProjectPeekTitle" FontSize="13" FontWeight="Bold" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                            <Button x:Name="ProjectPeekPin" Grid.Column="1" Content="Pin" Padding="6,2" Margin="5,0" Click="OnProjectPeekPinClick"/>
+                            <Button Grid.Column="2" Content="×" Padding="6,2" Click="OnProjectPeekCloseClick"/>
+                        </Grid>
+                        <TextBlock x:Name="ProjectPeekSummary" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                        <StackPanel x:Name="ProjectPeekRows"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Popup>
+    </Grid>
 </Window>

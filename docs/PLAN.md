@@ -712,6 +712,20 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 
 ## 9. Known limitations to document
 
+## 10. Project overview (2026-10-13)
+
+The project overview is a separate feature phase after the original status-bar phases. It groups local Codex and Claude Code conversations into projects, shows derived updates with exact source attribution, and keeps live task state independent from summary state. It does not collect email, dispatch work, or claim to verify assistant-reported work. Existing Codex Cloud entries remain metadata-only; ordinary ChatGPT and Cowork transcripts are outside coverage.
+
+Durable storage follows the narrow exception recorded in `AGENTS.md`: only concise derived summaries and progress bullets, corrected project labels, bounded titles, stable IDs, memberships, acknowledgements, timestamps, coverage checkpoints and version metadata may persist. Derived text is private job data and must be encrypted with DPAPI CurrentUser in the Windows adapter. Raw prompts, transcripts, reasoning, tool arguments/results, full session paths, credentials and account identifiers remain ephemeral. Store and recovery snapshots must be replaced atomically and deleted consistently by clear-history/delete-project.
+
+### P7 — Project overview
+
+- **P7.1 Core project projection:** model projects, many-to-many thread memberships, per-turn updates/source references, independent working/input/unseen dimensions, manual grouping precedence, bounded visible updates and per-update revision acknowledgements. Keep project reduction and ordering in Core with `TimeProvider`.
+- **P7.2 Isolated summary runner:** Codex CLI subscription runner, stdin-only input, schema validation, bounded execution, exact worker source marker and collector exclusion. Keep the existing Jev attention classifier unchanged. Do not enable it if tool/MCP/browser/hook isolation is unsupported.
+- **P7.3 Durable private state:** versioned serialisable state, DPAPI CurrentUser adapter, atomic primary/recovery snapshots, retention, corruption recovery, restart coverage and consistent deletion.
+- **P7.4 Projects UI:** add Projects/Conversations views to the details pane; active updates are directly clickable, overflow is visible, hover side card supports pin/close/Escape, and all placement is monitor/DPI aware. Keep the list stationary while a card is open.
+- **P7.5 Acceptance:** test grouping conflicts/overrides, multi-project threads, source validation, duplicate/stale results, acknowledgement races, worker exclusion, queue limits/backoff, encrypted round trips/recovery/deletion and restart without repeated calls; run Windows interaction checks and report what cannot be exercised in the current environment.
+
 These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P3.6, updated with recon results:
 
 - Codex approval waits are inferred from pending tool calls, because Codex does not record approval requests on disk. Approvals for file edits outside the workspace (`apply_patch`) may not be detected.

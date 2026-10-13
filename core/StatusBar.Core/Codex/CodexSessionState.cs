@@ -28,15 +28,25 @@ internal sealed class CodexSessionState
     /// </summary>
     internal string? FileKey { get; set; }
     internal string? Source { get; set; }
+    internal string? ThreadSource { get; set; }
     internal string? ParentThreadId { get; set; }
     /// <summary>The session is Codex's own approval-review ("guardian") run, not a task Steve started.</summary>
     internal bool IsGuardianReview { get; set; }
+    /// <summary>The session is an app-owned summary worker and must never enter task/history state.</summary>
+    internal bool IsSummaryWorker { get; set; }
 
     /// <summary>Tail of the last final message, only while the optional AI check is on. Never logged or persisted.</summary>
     internal string? FinalMessageTail { get; set; }
 
     /// <summary>Start of the last final message when it was longer than the tail; same handling as the tail.</summary>
     internal string? FinalMessageStart { get; set; }
+
+    /// <summary>Last bounded visible user request for the optional project-summary path; memory only.</summary>
+    internal string? SummaryContextText { get; set; }
+    internal string? SummaryFinalMessageTail { get; set; }
+    internal string? SummaryFinalMessageStart { get; set; }
+    internal DateTimeOffset? SummaryFinalMessageAt { get; set; }
+    internal DateTimeOffset? SummaryTurnEndedReportedAt { get; set; }
 
     /// <summary>When <see cref="FinalMessageTail"/> was captured; changes once per finished turn.</summary>
     internal DateTimeOffset? FinalMessageAt { get; set; }

@@ -9,13 +9,21 @@ namespace StatusBar.Core.Judgment;
 /// <param name="Heuristic">What the built-in rules decided: <c>question</c>, <c>card</c> (a structured question) or <c>none</c>.</param>
 /// <param name="Text">The tail of the final message. Held in memory for the check only; never logged.</param>
 /// <param name="Start">The start of the message when it is longer than the tail; same handling.</param>
+/// <param name="ContextText">Optional bounded user request for the project summary path; memory only.</param>
+/// <param name="StableTaskId">Full provider-prefixed task identity, when available; never a log label.</param>
+/// <param name="TurnId">Provider turn identity when available.</param>
+/// <param name="OccurredAt">Source timestamp for this completed turn, not the later queue completion time.</param>
 public sealed record TurnEndInfo(
     AgentProvider Provider,
     string TaskKey,
     string EvidenceKey,
     string Heuristic,
     string Text,
-    string? Start = null);
+    string? Start = null,
+    string? ContextText = null,
+    string? StableTaskId = null,
+    string? TurnId = null,
+    DateTimeOffset? OccurredAt = null);
 
 /// <summary>Receives a finished turn from a provider.</summary>
 public delegate void TurnEndHandler(TurnEndInfo info);

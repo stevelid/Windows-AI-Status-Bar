@@ -9,6 +9,7 @@ using CoreRect = StatusBar.Core.Docking.Rect;
 using CoreSize = StatusBar.Core.Docking.Size;
 using StatusBar.Core.Docking;
 using StatusBar.Core.Tasks;
+using StatusBar.Core.Projects;
 using StatusBar.Core.Usage;
 using WinForms = System.Windows.Forms;
 using Color = System.Windows.Media.Color;
@@ -24,6 +25,8 @@ public partial class DetailsPaneWindow : Window
     readonly TaskHistory? _history;
     readonly UsageRateHistory? _rates;
     readonly TaskActivityLog? _activity;
+    ProjectOverviewDocument _projectDocument;
+    bool _showProjects = true;
     Dictionary<string, double> _costs = new(StringComparer.Ordinal);
     double? _anchorBottom;
     double _workAreaTop;
@@ -31,6 +34,18 @@ public partial class DetailsPaneWindow : Window
     readonly Dictionary<string, TaskRowView> _taskRows = new(StringComparer.Ordinal);
     readonly DispatcherTimer _countdownTimer;
     readonly DispatcherTimer _autoCollapseTimer;
+    readonly DispatcherTimer _projectPeekOpenTimer;
+    readonly DispatcherTimer _projectPeekCloseTimer;
+    ProjectOverviewItem? _pendingProjectPeek;
+    ProjectOverviewItem? _visibleProjectPeek;
+    Border? _projectPeekTarget;
+    bool _projectPeekPinned;
+    bool _projectsDirty;
+    bool _forceProjectRerank = true;
+    DateTimeOffset _lastProjectRankAt;
+    List<string> _projectOrder = [];
+    System.Windows.Controls.Button? _summaryToggleButton;
+    TextBlock? _summaryStatusText;
     IReadOnlyDictionary<UsageSource, UsageSnapshot> _usage =
         new Dictionary<UsageSource, UsageSnapshot>();
     StatusBarState _tasks = StatusBarState.Empty;
@@ -48,20 +63,44 @@ public partial class DetailsPaneWindow : Window
     /// <summary>Raised when the user clicks a task row to focus its owning desktop app.</summary>
     public event Action<AgentTask>? FocusTaskRequested;
 
+    /// <summary>Raised when a displayed update is opened so only its shown revision is acknowledged.</summary>
+    public event Action<ProjectAcknowledgement, AgentTask>? ProjectUpdateOpenRequested;
+
+    /// <summary>Raised when Steve moves a conversation to a project or clears its grouping.</summary>
+    public event Action<string, string?>? ProjectAssignmentRequested;
+
+    public event Action<string>? ProjectDeleteRequested;
+    public event Action? ClearProjectOverviewRequested;
+    public event Action? ProjectSummaryToggleRequested;
+
     /// <summary>Creates the pane and starts its display timers only while it is visible.</summary>
-    public DetailsPaneWindow(Settings settings, TaskHistory? history = null, UsageRateHistory? rates = null, TaskActivityLog? activity = null)
+    public DetailsPaneWindow(Settings settings, TaskHistory? history = null, UsageRateHistory? rates = null, TaskActivityLog? activity = null, ProjectOverviewDocument? projectDocument = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         _settings = settings;
         _history = history;
         _rates = rates;
         _activity = activity;
+        _projectDocument = projectDocument ?? ProjectOverviewDocumentRules.Clear();
         if (_history is not null) _history.Changed += OnHistoryChanged;
         InitializeComponent();
         _countdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _countdownTimer.Tick += OnCountdownTick;
         _autoCollapseTimer = new DispatcherTimer();
         _autoCollapseTimer.Tick += OnAutoCollapseTick;
+        _projectPeekOpenTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
+        _projectPeekOpenTimer.Tick += (_, _) =>
+        {
+            _projectPeekOpenTimer.Stop();
+            if (_pendingProjectPeek is not null && _projectPeekTarget is not null) OpenProjectPeek(_pendingProjectPeek, _projectPeekTarget);
+        };
+        _projectPeekCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(450) };
+        _projectPeekCloseTimer.Tick += (_, _) =>
+        {
+            _projectPeekCloseTimer.Stop();
+            if (!_projectPeekPinned) ProjectPeekPopup.IsOpen = false;
+            if (_projectsDirty && !ProjectOverviewRows.IsMouseOver) RenderProjects();
+        };
         IsVisibleChanged += OnVisibilityChanged;
         SizeChanged += OnPaneSizeChanged;
         Closed += OnClosed;
@@ -84,6 +123,7 @@ public partial class DetailsPaneWindow : Window
         RenderUsage(UsageSource.Claude, ClaudeUsageRows, ClaudeHealth);
         RenderRates();
         RenderTasks();
+        RenderProjects();
     }
 
     /// <summary>Shows the pane above its owner and clamps it to that monitor's work area.</summary>
@@ -92,8 +132,10 @@ public partial class DetailsPaneWindow : Window
         ArgumentNullException.ThrowIfNull(strip);
         Owner = strip;
         _closeRequested = false;
+        _forceProjectRerank = true;
         Show();
         UpdateLayout();
+        RenderProjects();
 
         var stripHandle = new System.Windows.Interop.WindowInteropHelper(strip).Handle;
         if (stripHandle == IntPtr.Zero) return;
@@ -176,6 +218,8 @@ public partial class DetailsPaneWindow : Window
         HistoryClear.Text = L10n.T("pane_history_clear");
         HistoryClear.Foreground = linkBrush;
         EmptyTasks.Text = L10n.T("pane_empty_tasks");
+        ProjectsTab.Content = L10n.T("pane_projects");
+        ConversationsTab.Content = L10n.T("pane_conversations");
     }
 
     void RenderUsage(UsageSource source, StackPanel rows, TextBlock healthText)
@@ -518,6 +562,293 @@ public partial class DetailsPaneWindow : Window
             : Visibility.Collapsed;
     }
 
+    void OnProjectsTabClick(object sender, RoutedEventArgs e) => SetProjectView(true);
+
+    void OnConversationsTabClick(object sender, RoutedEventArgs e) => SetProjectView(false);
+
+    void SetProjectView(bool showProjects)
+    {
+        _showProjects = showProjects;
+        ProjectOverviewRows.Visibility = showProjects ? Visibility.Visible : Visibility.Collapsed;
+        ConversationTasks.Visibility = showProjects ? Visibility.Collapsed : Visibility.Visible;
+        ProjectsTab.FontWeight = showProjects ? FontWeights.Bold : FontWeights.Normal;
+        ConversationsTab.FontWeight = showProjects ? FontWeights.Normal : FontWeights.Bold;
+    }
+
+    public void UpdateProjectDocument(ProjectOverviewDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        _projectDocument = document;
+        RenderProjects();
+    }
+
+    public void UpdateProjectSummaryStatus(bool enabled, bool unavailable = false)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => UpdateProjectSummaryStatus(enabled, unavailable));
+            return;
+        }
+        _settings.ProjectSummariesEnabled = enabled;
+        if (_summaryToggleButton is not null)
+            _summaryToggleButton.Content = L10n.T(enabled ? "pane_project_pause_summaries" : "pane_project_resume_summaries");
+        if (_summaryStatusText is not null)
+            _summaryStatusText.Text = L10n.T(unavailable ? "pane_project_summary_unavailable" :
+                enabled ? "pane_project_summary_ready" : "pane_project_summary_paused");
+    }
+
+    void RenderProjects()
+    {
+        if (ProjectPeekPopup.IsOpen || ProjectOverviewRows.IsMouseOver)
+        {
+            _projectsDirty = true;
+            return;
+        }
+        ProjectOverviewRows.Children.Clear();
+        _projectsDirty = false;
+        var controls = new Grid { Margin = new Thickness(0, 0, 0, 3) };
+        controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        controls.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        controls.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        _summaryToggleButton = new System.Windows.Controls.Button
+        {
+            Content = L10n.T(_settings.ProjectSummariesEnabled ? "pane_project_pause_summaries" : "pane_project_resume_summaries"),
+            Padding = new Thickness(4, 2, 4, 2), Margin = new Thickness(0, 0, 3, 0),
+        };
+        _summaryToggleButton.Click += (_, _) => ProjectSummaryToggleRequested?.Invoke();
+        _summaryStatusText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap,
+            Text = L10n.T(_settings.ProjectSummariesEnabled ? "pane_project_summary_ready" : "pane_project_summary_paused") };
+        var clear = new System.Windows.Controls.Button { Content = L10n.T("pane_project_clear"), Padding = new Thickness(4, 2, 4, 2),
+            ToolTip = L10n.T("pane_project_clear_hint") };
+        clear.Click += (_, _) => ClearProjectOverviewRequested?.Invoke();
+        Grid.SetColumn(_summaryStatusText, 1);
+        Grid.SetColumn(clear, 2);
+        controls.Children.Add(_summaryToggleButton);
+        controls.Children.Add(_summaryStatusText);
+        controls.Children.Add(clear);
+        ProjectOverviewRows.Children.Add(controls);
+        var state = ProjectOverviewBuilder.Build(_projectDocument.Projects, _projectDocument.Memberships,
+            _tasks.Tasks, _projectDocument.Updates, _projectDocument.Acknowledgements, _projectDocument.ThreadReferences);
+        if (_forceProjectRerank || DateTimeOffset.UtcNow - _lastProjectRankAt >= TimeSpan.FromMinutes(15))
+        {
+            _projectOrder = state.Projects.Select(item => item.Project.Id).ToList();
+            _lastProjectRankAt = DateTimeOffset.UtcNow;
+            _forceProjectRerank = false;
+        }
+        var ranks = _projectOrder.Select((id, index) => (id, index)).ToDictionary(item => item.id, item => item.index, StringComparer.Ordinal);
+        state = state with { Projects = state.Projects.OrderBy(item => ranks.GetValueOrDefault(item.Project.Id, int.MaxValue)).ToArray() };
+        foreach (var item in state.Projects)
+        {
+            var content = new StackPanel { Margin = new Thickness(8, 6, 5, 6) };
+            var status = item.HasUnresolvedInput ? " · " + L10n.T("pane_needs_you") :
+                item.HasWorkingConversation ? " · " + L10n.T("pane_working") : string.Empty;
+            var heading = new TextBlock
+            {
+                Text = item.Project.Name + status + (item.UnseenUpdateCount > 0 ? $" · {item.UnseenUpdateCount} new" : string.Empty),
+                FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap,
+                Foreground = ThemeManager.Brush(ThemeManager.LabelText),
+                Focusable = true,
+            };
+            heading.ContextMenu = new System.Windows.Controls.ContextMenu();
+            var deleteProject = new System.Windows.Controls.MenuItem { Header = L10n.T("pane_project_delete") };
+            deleteProject.Click += (_, _) => ProjectDeleteRequested?.Invoke(item.Project.Id);
+            heading.ContextMenu.Items.Add(deleteProject);
+            heading.Cursor = System.Windows.Input.Cursors.Hand;
+            heading.MouseLeftButtonUp += (_, args) =>
+            {
+                args.Handled = true;
+                _projectPeekPinned = true;
+                OpenProjectPeek(item, (Border)heading.Tag!);
+            };
+            heading.KeyDown += (_, args) =>
+            {
+                if (args.Key is not (Key.Enter or Key.Space)) return;
+                _projectPeekPinned = true;
+                OpenProjectPeek(item, (Border)heading.Tag!);
+                args.Handled = true;
+            };
+            content.Children.Add(heading);
+            var activeRow = item.HasWorkingConversation || item.HasUnresolvedInput || item.UnseenUpdateCount > 0;
+            if (!string.IsNullOrWhiteSpace(item.Project.CurrentSummary) && activeRow)
+                content.Children.Add(new TextBlock { Text = item.Project.CurrentSummary, Margin = new Thickness(0, 3, 0, 3),
+                    TextWrapping = TextWrapping.Wrap, Foreground = ThemeManager.Brush(ThemeManager.LabelText) });
+
+            var byThread = item.Conversations.ToDictionary(conversation => conversation.Task.Id, conversation => conversation.Task, StringComparer.Ordinal);
+            var visibleUpdates = item.Updates.GroupBy(update => update.ThreadId, StringComparer.Ordinal)
+                .Select(group => group.First()).Take(ProjectOverviewBuilder.VisibleUpdatesPerProject).ToArray();
+            if (activeRow)
+                foreach (var update in visibleUpdates)
+                    content.Children.Add(CreateProjectUpdateButton(update, byThread));
+            var overflowCount = item.Updates.Count - visibleUpdates.Length;
+            if (overflowCount > 0 && activeRow)
+            {
+                var overflow = new StackPanel { Visibility = Visibility.Collapsed };
+                var visibleIds = visibleUpdates.Select(update => update.Id).ToHashSet(StringComparer.Ordinal);
+                foreach (var update in item.Updates.Where(update => !visibleIds.Contains(update.Id)))
+                    overflow.Children.Add(CreateProjectUpdateButton(update, byThread));
+                var toggle = new System.Windows.Controls.Button { Content = L10n.F("pane_project_more", overflowCount),
+                    HorizontalContentAlignment = System.Windows.HorizontalAlignment.Left, Padding = new Thickness(2),
+                    Background = System.Windows.Media.Brushes.Transparent, BorderThickness = new Thickness(0),
+                    Foreground = ThemeManager.Brush(ThemeManager.SubtleText) };
+                toggle.Click += (_, _) => overflow.Visibility = overflow.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+                content.Children.Add(toggle);
+                content.Children.Add(overflow);
+            }
+            var card = new Border
+            {
+                Margin = new Thickness(0, 2, 0, 4), CornerRadius = new CornerRadius(6),
+                Background = ThemeManager.Brush(ThemeManager.IsLight ? Color.FromRgb(0xEA, 0xEB, 0xF0) : Color.FromRgb(0x26, 0x27, 0x31)),
+                Child = content,
+            };
+            heading.Tag = card;
+            card.MouseEnter += (_, _) => ScheduleProjectPeek(item, card);
+            card.MouseLeave += (_, _) => ScheduleProjectPeekClose();
+            ProjectOverviewRows.Children.Add(card);
+        }
+
+        if (state.UngroupedConversations.Count > 0)
+        {
+            ProjectOverviewRows.Children.Add(new TextBlock { Text = L10n.T("pane_project_ungrouped"), FontSize = 11,
+                FontWeight = FontWeights.Bold, Margin = new Thickness(0, 7, 0, 3), Foreground = ThemeManager.Brush(ThemeManager.LabelText) });
+            foreach (var task in state.UngroupedConversations)
+            {
+                var statusKey = task.Status switch { AgentTaskStatus.Working => "pane_working", AgentTaskStatus.NeedsAttention => "pane_needs_you", _ => "pane_recent" };
+                var row = new System.Windows.Controls.Button { Content = $"{task.Title} · {L10n.T(statusKey)}", HorizontalContentAlignment = System.Windows.HorizontalAlignment.Left,
+                    Padding = new Thickness(5, 4, 5, 4) };
+                row.ContextMenu = CreateAssignmentMenu(task.Id);
+                row.Click += (_, _) => FocusTaskRequested?.Invoke(task);
+                ProjectOverviewRows.Children.Add(row);
+            }
+        }
+
+        if (ProjectOverviewRows.Children.Count == 1)
+            ProjectOverviewRows.Children.Add(new TextBlock { Text = L10n.T("pane_projects_empty"), TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(2, 8, 2, 8), Foreground = ThemeManager.Brush(ThemeManager.SubtleText) });
+        SetProjectView(_showProjects);
+    }
+
+    System.Windows.Controls.ContextMenu CreateAssignmentMenu(string threadId)
+    {
+        var menu = new System.Windows.Controls.ContextMenu();
+        var move = new System.Windows.Controls.MenuItem { Header = L10n.T("pane_project_move_to") };
+        foreach (var project in _projectDocument.Projects)
+        {
+            var choice = new System.Windows.Controls.MenuItem { Header = project.Name };
+            choice.Click += (_, _) => ProjectAssignmentRequested?.Invoke(threadId, project.Id);
+            move.Items.Add(choice);
+        }
+        menu.Items.Add(move);
+        var ungroup = new System.Windows.Controls.MenuItem { Header = L10n.T("pane_project_ungroup") };
+        ungroup.Click += (_, _) => ProjectAssignmentRequested?.Invoke(threadId, null);
+        menu.Items.Add(ungroup);
+        return menu;
+    }
+
+    System.Windows.Controls.Button CreateProjectUpdateButton(ProjectUpdate update, IReadOnlyDictionary<string, AgentTask> taskById, string? label = null)
+    {
+        var row = new System.Windows.Controls.Button { Content = label ?? ("• " + update.LatestAction), HorizontalContentAlignment = System.Windows.HorizontalAlignment.Left,
+            Padding = new Thickness(2), Background = System.Windows.Media.Brushes.Transparent,
+            BorderThickness = new Thickness(0), Foreground = ThemeManager.Brush(ThemeManager.LabelText),
+            ToolTip = update.NeedsInput ? L10n.T("pane_needs_you") : null };
+        row.Click += (_, _) =>
+        {
+            if (taskById.TryGetValue(update.ThreadId, out var task))
+                ProjectUpdateOpenRequested?.Invoke(new ProjectAcknowledgement(update.Id, update.Revision), task);
+        };
+        return row;
+    }
+
+    void ScheduleProjectPeek(ProjectOverviewItem item, Border target)
+    {
+        _projectPeekCloseTimer.Stop();
+        if (_projectPeekPinned && _visibleProjectPeek?.Project.Id != item.Project.Id) return;
+        _pendingProjectPeek = item;
+        _projectPeekTarget = target;
+        _projectPeekOpenTimer.Stop();
+        _projectPeekOpenTimer.Start();
+    }
+
+    void ScheduleProjectPeekClose()
+    {
+        _projectPeekOpenTimer.Stop();
+        if (!_projectPeekPinned && (ProjectPeekPopup.IsOpen || _projectsDirty))
+        {
+            _projectPeekCloseTimer.Stop();
+            _projectPeekCloseTimer.Start();
+        }
+    }
+
+    void OpenProjectPeek(ProjectOverviewItem item, Border target)
+    {
+        _visibleProjectPeek = item;
+        _pendingProjectPeek = item;
+        ProjectPeekTitle.Text = item.Project.Name;
+        ProjectPeekSummary.Text = item.Project.CurrentSummary ?? L10n.T("pane_project_summary_pending");
+        ProjectPeekRows.Children.Clear();
+        var updatesByThread = item.Updates.GroupBy(update => update.ThreadId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        foreach (var conversation in item.Conversations)
+        {
+            var task = conversation.Task;
+            var status = task.Status switch
+            {
+                AgentTaskStatus.Working => L10n.T("pane_working"),
+                AgentTaskStatus.NeedsAttention => L10n.T("pane_needs_you"),
+                AgentTaskStatus.Complete => L10n.T("pane_recent"),
+                _ => L10n.T("pane_unknown"),
+            };
+            var conversationButton = new System.Windows.Controls.Button
+            {
+                Content = $"{task.Provider} · {task.Title} · {status}",
+                HorizontalContentAlignment = System.Windows.HorizontalAlignment.Left,
+                Padding = new Thickness(3, 4, 3, 4),
+            };
+            conversationButton.ContextMenu = CreateAssignmentMenu(task.Id);
+            conversationButton.Click += (_, _) => FocusTaskRequested?.Invoke(task);
+            ProjectPeekRows.Children.Add(conversationButton);
+            if (!updatesByThread.TryGetValue(task.Id, out var updates)) continue;
+            foreach (var update in updates)
+            {
+                var action = CreateProjectUpdateButton(update, new Dictionary<string, AgentTask>(StringComparer.Ordinal) { [task.Id] = task });
+                ProjectPeekRows.Children.Add(action);
+                foreach (var progress in update.Progress)
+                    ProjectPeekRows.Children.Add(CreateProjectUpdateButton(update,
+                        new Dictionary<string, AgentTask>(StringComparer.Ordinal) { [task.Id] = task }, "• " + progress));
+            }
+        }
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var screen = WinForms.Screen.FromHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        var rightFits = Left + ActualWidth + 320 <= screen.WorkingArea.Right / dpi.DpiScaleX;
+        ProjectPeekPopup.PlacementTarget = target;
+        ProjectPeekPopup.Placement = rightFits ? System.Windows.Controls.Primitives.PlacementMode.Right : System.Windows.Controls.Primitives.PlacementMode.Left;
+        ProjectPeekPopup.IsOpen = true;
+        _projectPeekCloseTimer.Stop();
+    }
+
+    void OnProjectPeekEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        _projectPeekCloseTimer.Stop();
+        ConfigureAutoCollapseTimer();
+    }
+
+    void OnProjectPeekLeave(object sender, System.Windows.Input.MouseEventArgs e) => ScheduleProjectPeekClose();
+
+    void OnProjectPeekPinClick(object sender, RoutedEventArgs e)
+    {
+        _projectPeekPinned = !_projectPeekPinned;
+        ProjectPeekPin.Content = L10n.T(_projectPeekPinned ? "pane_project_unpin" : "pane_project_pin");
+    }
+
+    void OnProjectPeekCloseClick(object sender, RoutedEventArgs e)
+    {
+        _projectPeekPinned = false;
+        _projectPeekOpenTimer.Stop();
+        _projectPeekCloseTimer.Stop();
+        ProjectPeekPopup.IsOpen = false;
+        _visibleProjectPeek = null;
+        if (_projectsDirty && !ProjectOverviewRows.IsMouseOver) RenderProjects();
+    }
+
     // History is a collapsed "HISTORY ▸ n" row under the task list; it expands in place. Tasks that
     // are still listed under "recently completed" are left out so nothing appears twice.
     void RenderHistory()
@@ -660,6 +991,7 @@ public partial class DetailsPaneWindow : Window
 
     void OnDeactivated(object? sender, EventArgs e)
     {
+        if (ProjectPeekPopup.IsOpen && _projectPeekPinned) return;
         // Let a strip click toggle the pane before focus loss closes it.
         Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(ClosePane));
     }
@@ -667,7 +999,13 @@ public partial class DetailsPaneWindow : Window
     void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key != Key.Escape) return;
-        ClosePane();
+        if (ProjectPeekPopup.IsOpen)
+        {
+            _projectPeekPinned = false;
+            ProjectPeekPopup.IsOpen = false;
+            _visibleProjectPeek = null;
+        }
+        else ClosePane();
         e.Handled = true;
     }
 
@@ -680,6 +1018,9 @@ public partial class DetailsPaneWindow : Window
 
     void OnClosed(object? sender, EventArgs e)
     {
+        _projectPeekOpenTimer.Stop();
+        _projectPeekCloseTimer.Stop();
+        ProjectPeekPopup.IsOpen = false;
         _countdownTimer.Stop();
         _autoCollapseTimer.Stop();
         L10n.Changed -= ApplyAppearance;
