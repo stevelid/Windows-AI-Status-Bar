@@ -87,10 +87,10 @@ public sealed class DockController : IDisposable
         var handle = new WindowInteropHelper(_window).Handle;
         if (handle == IntPtr.Zero) return;
         var screen = WinForms.Screen.FromHandle(handle);
-        var workArea = WorkAreaDip(screen);
+        var movementArea = ScreenBoundsDip(screen);
         var size = StripSizeDip();
         var relative = StatusBar.Core.Docking.DockGeometry.CaptureRelative(
-            workArea, size, _window.Left, _window.Top);
+            movementArea, size, _window.Left, _window.Top);
         _settings.MonitorDeviceName = screen.DeviceName;
         _settings.StripRelativeX = relative.X;
         _settings.StripRelativeY = relative.Y;
@@ -158,7 +158,7 @@ public sealed class DockController : IDisposable
         var stripDip = StripSizeDip();
         var placed = _settings.StripRelativeX is double x && _settings.StripRelativeY is double y
             ? StatusBar.Core.Docking.DockGeometry.PlaceRelative(
-                workAreaDip, stripDip, new RelativePosition(x, y))
+                ScreenBoundsDip(screen), stripDip, new RelativePosition(x, y))
             : StatusBar.Core.Docking.DockGeometry.Place(
                 workAreaDip, stripDip,
                 StatusBar.Core.Docking.DockAnchor.BottomRight, MarginDip);
@@ -178,6 +178,18 @@ public sealed class DockController : IDisposable
     CoreRect WorkAreaDip(WinForms.Screen screen)
     {
         var physical = screen.WorkingArea;
+        var dpi = VisualTreeHelper.GetDpi(_window);
+        return new CoreRect(
+            physical.Left / dpi.DpiScaleX,
+            physical.Top / dpi.DpiScaleY,
+            physical.Width / dpi.DpiScaleX,
+            physical.Height / dpi.DpiScaleY);
+    }
+
+    CoreRect ScreenBoundsDip(WinForms.Screen screen)
+    {
+        // Floating placement includes the taskbar; only the default dock uses the work area.
+        var physical = screen.Bounds;
         var dpi = VisualTreeHelper.GetDpi(_window);
         return new CoreRect(
             physical.Left / dpi.DpiScaleX,
