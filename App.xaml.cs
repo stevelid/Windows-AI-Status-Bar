@@ -201,7 +201,8 @@ public partial class App : System.Windows.Application
         _projectOverviewDocument = projectLoad.Document;
         if (projectLoad.DiagnosticCode is not null)
             Log.Write($"Project overview data: {projectLoad.DiagnosticCode}");
-        _projectSummaryProvider = new CodexCliProjectSummaryProvider(AppPaths.DataDir);
+        _projectSummaryProvider = new ProjectSummaryFallbackProvider(
+            new ClaudeCliProjectSummaryProvider(), new CodexCliProjectSummaryProvider(AppPaths.DataDir), TimeProvider.System);
         _ = Task.Run(ProjectSummaryQueueLoopAsync);
         _turnEnds = new TurnEndMonitor(
             () => _jevClassifier,
@@ -921,7 +922,7 @@ public partial class App : System.Windows.Application
             info.EvidenceKey.Length > ProjectTextLimits.MaximumEvidenceIdLength) return;
 
         var task = _taskState.Tasks.FirstOrDefault(item => item.Id == info.StableTaskId);
-        var title = ProjectSummaryTextSanitizer.Sanitize(task?.Title ?? "AI conversation", 120) ?? "AI conversation";
+        var title = ProjectSummaryTextSanitizer.Sanitize(info.DisplayTitle ?? task?.Title ?? "AI conversation", 120) ?? "AI conversation";
         var assistantText = (info.Start is null ? string.Empty : "[message start]\n" + info.Start + "\n[message end]\n") + info.Text;
         string[] candidateNames;
         string? priorSummary;
@@ -950,7 +951,8 @@ public partial class App : System.Windows.Application
 
         lock (_projectOverviewGate)
         {
-            if (_projectOverviewDocument.Coverage.Any(item => item.ThreadId == request.ThreadId && item.TurnId == request.EvidenceId)) return;
+            if (_projectOverviewDocument.Coverage.Any(item => item.ThreadId == request.ThreadId && item.TurnId == request.EvidenceId &&
+                (item.ProjectId is not null || item.PromptVersion == "project-overview-v2"))) return;
             if (_projectSummaryQueue.Enqueue(request)) _summaryQueueSignal.Release();
         }
     }

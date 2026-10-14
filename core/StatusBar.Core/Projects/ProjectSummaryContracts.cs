@@ -21,7 +21,8 @@ public sealed record ProjectSummaryResult(
     string? SuggestedProjectName,
     string LatestAction,
     IReadOnlyList<string> Progress,
-    IReadOnlyList<string> SourceEvidenceIds);
+    IReadOnlyList<string> SourceEvidenceIds,
+    string? Model = null);
 
 /// <summary>Replaceable backend for subscription-backed project summaries.</summary>
 public interface IProjectSummaryProvider
@@ -45,6 +46,7 @@ public static class ProjectSummaryValidator
         if (!IsValidRequest(request) || result is null) return false;
 
         if (result.LatestAction is null || result.LatestAction.Length > ProjectTextLimits.MaximumActionLength ||
+            result.Model is { Length: > 64 } ||
             result.Progress is null || result.Progress.Count > ProjectTextLimits.MaximumProgressItems ||
             result.Progress.Any(line => string.IsNullOrWhiteSpace(line) || line.Length > ProjectTextLimits.MaximumProgressLength) ||
             result.SuggestedProjectName is { Length: > 120 } ||

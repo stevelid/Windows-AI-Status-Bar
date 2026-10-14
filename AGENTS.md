@@ -33,3 +33,4 @@ WPF projects compile on Linux (`EnableWindowsTargeting`) but cannot run there. W
 - New UI strings need entries in `Localization.cs` (missing keys render as the key). English text may be copied into the zh slot.
 - Do not add NuGet packages to Core beyond test helpers without a note in `PROGRESS.md`.
 - Commits start with the plan ID (e.g. `P2.2 Add Codex rollout parser`). Update `docs/PROGRESS.md` in the same commit.
+- Steve's coding preference (2026-10-14): Codex does the coding directly. Do not delegate implementation to Luna or other coding agents unless Steve explicitly requests it again.

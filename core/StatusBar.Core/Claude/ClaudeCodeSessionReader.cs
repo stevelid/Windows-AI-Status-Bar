@@ -172,6 +172,9 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                         now - entry.State.LastActivity < _timings.ClaudeCodeWorkingStaleAfter)),
                 StringComparer.Ordinal);
         return _entries.Values
+            // Summary backfill must not resurrect old attention rows in the live strip.
+            .Where(entry => !StatusBar.Core.Judgment.FinalMessageCapture.ProjectOverviewEnabled ||
+                entry.State.LastActivity >= now - _timings.ClaudeCodeRecentFileWindow)
             .Where(entry => !entry.State.IsSidechainOnly)
             .Select(entry => ClaudeCodeTaskMapper.Map(
                 entry.State,
@@ -188,7 +191,9 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
     IReadOnlyList<string> DiscoverFiles(DateTimeOffset now)
     {
         var files = new List<string>();
-        var minimumWriteTime = now - _timings.ClaudeCodeRecentFileWindow;
+        var discoveryWindow = StatusBar.Core.Judgment.FinalMessageCapture.ProjectOverviewEnabled
+            ? StatusBar.Core.Projects.ProjectSummaryBootstrap.Window : _timings.ClaudeCodeRecentFileWindow;
+        var minimumWriteTime = now - discoveryWindow;
         try
         {
             // ⚠️ A-K1 The projects JSONL tree is confirmed for the desktop Code tab; other Claude Code roots remain unverified.
@@ -250,7 +255,7 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
     void RaiseRecoveredTurns(List<ClaudeCodeSessionState> recovered, DateTimeOffset now)
     {
         var summaryCandidates = recovered.Where(state => !state.IsSidechainOnly && state.SummaryFinalMessageAt is not null && state.SummaryFinalMessageTail is not null).ToList();
-        var summaryChosen = StatusBar.Core.Judgment.TurnVerdictPolicy.SelectStartupJudgments(summaryCandidates.Select(state => state.SummaryFinalMessageAt!.Value).ToArray(), now);
+        var summaryChosen = StatusBar.Core.Projects.ProjectSummaryBootstrap.Select(summaryCandidates.Select(state => state.SummaryFinalMessageAt!.Value).ToArray(), now);
         foreach (var index in summaryChosen) RaiseProjectSummaryTurnEnded(summaryCandidates[index]);
         var candidates = recovered.Where(state => state.FinalMessageAt is not null && state.FinalMessageTail is not null).ToList();
         var chosen = StatusBar.Core.Judgment.TurnVerdictPolicy.SelectStartupJudgments(candidates.Select(state => state.FinalMessageAt!.Value).ToArray(), now);
@@ -293,7 +298,8 @@ internal sealed class ClaudeCodeSessionReader : IDisposable
                 StatusBar.Core.Judgment.TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithQuestion ? "question" : "none", text,
                 state.SummaryFinalMessageStart, state.SummaryContextText,
-                "claude:" + (state.SessionId ?? "unknown"), null, at));
+                "claude:" + (state.SessionId ?? "unknown"), null, at,
+                ClaudeCodeTaskMapper.Map(state, _time.GetUtcNow(), _timings).Title));
         }
         catch (Exception) { /* Summary failures must never interrupt task collection. */ }
     }

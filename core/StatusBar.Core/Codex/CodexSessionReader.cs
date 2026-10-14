@@ -200,8 +200,10 @@ internal sealed class CodexSessionReader : IDisposable
     /// </summary>
     void RaiseRecoveredTurns(List<CodexSessionState> recovered, DateTimeOffset now)
     {
-        var summaryCandidates = recovered.Where(state => state.SummaryFinalMessageAt is not null && state.SummaryFinalMessageTail is not null).ToList();
-        var summaryChosen = TurnVerdictPolicy.SelectStartupJudgments(summaryCandidates.Select(state => state.SummaryFinalMessageAt!.Value).ToArray(), now);
+        _titles.Refresh();
+        var summaryCandidates = recovered.Where(state => !state.IsGuardianReview && state.ParentThreadId is null &&
+            state.SummaryFinalMessageAt is not null && state.SummaryFinalMessageTail is not null).ToList();
+        var summaryChosen = StatusBar.Core.Projects.ProjectSummaryBootstrap.Select(summaryCandidates.Select(state => state.SummaryFinalMessageAt!.Value).ToArray(), now);
         foreach (var index in summaryChosen) RaiseProjectSummaryTurnEnded(summaryCandidates[index]);
         var candidates = recovered.Where(state => state.FinalMessageAt is not null && state.FinalMessageTail is not null).ToList();
         var chosen = TurnVerdictPolicy.SelectStartupJudgments(candidates.Select(state => state.FinalMessageAt!.Value).ToArray(), now);
@@ -244,7 +246,8 @@ internal sealed class CodexSessionReader : IDisposable
                 "codex:" + ShortId(state), TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "question" : "none",
                 text, state.SummaryFinalMessageStart, state.SummaryContextText,
-                "codex:" + (state.ThreadId ?? state.FileKey ?? "unknown"), state.TurnId, at));
+                "codex:" + (state.ThreadId ?? state.FileKey ?? "unknown"), state.TurnId, at,
+                _titles.Resolve(state)));
         }
         catch (Exception) { /* Summary failures must never interrupt task collection. */ }
     }
@@ -280,6 +283,8 @@ internal sealed class CodexSessionReader : IDisposable
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)
     {
         var mapped = _entries.Values
+            // Older files seed project summaries without expanding the live task window.
+            .Where(entry => !FinalMessageCapture.ProjectOverviewEnabled || entry.State.LastActivity >= now - _timings.CodexRecentFileWindow)
             // ⚠️ A-X6 Codex's approval-review ("guardian") sessions are internal safety checks, not tasks.
             .Where(entry => !entry.State.IsGuardianReview && !entry.State.IsSummaryWorker)
             .Select(entry => (entry.State, Task: CodexTaskMapper.Map(entry.State, now, _timings)))
@@ -356,7 +361,9 @@ internal sealed class CodexSessionReader : IDisposable
             AddFiles(dateDirectory, SearchOption.TopDirectoryOnly, files, _ => true);
         }
 
-        var recentAfter = now - _timings.CodexRecentFileWindow;
+        var discoveryWindow = FinalMessageCapture.ProjectOverviewEnabled
+            ? StatusBar.Core.Projects.ProjectSummaryBootstrap.Window : _timings.CodexRecentFileWindow;
+        var recentAfter = now - discoveryWindow;
         AddFiles(_paths.SessionsDirectory, SearchOption.AllDirectories, files, path =>
         {
             try

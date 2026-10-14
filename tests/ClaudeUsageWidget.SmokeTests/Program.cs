@@ -299,12 +299,14 @@ if (args.Length == 1 && string.Equals(args[0], "--live", StringComparison.Ordina
     return;
 }
 
-if (args.Length == 1 && string.Equals(args[0], "--live-summary", StringComparison.OrdinalIgnoreCase))
+if (args.Length == 1 && (string.Equals(args[0], "--live-summary", StringComparison.OrdinalIgnoreCase) ||
+    string.Equals(args[0], "--live-haiku-summary", StringComparison.OrdinalIgnoreCase)))
 {
     var liveSummaryData = Path.Combine(Path.GetTempPath(), "ClaudeUsageWidget.LiveSummaryProbe", Guid.NewGuid().ToString("N"));
     try
     {
-        var liveSummaryProvider = new CodexCliProjectSummaryProvider(liveSummaryData);
+        IProjectSummaryProvider liveSummaryProvider = args[0] == "--live-haiku-summary"
+            ? new ClaudeCliProjectSummaryProvider() : new CodexCliProjectSummaryProvider(liveSummaryData);
         var liveRequest = new ProjectSummaryRequest(
             ThreadId: "codex:fictional-probe-thread",
             EvidenceId: "fictional-probe-turn",
@@ -316,7 +318,7 @@ if (args.Length == 1 && string.Equals(args[0], "--live-summary", StringCompariso
             OccurredAt: DateTimeOffset.Parse("2030-01-01T00:00:00Z"));
         var liveResult = await liveSummaryProvider.SummarizeAsync(liveRequest, CancellationToken.None);
         Console.WriteLine(liveResult is not null && ProjectSummaryValidator.TryValidate(liveRequest, liveResult)
-            ? "Project summary runner: success"
+            ? $"Project summary runner: success ({liveResult.Model})"
             : "Project summary runner: error/invalid-result");
     }
     catch (Exception exception)

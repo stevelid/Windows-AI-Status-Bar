@@ -13,6 +13,7 @@ namespace StatusBar.Core.Judgment;
 /// <param name="StableTaskId">Full provider-prefixed task identity, when available; never a log label.</param>
 /// <param name="TurnId">Provider turn identity when available.</param>
 /// <param name="OccurredAt">Source timestamp for this completed turn, not the later queue completion time.</param>
+/// <param name="DisplayTitle">Resolved conversation title available before the task snapshot is published.</param>
 public sealed record TurnEndInfo(
     AgentProvider Provider,
     string TaskKey,
@@ -23,7 +24,8 @@ public sealed record TurnEndInfo(
     string? ContextText = null,
     string? StableTaskId = null,
     string? TurnId = null,
-    DateTimeOffset? OccurredAt = null);
+    DateTimeOffset? OccurredAt = null,
+    string? DisplayTitle = null);
 
 /// <summary>Receives a finished turn from a provider.</summary>
 public delegate void TurnEndHandler(TurnEndInfo info);

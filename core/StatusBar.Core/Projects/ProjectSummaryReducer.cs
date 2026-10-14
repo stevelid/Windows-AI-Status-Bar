@@ -16,7 +16,8 @@ public static class ProjectSummaryReducer
         if (!ProjectSummaryValidator.TryValidate(request, result)) throw new InvalidDataException("SummaryOutputInvalid");
         var incomingTurns = (request.EarlierEvidence ?? []).Select(item => item.EvidenceId).Append(request.EvidenceId)
             .Distinct(StringComparer.Ordinal).ToArray();
-        if (incomingTurns.All(turnId => document.Coverage.Any(item => item.ThreadId == request.ThreadId && item.TurnId == turnId)))
+        if (incomingTurns.All(turnId => document.Coverage.Any(item => item.ThreadId == request.ThreadId && item.TurnId == turnId &&
+                (item.ProjectId is not null || item.PromptVersion == "project-overview-v2"))))
             return document;
 
         var memberships = document.Memberships.ToList();
@@ -84,7 +85,7 @@ public static class ProjectSummaryReducer
             var projectIds = targetIds.Length > 0 ? targetIds.Cast<string?>() : [null];
             foreach (var projectId in projectIds)
                 coverage.Add(new ProjectCoverageCheckpoint(projectId, request.ThreadId, turnId,
-                    turnTime == default ? occurredAt : turnTime, "1", "project-overview-v1", "gpt-6-luna"));
+                    turnTime == default ? occurredAt : turnTime, "1", "project-overview-v2", result.Model ?? "gpt-6-luna"));
         }
         var updated = document with
         {
