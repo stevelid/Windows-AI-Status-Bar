@@ -8,6 +8,67 @@
         WindowStartupLocation="Manual" SizeToContent="Height" Width="390" MaxHeight="640"
         Deactivated="OnDeactivated" PreviewKeyDown="OnPreviewKeyDown"
         PreviewMouseDown="OnActivity" PreviewMouseMove="OnActivity">
+    <Window.Resources>
+        <SolidColorBrush x:Key="PaneTextBrush" Color="#E0E0E7"/>
+        <SolidColorBrush x:Key="PaneMutedBrush" Color="#8A8A96"/>
+        <SolidColorBrush x:Key="PaneSurfaceBrush" Color="#1B1B24"/>
+        <SolidColorBrush x:Key="PaneHoverBrush" Color="#30303C"/>
+        <SolidColorBrush x:Key="PaneBorderBrush" Color="#4B4C56"/>
+        <Style TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource PaneTextBrush}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="5,3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Surface" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource PaneHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Surface" Property="Background" Value="{DynamicResource PaneHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource PaneSurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PaneTextBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PaneBorderBrush}"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="5" Padding="3">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource PaneTextBrush}"/>
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource PaneHoverBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <Grid>
     <Border x:Name="RootBorder" CornerRadius="12" BorderThickness="1"
             Padding="14" Background="#F21B1B24">
@@ -32,15 +93,31 @@
                 <TextBlock x:Name="ClaudeHealth" FontSize="10" TextWrapping="Wrap"
                            Margin="0,0,0,6"/>
 
-                <Grid Margin="0,7,0,5">
+                <Grid Margin="0,7,0,3">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Button x:Name="ProjectsTab" Grid.Column="0" Padding="7,4" Margin="0,0,3,0"
+                    <Button x:Name="ProjectsTab" Grid.Column="0" Padding="3,4" Margin="0,0,12,0"
                             Click="OnProjectsTabClick"/>
-                    <Button x:Name="ConversationsTab" Grid.Column="1" Padding="7,4" Margin="3,0,0,0"
+                    <Button x:Name="ConversationsTab" Grid.Column="1" Padding="3,4"
                             Click="OnConversationsTabClick"/>
+                    <TextBlock x:Name="SummaryStatus" Grid.Column="3" FontSize="10" MaxWidth="90"
+                               TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PaneMutedBrush}"
+                               VerticalAlignment="Center" Margin="5,0" Visibility="Collapsed"/>
+                    <Button x:Name="ProjectOptions" Grid.Column="4" Content="⋯" FontSize="16" Padding="5,0"
+                            Click="OnProjectOptionsClick">
+                        <Button.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem x:Name="SummaryToggleMenuItem" Click="OnSummaryToggleClick"/>
+                                <Separator/>
+                                <MenuItem x:Name="ClearProjectsMenuItem" Click="OnClearProjectsClick"/>
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
                 </Grid>
                 <Separator x:Name="TaskDivider" Margin="0,3,0,6"/>
                 <StackPanel x:Name="ProjectOverviewRows" Visibility="Collapsed"/>
@@ -81,7 +158,8 @@
     </Border>
         <Popup x:Name="ProjectPeekPopup" AllowsTransparency="True" StaysOpen="True" PopupAnimation="Fade">
             <Border x:Name="ProjectPeekCard" Width="310" MaxHeight="560" CornerRadius="10" BorderThickness="1"
-                    Padding="12" Background="#F21B1B24" BorderBrush="#5A5B67"
+                    Padding="12" Background="{DynamicResource PaneSurfaceBrush}" BorderBrush="{DynamicResource PaneBorderBrush}"
+                    TextElement.Foreground="{DynamicResource PaneTextBrush}"
                     MouseEnter="OnProjectPeekEnter" MouseLeave="OnProjectPeekLeave">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="530">
                     <StackPanel>

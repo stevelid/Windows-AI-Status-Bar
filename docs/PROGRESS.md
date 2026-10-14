@@ -86,6 +86,8 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [x] P7.4 Projects/Conversations pane and hover detail card
 - [ ] P7.5 Acceptance checks and Windows interaction review
 
+- 2026-10-14 — P7.5 pane styling (Steve's screenshot review) — Restored the compact task-list appearance: text tabs with a selected underline, themed link buttons and menus, summary controls under an ellipsis menu, short paused/retrying status only when relevant, two provider-labelled clickable update lines per active project, and compact original task rows for ungrouped conversations. Overflow opens the side card; older seen projects stay one row. Expanded the visual harness with fictional projects and dark/light/language snapshots of the pane, menu and side card. Build and rendered visual review passed; manual monitor/hover acceptance remains open.
+
 ### Runner feasibility (2026-10-13)
 
 - Installed Codex CLI `0.159.0` completed a fictional stdin summary using saved ChatGPT authentication, `gpt-6-luna`, low reasoning, `--ephemeral`, `--no-daemon`, `--ignore-user-config`, `--ignore-rules`, `--strict-config`, a custom `--thread-source windows_ai_status_bar_summary`, read-only sandbox and schema-constrained JSON.

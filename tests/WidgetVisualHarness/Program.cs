@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using ClaudeUsageWidget;
 using StatusBar.Core.Tasks;
+using StatusBar.Core.Projects;
 using StatusBar.Core.Usage;
 
 namespace WidgetVisualHarness;
@@ -64,7 +65,7 @@ static class Program
                 return;
             }
 
-            pane = new DetailsPaneWindow(settings);
+            pane = new DetailsPaneWindow(settings, projectDocument: SampleProjects());
             pane.UpdateState(Samples(), SampleTasks());
             pane.ShowAbove(window);
         };
@@ -102,7 +103,7 @@ static class Program
                 window.Show();
                 window.UpdateState(Samples(), SampleTasks());
                 window.UpdateLayout();
-                var pane = new DetailsPaneWindow(settings);
+                var pane = new DetailsPaneWindow(settings, projectDocument: SampleProjects());
                 pane.UpdateState(Samples(), SampleTasks());
                 pane.ShowAbove(window);
                 pane.UpdateLayout();
@@ -115,6 +116,21 @@ static class Program
                 SaveSnapshot(
                     pane,
                     Path.Combine(outputDirectory, $"{themeName}-pane-{languageName}.png"));
+                var options = (System.Windows.Controls.Button)pane.FindName("ProjectOptions");
+                options.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));
+                options.ContextMenu.UpdateLayout();
+                SaveSnapshot(options.ContextMenu, Path.Combine(outputDirectory, $"{themeName}-menu-{languageName}.png"));
+                options.ContextMenu.IsOpen = false;
+                var rows = (System.Windows.Controls.StackPanel)pane.FindName("ProjectOverviewRows");
+                var target = (System.Windows.Controls.Border)rows.Children[0];
+                var projects = SampleProjects();
+                var item = ProjectOverviewBuilder.Build(projects.Projects, projects.Memberships, SampleTasks().Tasks,
+                    projects.Updates, projects.Acknowledgements).Projects[0];
+                typeof(DetailsPaneWindow).GetMethod("OpenProjectPeek", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .Invoke(pane, [item, target]);
+                var peek = (System.Windows.Controls.Border)pane.FindName("ProjectPeekCard");
+                peek.UpdateLayout();
+                SaveSnapshot(peek, Path.Combine(outputDirectory, $"{themeName}-peek-{languageName}.png"));
                 pane.Close();
                 window.Close();
             }
@@ -123,7 +139,7 @@ static class Program
         app.Shutdown();
     }
 
-    static void SaveSnapshot(Window window, string outputPath)
+    static void SaveSnapshot(FrameworkElement window, string outputPath)
     {
         var dpi = VisualTreeHelper.GetDpi(window);
         var width = Math.Max(
@@ -184,7 +200,7 @@ static class Program
             {
                 Id = "claude:preview",
                 Provider = AgentProvider.Claude,
-                Title = "Cowork task",
+                Title = "Independent report review",
                 Status = AgentTaskStatus.NeedsAttention,
                 Confidence = StateConfidence.Confirmed,
                 LastActivity = now,
@@ -193,5 +209,38 @@ static class Program
             },
         };
         return new StatusBarState(tasks, 1, 1, new Dictionary<AgentProvider, ProviderHealth>());
+    }
+
+    static ProjectOverviewDocument SampleProjects()
+    {
+        var now = DateTimeOffset.Now;
+        return new ProjectOverviewDocument
+        {
+            Projects =
+            [
+                new() { Id = "example", Name = "5670 Example Arms", CurrentSummary = "Report revised after independent review" },
+                new() { Id = "dashboard", Name = "Household dashboard", LastMeaningfulActivity = now.AddDays(-1) },
+            ],
+            Memberships =
+            [
+                new("example", "codex:preview", ProjectMembershipSource.ExplicitReference),
+                new("example", "claude:preview", ProjectMembershipSource.ExplicitReference),
+                new("dashboard", "codex:dashboard", ProjectMembershipSource.ExplicitReference),
+            ],
+            Updates =
+            [
+                new() { Id = "draft", ProjectId = "example", ThreadId = "codex:preview", Revision = 1,
+                    OccurredAt = now.AddMinutes(-8), LatestAction = "Updated report following review",
+                    Progress = ["Completed calculations", "Revised the conclusion"] },
+                new() { Id = "review", ProjectId = "example", ThreadId = "claude:preview", Revision = 1,
+                    OccurredAt = now.AddMinutes(-3), LatestAction = "Review finished; needs your answer",
+                    Progress = ["Checked report assumptions", "Asked which background level to use"] },
+                new() { Id = "earlier", ProjectId = "example", ThreadId = "codex:preview", Revision = 1,
+                    OccurredAt = now.AddHours(-1), LatestAction = "Completed survey calculations" },
+                new() { Id = "chart", ProjectId = "dashboard", ThreadId = "codex:dashboard", Revision = 1,
+                    OccurredAt = now.AddDays(-1), LatestAction = "Updated monthly comparison" },
+            ],
+            Acknowledgements = [new("chart", 1)],
+        };
     }
 }
