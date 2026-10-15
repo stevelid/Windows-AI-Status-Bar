@@ -200,7 +200,7 @@ internal sealed class TaskRowView : Border
     };
 
     // Compact age beside the provider; the tooltip keeps the full wording.
-    static string FormatAge(DateTimeOffset lastActivity)
+    internal static string FormatAge(DateTimeOffset lastActivity)
     {
         var age = DateTimeOffset.Now - lastActivity;
         if (age < TimeSpan.FromMinutes(1)) return L10n.T("pane_age_now");

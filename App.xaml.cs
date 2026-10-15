@@ -1128,6 +1128,21 @@ public partial class App : System.Windows.Application
         }
     }
 
+    void OnProjectMarkAllSeen()
+    {
+        lock (_projectOverviewGate)
+        {
+            var updated = ProjectOverviewDocumentRules.AcknowledgeAll(_projectOverviewDocument);
+            try
+            {
+                _projectOverviewRepository.Save(updated);
+                _projectOverviewDocument = updated;
+                _detailsPane?.UpdateProjectDocument(updated);
+            }
+            catch (Exception exception) { Log.Write($"Project overview save: {exception.GetType().Name}"); }
+        }
+    }
+
     async void OnProjectUpdateOpenRequested(ProjectAcknowledgement acknowledgement, AgentTask task)
     {
         var result = await AppActivator.TryFocusAsync(task);
@@ -1285,6 +1300,7 @@ public partial class App : System.Windows.Application
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
         _detailsPane.FocusTaskRequested += OnFocusTaskRequested;
         _detailsPane.ProjectUpdateOpenRequested += OnProjectUpdateOpenRequested;
+        _detailsPane.ProjectMarkAllSeenRequested += OnProjectMarkAllSeen;
         _detailsPane.ProjectAssignmentRequested += OnProjectAssignmentRequested;
         _detailsPane.ProjectDeleteRequested += OnProjectDeleteRequested;
         _detailsPane.ClearProjectOverviewRequested += OnProjectOverviewClearRequested;
