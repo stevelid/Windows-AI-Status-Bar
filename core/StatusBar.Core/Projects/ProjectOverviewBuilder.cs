@@ -62,9 +62,18 @@ public static class ProjectOverviewBuilder
                 .ThenByDescending(task => task.Status == AgentTaskStatus.Working)
                 .ThenByDescending(task => task.LastActivity)
                 .ToArray();
-            var projectUpdates = validUpdates
-                .Where(update => update.ProjectId == project.Id)
-                .OrderByDescending(update => update.NeedsInput)
+            var projectOwned = validUpdates.Where(update => update.ProjectId == project.Id).ToArray();
+            // A question stays open only while it is the thread's newest update and Steve has not opened it;
+            // otherwise a project would sit in "Needs you" forever after one question.
+            var newestByThread = projectOwned.GroupBy(update => update.ThreadId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key,
+                    group => group.OrderByDescending(update => update.OccurredAt).ThenByDescending(update => update.Revision).First(),
+                    StringComparer.Ordinal);
+            bool IsOpenQuestion(ProjectUpdate update) => update.NeedsInput &&
+                !acknowledged.Contains((update.Id, update.Revision)) &&
+                newestByThread[update.ThreadId].Id == update.Id && newestByThread[update.ThreadId].Revision == update.Revision;
+            var projectUpdates = projectOwned
+                .OrderByDescending(IsOpenQuestion)
                 .ThenByDescending(update => !acknowledged.Contains((update.Id, update.Revision)))
                 .ThenByDescending(update => update.OccurredAt)
                 .ToArray();
@@ -86,7 +95,7 @@ public static class ProjectOverviewBuilder
                 conversationsForProject,
                 projectUpdates,
                 memberTasks.Any(task => task.Status == AgentTaskStatus.Working),
-                memberTasks.Any(task => task.Status == AgentTaskStatus.NeedsAttention) || projectUpdates.Any(update => update.NeedsInput),
+                memberTasks.Any(task => task.Status == AgentTaskStatus.NeedsAttention) || projectUpdates.Any(IsOpenQuestion),
                 unseenCount,
                 Math.Max(0, projectUpdates.Length - VisibleUpdatesPerProject)));
         }

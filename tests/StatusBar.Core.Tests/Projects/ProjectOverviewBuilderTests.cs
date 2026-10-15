@@ -95,6 +95,38 @@ public sealed class ProjectOverviewBuilderTests
     }
 
     [Fact]
+    public void Question_superseded_by_a_newer_update_in_the_thread_is_not_unresolved()
+    {
+        var task = Task("codex:t", AgentTaskStatus.Complete);
+        var question = Update("q", "p", task.Id, 1, "Asked which option") with { NeedsInput = true };
+        var later = Update("later", "p", task.Id, 1, "Continued the work") with { OccurredAt = Now.AddMinutes(5) };
+        var state = Build([Project("p")], [new ProjectMembership("p", task.Id, ProjectMembershipSource.Manual)], [task], [question, later]);
+
+        Assert.False(state.Projects.Single().HasUnresolvedInput);
+    }
+
+    [Fact]
+    public void Acknowledged_question_is_not_unresolved()
+    {
+        var task = Task("codex:t", AgentTaskStatus.Complete);
+        var question = Update("q", "p", task.Id, 1, "Asked which option") with { NeedsInput = true };
+        var state = Build([Project("p")], [new ProjectMembership("p", task.Id, ProjectMembershipSource.Manual)], [task], [question],
+            [new ProjectAcknowledgement("q", 1)]);
+
+        Assert.False(state.Projects.Single().HasUnresolvedInput);
+    }
+
+    [Fact]
+    public void Open_question_is_unresolved()
+    {
+        var task = Task("codex:t", AgentTaskStatus.Complete);
+        var question = Update("q", "p", task.Id, 1, "Asked which option") with { NeedsInput = true };
+        var state = Build([Project("p")], [new ProjectMembership("p", task.Id, ProjectMembershipSource.Manual)], [task], [question]);
+
+        Assert.True(state.Projects.Single().HasUnresolvedInput);
+    }
+
+    [Fact]
     public void Working_and_needs_input_can_both_be_true_and_input_stays_prominent()
     {
         var active = Task("codex:active", AgentTaskStatus.Working);

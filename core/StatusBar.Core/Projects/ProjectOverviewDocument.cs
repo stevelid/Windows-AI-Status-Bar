@@ -99,6 +99,19 @@ public static class ProjectOverviewDocumentRules
         };
     }
 
+    /// <summary>Acknowledges the current revision of every update; stale acknowledgements are dropped so the list stays bounded.</summary>
+    public static ProjectOverviewDocument AcknowledgeAll(ProjectOverviewDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return document with
+        {
+            Acknowledgements = document.Updates
+                .Select(update => new ProjectAcknowledgement(update.Id, update.Revision))
+                .Distinct()
+                .ToList(),
+        };
+    }
+
     public static ProjectOverviewDocument Clear() => new();
 }
 
