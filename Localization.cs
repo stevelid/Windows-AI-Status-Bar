@@ -95,6 +95,7 @@ public static class L10n
         ["settings_save_usage_history"] = ("儲存用量記錄，讓用量圖在重新啟動後仍保留", "Save usage readings so the usage chart survives a restart"),
         ["settings_save_usage_history_hint"] = ("只儲存百分比與時間（最近 3 小時），以及哪些對話在執行（僅代號與時間，不含標題），不含任何內容；關閉時會刪除檔案。", "Percentages and times only (the last 3 hours), plus which conversations were running (ids and times only, no titles), never any content. Turning it off deletes the files."),
         ["pane_recent_clear"] = ("全部清除", "Clear all"),
+        ["pane_job_group"] = ("{0} · {1} conversations", "{0} · {1} conversations"),
         ["pane_history"] = ("歷史", "HISTORY"),
         ["pane_history_clear"] = ("清除歷史", "Clear history"),
         ["pane_history_remove"] = ("從歷史移除", "Remove from history"),

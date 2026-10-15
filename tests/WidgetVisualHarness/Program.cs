@@ -191,6 +191,24 @@ static class Program
                 AttentionReason = "Approval requested",
                 StatusDetail = "Waiting for input",
             },
+            new()
+            {
+                Id = "codex:job-a",
+                Provider = AgentProvider.Codex,
+                Title = "6101 Example Garden Centre report",
+                Status = AgentTaskStatus.Working,
+                Confidence = StateConfidence.Confirmed,
+                LastActivity = now.AddSeconds(-30),
+            },
+            new()
+            {
+                Id = "claude:job-b",
+                Provider = AgentProvider.Claude,
+                Title = "Review 6101.L1 changes",
+                Status = AgentTaskStatus.Working,
+                Confidence = StateConfidence.Confirmed,
+                LastActivity = now.AddSeconds(-90),
+            },
         };
         return StatusBar.Core.Sync.LiveTaskExchange.Attach(
             new StatusBarState(tasks, 1, 1, new Dictionary<AgentProvider, ProviderHealth>()),

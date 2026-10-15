@@ -489,6 +489,7 @@ public partial class DetailsPaneWindow : Window
         foreach (var panel in panels) panel.Children.Clear();
         var activeIds = new HashSet<string>(StringComparer.Ordinal);
         var counts = new int[4];
+        var sections = new List<AgentTask>[] { [], [], [], [] };
         foreach (var task in _tasks.Tasks)
         {
             var group = GroupFor(task.Status);
@@ -503,7 +504,30 @@ public partial class DetailsPaneWindow : Window
                 _taskRows.Add(task.Id, row);
             }
             row.Update(task, _costs.GetValueOrDefault(task.Id));
-            panels[group].Children.Add(row);
+            sections[group].Add(task);
+        }
+
+        // Status stays the primary grouping; within a section, conversations that share a job number
+        // sit together under a small header (title-derived, in memory only).
+        for (var group = 0; group < sections.Length; group++)
+        {
+            foreach (var cluster in JobGrouping.Cluster(sections[group]))
+            {
+                if (cluster.JobNumber is { } job)
+                    panels[group].Children.Add(new TextBlock
+                    {
+                        Text = L10n.F("pane_job_group", job, cluster.Tasks.Count),
+                        FontSize = 10,
+                        Margin = new Thickness(2, 3, 0, 2),
+                        Foreground = ThemeManager.Brush(ThemeManager.SubtleText),
+                    });
+                foreach (var task in cluster.Tasks)
+                {
+                    var row = _taskRows[task.Id];
+                    row.Margin = new Thickness(cluster.JobNumber is null ? 0 : 10, 0, 0, 3);
+                    panels[group].Children.Add(row);
+                }
+            }
         }
 
         foreach (var id in _taskRows.Keys.Where(id => !activeIds.Contains(id)).ToArray())

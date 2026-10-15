@@ -768,4 +768,4 @@ These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P3.
 ### P9 — Simplify (2026-10-15)
 
 - **P9.1 Remove the Projects feature:** delete the Core `Projects` folder, the Haiku/Codex summary workers, the encrypted store, the Projects tab, side card and Mark all seen; restore the plain discovery windows and drop the summary-only fields on the session readers. The details pane shows usage, the conversations list and the Other PC section with no tab bar. Existing `projects.dat`, its recovery copies and the worker folder are deleted at start-up.
-- **P9.2 Group conversations by job number:** group the conversations list by the job number found in the conversation title or working folder.
+- **P9.2 Group conversations by job number:** group the conversations list by the job number found in the conversation title. Pure Core `JobGrouping` (first standalone 4-digit token, years 1900-2099 ignored); within each status section, conversations sharing a job number sit together under a small muted header. No extra tab, no model calls, nothing persisted or synced.
