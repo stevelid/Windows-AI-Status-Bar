@@ -78,13 +78,13 @@ Legend: 🧑 needs Steve on Windows · 🧪 spike · ⚠️ depends on undocumen
 - [ ] P6.3 🧑 Manual test matrix — 12 of 14 pass (several simulated), Cowork N/A, network-off left for Steve; see `docs/TEST_MATRIX.md`
 - [ ] P6.4 Release 3.0.0 — prepared (version, README, tag-triggered release workflow); tag `v3.0.0` after P6.3 passes
 
-## Phase 7 — Project overview (new feature)
+## Phase 7 — Project overview (withdrawn 2026-10-15, see P9.1)
 
 - [x] P7.1 Core project projection, memberships, updates and revision acknowledgements
 - [x] P7.2 Isolated Codex CLI summariser with worker self-exclusion
 - [x] P7.3 DPAPI-encrypted durable summaries and consistent recovery/deletion
 - [x] P7.4 Projects/Conversations pane and hover detail card
-- [ ] P7.5 Acceptance checks and Windows interaction review
+- [-] P7.5 Acceptance checks and Windows interaction review — withdrawn 2026-10-15 with the rest of the feature (P9.1)
 
 - 2026-10-14 — P7.2 readers and initial population (Steve) — Claude Code's subscription-backed latest `haiku` alias is now the primary summary reader, with Luna fallback on unavailable, timed-out or invalid responses and a 15-minute primary cooldown. Installed Claude Code was updated from 2.1.285 to 2.1.299; a fictional actual-wrapper call verified `claude-haiku-5-5` and no transcript/history content persisted. Summary source model is stored with coverage. Fixed empty initial Projects: summary bootstrap has its own bounded seven-day/ten-thread-per-provider window instead of Jev's 30-minute window, and carries resolved titles before live snapshots are published. Live strip collection retains its prior window. Shared schema now enforces compact lengths and permits genuine no-op outputs; previous unattributed v1 checkpoints may be repaired once with richer context. Steve requests direct coding by Codex for future changes; no further coding delegation.
 
@@ -236,6 +236,13 @@ _(Date — commit ID — what changed from PLAN.md and why.)_
 
 ## Phase 8 — Live cross-PC visibility
 
-- [x] P8.1 Encrypted per-device live snapshots, heartbeat validation, read-only Other PC section, settings and shared installer. No history/Projects replication. Full solution build passes with zero warnings/errors; all 434 Core tests pass; Windows smoke tests pass including two independent DPAPI identities exchanging snapshots, restart recovery and damaged-file retention. Dark/light pane renders checked. No new packages.
+- [x] P8.1 Encrypted per-device live snapshots, heartbeat validation, read-only Other PC section, settings and shared installer. No history replication. Full solution build passes with zero warnings/errors; all 434 Core tests pass; Windows smoke tests pass including two independent DPAPI identities exchanging snapshots, restart recovery and damaged-file retention. Dark/light pane renders checked. No new packages.
 - Setup: install the prepared private Drive bundle on both PCs using Install-StatusBar.cmd (see docs/REMOTE_PC_SETUP.md). Local configuration and an installer for the other PC are provided with this change. Windows startup preferences are preserved. Actual Drive propagation and live visibility from the second PC require its installer to run; no remote access to that PC is available in this session.
 - Design: after Astra's sanity check, first release is live visibility only. Per-recipient AES-GCM snapshots and RSA signing/key wrapping use public-key enrollment through the explicitly chosen private Drive folder, with local fingerprint pins and DPAPI-protected private identity/counter state. This avoids putting a shared decryption secret in Drive or copying the machine-bound project cache. Cached first snapshots stay unconfirmed until advancement; missing heartbeats become Unknown, not Complete. Imported tasks never enter local history/Projects or navigate through local session IDs.
+
+## Phase 9 — Simplify
+
+- [x] P9.1 Remove the Projects feature
+- [ ] P9.2 Group conversations by job number
+
+- 2026-10-15 — P9.1 (Steve) — Steve decided the Projects feature (P7) was not worth keeping, so it is removed in one commit. Deleted Core `Projects/` and its tests, the Claude/Codex CLI summary workers, `ProjectOverviewRepository` and the summary prompt. The details pane has no tab bar again: usage, the conversations list (Needs you, Working, Unknown, Recently completed, History) and the Other PC section, which now always renders below the list. The session readers lost the project-summary events, summary fields and the widened discovery windows (back to the plain recent-file windows), `FinalMessageCapture.ProjectOverviewEnabled`, `IsSummaryWorker` and the extra `TurnEndInfo` fields; Jev is unchanged. `Settings.ProjectSummariesEnabled` is gone (old settings.json keys are ignored on load). At start-up the app now deletes any leftover `projects*.dat` files and the `summary-worker` folder in its data directory (and the worker's temp folder), logging only the exception type on failure. The privacy exception was removed from `CLAUDE.md` and `AGENTS.md`; `PLAN.md` section 10 and P7 are marked withdrawn. Verification: full solution build 0 warnings/errors, 388 Core tests pass, Windows smoke tests pass with the mock Codex server.

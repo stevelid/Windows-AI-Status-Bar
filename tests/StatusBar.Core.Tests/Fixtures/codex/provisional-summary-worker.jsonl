@@ -1,4 +1,0 @@
-{"timestamp":"2026-01-01T12:00:00Z","type":"session_meta","payload":{"id":"thread-summary-worker","source":"exec","thread_source":"windows_ai_status_bar_summary"}}
-{"timestamp":"2026-01-01T12:00:01Z","type":"event_msg","payload":{"type":"task_started"}}
-{"timestamp":"2026-01-01T12:00:02Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Summarize this fictional sample"}]}}
-{"timestamp":"2026-01-01T12:00:03Z","type":"event_msg","payload":{"type":"task_complete","last_agent_message":"The sample button was added."}}

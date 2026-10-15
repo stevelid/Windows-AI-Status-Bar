@@ -4,7 +4,7 @@
 
 Optional encrypted live sharing publishes every 15 seconds plus Drive sync delay.
 Install/configure both PCs using `docs/REMOTE_PC_SETUP.md`. Remote rows are read-only;
-history, Projects, dismissal and resume links stay local. An initial cached file is
+history, dismissal and resume links stay local. An initial cached file is
 unconfirmed until the host advances its heartbeat. Two minutes without advancement
 shows Unknown and clears remote working/attention counts, never a false completion.
 Changed peer keys are refused. End-to-end Drive delivery still needs the second PC;

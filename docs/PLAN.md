@@ -714,7 +714,7 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 
 Each Windows app may opt into a private shared folder. Publish bounded normalized
 task display fields per execution device and recipient, every 15 seconds. Keep the
-existing local collectors, history and Projects unchanged. Show imported rows in
+existing local collectors, and history unchanged. Show imported rows in
 an Other PC section and include fresh remote status in strip counts. No remote
 navigation, dismissal or notification balloons in this release. Codex Cloud rows
 and imported rows are not republished; never deduplicate executions by title.
@@ -726,7 +726,7 @@ and scheduling. Opting into the same trusted folder enrols public peer keys, whi
 are pinned on first use; changed keys are refused. Shared payloads remain encrypted
 and private keys never leave the local profile. This explicitly scoped live display
 exchange extends the in-memory title rule only for encrypted transport; it does not
-permit raw transcripts or sharing the local DPAPI project cache.
+permit raw transcripts.
 
 Treat first-seen files as unconfirmed until sequence advancement; duplicates and
 reordering cannot reset freshness. Use receiver TimeProvider timestamps, show
@@ -738,13 +738,15 @@ confirmed the existing host collector already works under Remote Control.
 
 ## 9. Known limitations to document
 
-## 10. Project overview (2026-10-13)
+## 10. Project overview (2026-10-13) — WITHDRAWN
+
+> **Withdrawn 2026-10-15 (P9.1).** Steve decided the Projects feature was not worth keeping, in favour of grouping conversations by job number (P9.2). The code, encrypted `projects.dat` store, summary workers and the privacy exception in `AGENTS.md` were removed; the app deletes leftover files at start-up. The text below is kept only as history and describes nothing that is built.
 
 The project overview is a separate feature phase after the original status-bar phases. It groups local Codex and Claude Code conversations into projects, shows derived updates with exact source attribution, and keeps live task state independent from summary state. It does not collect email, dispatch work, or claim to verify assistant-reported work. Existing Codex Cloud entries remain metadata-only; ordinary ChatGPT and Cowork transcripts are outside coverage.
 
 Durable storage follows the narrow exception recorded in `AGENTS.md`: only concise derived summaries and progress bullets, corrected project labels, bounded titles, stable IDs, memberships, acknowledgements, timestamps, coverage checkpoints and version metadata may persist. Derived text is private job data and must be encrypted with DPAPI CurrentUser in the Windows adapter. Raw prompts, transcripts, reasoning, tool arguments/results, full session paths, credentials and account identifiers remain ephemeral. Store and recovery snapshots must be replaced atomically and deleted consistently by clear-history/delete-project.
 
-### P7 — Project overview
+### P7 — Project overview (withdrawn 2026-10-15)
 
 - **P7.1 Core project projection:** model projects, many-to-many thread memberships, per-turn updates/source references, independent working/input/unseen dimensions, manual grouping precedence, bounded visible updates and per-update revision acknowledgements. Keep project reduction and ordering in Core with `TimeProvider`.
 - **P7.2 Isolated summary runner, revised 2026-10-14:** Claude Code latest Haiku via subscription login is primary; Codex Luna is fallback. Both use stdin-only input, shared schema validation, bounded execution and no session persistence. Claude disables tools/MCP/hooks/customisations, Codex uses its verified isolated configuration and exact worker source marker. Primary failure opens a 15-minute cooldown; cancellation and valid no-op results never trigger fallback. Bootstrap up to ten recent threads per provider over seven days, carrying resolved titles independently from Jev's short attention replay window. Keep the existing Jev attention classifier unchanged. Do not enable a reader if tool/MCP/browser/hook isolation is unsupported.
@@ -762,3 +764,8 @@ These are expected and should be written into `docs/KNOWN_LIMITATIONS.md` in P3.
 - Without the optional Claude Code hooks, a Claude Code permission prompt is not visible in the transcript, so the task shows as Working until Steve answers. With hooks enabled it shows as Needs you.
 - Cowork attention (optional Phase 4) relies on undocumented `system/permission_request` records in `audit.jsonl`. If a Claude update removes them, alerts fall back to pending `AskUserQuestion` tool calls (inferred) and the notification-listener seam.
 - Allowance percentages come from undocumented (Claude) and app-server (Codex) sources and may lag by one refresh interval.
+
+### P9 — Simplify (2026-10-15)
+
+- **P9.1 Remove the Projects feature:** delete the Core `Projects` folder, the Haiku/Codex summary workers, the encrypted store, the Projects tab, side card and Mark all seen; restore the plain discovery windows and drop the summary-only fields on the session readers. The details pane shows usage, the conversations list and the Other PC section with no tab bar. Existing `projects.dat`, its recovery copies and the worker folder are deleted at start-up.
+- **P9.2 Group conversations by job number:** group the conversations list by the job number found in the conversation title or working folder.

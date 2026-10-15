@@ -10,7 +10,7 @@ public sealed record StatusBarState(
     int AttentionCount,
     IReadOnlyDictionary<AgentProvider, ProviderHealth> TaskProviderHealth)
 {
-    /// <summary>Read-only cross-PC visibility, excluded from local task history and Projects.</summary>
+    /// <summary>Read-only cross-PC visibility, excluded from local task history.</summary>
     public IReadOnlyList<StatusBar.Core.Sync.RemoteTaskDevice> RemoteDevices { get; init; } = [];
     /// <summary>Optional application-owned localization key describing the exchange health.</summary>
     public string? TaskSyncStatusKey { get; init; }

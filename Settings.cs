@@ -47,9 +47,7 @@ public class Settings
     /// <summary>When the Jev check is on: let its answer decide whether a finished turn asked a question (and show review hints). Off = log only, the built-in rules decide.</summary>
     public bool JevAffectsState { get; set; } = true;
     public bool HistoryExpanded { get; set; } = false;
-    /// <summary>Whether the optional subscription-backed project summary worker may launch.</summary>
-    public bool ProjectSummariesEnabled { get; set; } = true;
-    /// <summary>Opt-in trusted shared folder for encrypted live task exchange; history and Projects stay local.</summary>
+    /// <summary>Opt-in trusted shared folder for encrypted live task exchange; history stays local.</summary>
     public string? TaskSyncFolder { get; set; }
     public string? TaskSyncLabel { get; set; }
     [JsonIgnore]

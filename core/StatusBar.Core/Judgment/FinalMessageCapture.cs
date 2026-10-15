@@ -18,7 +18,6 @@ public static class FinalMessageCapture
     public const int StartCharacters = 300;
 
     static volatile bool _enabled;
-    static volatile bool _projectOverviewEnabled;
 
     /// <summary>Whether final-message tails are captured.</summary>
     public static bool Enabled
@@ -27,14 +26,7 @@ public static class FinalMessageCapture
         set => _enabled = value;
     }
 
-    /// <summary>Whether bounded final-message excerpts may be held for project summaries.</summary>
-    public static bool ProjectOverviewEnabled
-    {
-        get => _projectOverviewEnabled;
-        set => _projectOverviewEnabled = value;
-    }
-
-    internal static bool CaptureEnabled => _enabled || _projectOverviewEnabled;
+    internal static bool CaptureEnabled => _enabled;
 
     /// <summary>The tail of <paramref name="text"/> when capture is on and the text is not blank; otherwise null.</summary>
     internal static string? Tail(string? text)
@@ -48,28 +40,6 @@ public static class FinalMessageCapture
     internal static string? Start(string? text)
     {
         if (!_enabled || string.IsNullOrWhiteSpace(text)) return null;
-        var trimmed = text.Trim();
-        return trimmed.Length <= MaximumCharacters ? null : trimmed[..StartCharacters];
-    }
-
-    internal static string? Context(string? text)
-    {
-        if (!_projectOverviewEnabled || string.IsNullOrWhiteSpace(text)) return null;
-        var trimmed = text.Trim();
-        const int maximum = 1200;
-        return trimmed.Length <= maximum ? trimmed : trimmed[^maximum..];
-    }
-
-    internal static string? SummaryTail(string? text)
-    {
-        if (!_projectOverviewEnabled || string.IsNullOrWhiteSpace(text)) return null;
-        var trimmed = text.Trim();
-        return trimmed.Length <= MaximumCharacters ? trimmed : trimmed[^MaximumCharacters..];
-    }
-
-    internal static string? SummaryStart(string? text)
-    {
-        if (!_projectOverviewEnabled || string.IsNullOrWhiteSpace(text)) return null;
         var trimmed = text.Trim();
         return trimmed.Length <= MaximumCharacters ? null : trimmed[..StartCharacters];
     }

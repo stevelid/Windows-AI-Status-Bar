@@ -17,7 +17,6 @@ internal sealed class CodexSessionReader : IDisposable
     readonly FormatDriftCounter _drift = new();
     readonly CodexTitleResolver _titles;
     readonly Dictionary<string, SessionEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
-    readonly HashSet<string> _summaryWorkerFiles = new(StringComparer.OrdinalIgnoreCase);
     int _readFailureCount;
     DateTimeOffset _lastDiscovery;
     bool _hasDiscovery;
@@ -42,7 +41,6 @@ internal sealed class CodexSessionReader : IDisposable
 
     /// <summary>Raised when a live turn finishes and the AI check is on (see <see cref="FinalMessageCapture"/>).</summary>
     internal event Action<TurnEndInfo>? TurnEnded;
-    internal event Action<TurnEndInfo>? ProjectSummaryTurnEnded;
 
     internal int TrackedFiles => _entries.Count;
     internal int ReadFailureCount => Volatile.Read(ref _readFailureCount);
@@ -62,7 +60,6 @@ internal sealed class CodexSessionReader : IDisposable
         if (!Directory.Exists(_paths.SessionsDirectory))
         {
             _entries.Clear();
-            _summaryWorkerFiles.Clear();
             _hasDiscovery = false;
             _lastDiscovery = default;
             _titles.Refresh();
@@ -75,15 +72,10 @@ internal sealed class CodexSessionReader : IDisposable
             var recovered = new List<CodexSessionState>();
             foreach (var path in discovered)
             {
-                if (_entries.ContainsKey(path) || _summaryWorkerFiles.Contains(path)) continue;
+                if (_entries.ContainsKey(path)) continue;
                 try
                 {
                     var created = CreateEntry(path, now);
-                    if (created.State.IsSummaryWorker)
-                    {
-                        _summaryWorkerFiles.Add(path);
-                        continue;
-                    }
                     _entries[path] = created;
                     recovered.Add(created.State);
                     Emit($"session {ShortId(created.State)} tracked: {Describe(created.State)}, meta={(created.State.ThreadId is null ? "no" : "yes")}");
@@ -108,7 +100,6 @@ internal sealed class CodexSessionReader : IDisposable
                 Emit($"session {ShortId(_entries[stale].State)} no longer recent; dropped");
                 _entries.Remove(stale);
             }
-            _summaryWorkerFiles.RemoveWhere(path => !discoveredSet.Contains(path));
 
             _lastDiscovery = now;
             _hasDiscovery = true;
@@ -159,7 +150,6 @@ internal sealed class CodexSessionReader : IDisposable
         if (_disposed) return;
         _disposed = true;
         _entries.Clear();
-        _summaryWorkerFiles.Clear();
     }
 
     SessionEntry CreateEntry(string path, DateTimeOffset now)
@@ -200,11 +190,6 @@ internal sealed class CodexSessionReader : IDisposable
     /// </summary>
     void RaiseRecoveredTurns(List<CodexSessionState> recovered, DateTimeOffset now)
     {
-        _titles.Refresh();
-        var summaryCandidates = recovered.Where(state => !state.IsGuardianReview && state.ParentThreadId is null &&
-            state.SummaryFinalMessageAt is not null && state.SummaryFinalMessageTail is not null).ToList();
-        var summaryChosen = StatusBar.Core.Projects.ProjectSummaryBootstrap.Select(summaryCandidates.Select(state => state.SummaryFinalMessageAt!.Value).ToArray(), now);
-        foreach (var index in summaryChosen) RaiseProjectSummaryTurnEnded(summaryCandidates[index]);
         var candidates = recovered.Where(state => state.FinalMessageAt is not null && state.FinalMessageTail is not null).ToList();
         var chosen = TurnVerdictPolicy.SelectStartupJudgments(candidates.Select(state => state.FinalMessageAt!.Value).ToArray(), now);
         foreach (var index in chosen) RaiseTurnEnded(candidates[index], null, now);
@@ -212,7 +197,6 @@ internal sealed class CodexSessionReader : IDisposable
 
     void RaiseTurnEnded(CodexSessionState state, DateTimeOffset? finalBefore, DateTimeOffset now)
     {
-        RaiseProjectSummaryTurnEnded(state);
         if (state.FinalMessageAt is not DateTimeOffset at || at == finalBefore || state.FinalMessageTail is not { } text) return;
         // The quiet wait for the answer counts from now, not from a final message that may be minutes old (D26).
         state.JudgmentRequestedAt = now;
@@ -224,32 +208,12 @@ internal sealed class CodexSessionReader : IDisposable
                 TurnVerdictPolicy.EvidenceKeyFor(at),
                 state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "question" : "none",
                 text,
-                state.FinalMessageStart,
-                state.SummaryContextText,
-                "codex:" + (state.ThreadId ?? state.FileKey ?? "unknown"),
-                state.TurnId));
+                state.FinalMessageStart));
         }
         catch (Exception)
         {
             // The optional check must never interrupt task collection.
         }
-    }
-
-    void RaiseProjectSummaryTurnEnded(CodexSessionState state)
-    {
-        if (state.SummaryFinalMessageAt is not DateTimeOffset at || at == state.SummaryTurnEndedReportedAt ||
-            state.SummaryFinalMessageTail is not { } text) return;
-        state.SummaryTurnEndedReportedAt = at;
-        try
-        {
-            ProjectSummaryTurnEnded?.Invoke(new TurnEndInfo(AgentProvider.Codex,
-                "codex:" + ShortId(state), TurnVerdictPolicy.EvidenceKeyFor(at),
-                state.EndedWithStructuredQuestion ? "card" : state.EndedWithQuestion ? "question" : "none",
-                text, state.SummaryFinalMessageStart, state.SummaryContextText,
-                "codex:" + (state.ThreadId ?? state.FileKey ?? "unknown"), state.TurnId, at,
-                _titles.Resolve(state)));
-        }
-        catch (Exception) { /* Summary failures must never interrupt task collection. */ }
     }
 
     void Emit(string message)
@@ -283,10 +247,8 @@ internal sealed class CodexSessionReader : IDisposable
     IReadOnlyList<AgentTask> MapAndMerge(DateTimeOffset now)
     {
         var mapped = _entries.Values
-            // Older files seed project summaries without expanding the live task window.
-            .Where(entry => !FinalMessageCapture.ProjectOverviewEnabled || entry.State.LastActivity >= now - _timings.CodexRecentFileWindow)
             // ⚠️ A-X6 Codex's approval-review ("guardian") sessions are internal safety checks, not tasks.
-            .Where(entry => !entry.State.IsGuardianReview && !entry.State.IsSummaryWorker)
+            .Where(entry => !entry.State.IsGuardianReview)
             .Select(entry => (entry.State, Task: CodexTaskMapper.Map(entry.State, now, _timings)))
             .Select(pair => (pair.State, Task: pair.Task with { Title = _titles.Resolve(pair.State) }))
             .ToList();
@@ -361,9 +323,7 @@ internal sealed class CodexSessionReader : IDisposable
             AddFiles(dateDirectory, SearchOption.TopDirectoryOnly, files, _ => true);
         }
 
-        var discoveryWindow = FinalMessageCapture.ProjectOverviewEnabled
-            ? StatusBar.Core.Projects.ProjectSummaryBootstrap.Window : _timings.CodexRecentFileWindow;
-        var recentAfter = now - discoveryWindow;
+        var recentAfter = now - _timings.CodexRecentFileWindow;
         AddFiles(_paths.SessionsDirectory, SearchOption.AllDirectories, files, path =>
         {
             try
