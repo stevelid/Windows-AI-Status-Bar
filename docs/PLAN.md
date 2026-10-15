@@ -710,6 +710,32 @@ Every rule marked ⚠️ cites one of these IDs in a code comment. Evidence for 
 
 ---
 
+## P8.1 Live cross-PC visibility (authorised 2026-10-15)
+
+Each Windows app may opt into a private shared folder. Publish bounded normalized
+task display fields per execution device and recipient, every 15 seconds. Keep the
+existing local collectors, history and Projects unchanged. Show imported rows in
+an Other PC section and include fresh remote status in strip counts. No remote
+navigation, dismissal or notification balloons in this release. Codex Cloud rows
+and imported rows are not republished; never deduplicate executions by title.
+
+Core owns DTO bounds/validation, signed authenticated portable encryption, receiver
+sequence/freshness state and UI count composition. The Windows adapter owns folder
+I/O, atomic replacement, DPAPI-protected local identity/private key/sequence/pins,
+and scheduling. Opting into the same trusted folder enrols public peer keys, which
+are pinned on first use; changed keys are refused. Shared payloads remain encrypted
+and private keys never leave the local profile. This explicitly scoped live display
+exchange extends the in-memory title rule only for encrypted transport; it does not
+permit raw transcripts or sharing the local DPAPI project cache.
+
+Treat first-seen files as unconfirmed until sequence advancement; duplicates and
+reordering cannot reset freshness. Use receiver TimeProvider timestamps, show
+Unknown after two minutes without advancement and forget after one hour. Test
+crypto/tampering/recipient validation, bounded schema, queue reordering, restart,
+staleness and non-republication plus two independently protected local identities
+sharing a test directory. No new undocumented Claude behavior is needed: Steve
+confirmed the existing host collector already works under Remote Control.
+
 ## 9. Known limitations to document
 
 ## 10. Project overview (2026-10-13)

@@ -10,17 +10,22 @@ public sealed record StatusBarState(
     int AttentionCount,
     IReadOnlyDictionary<AgentProvider, ProviderHealth> TaskProviderHealth)
 {
+    /// <summary>Read-only cross-PC visibility, excluded from local task history and Projects.</summary>
+    public IReadOnlyList<StatusBar.Core.Sync.RemoteTaskDevice> RemoteDevices { get; init; } = [];
+    /// <summary>Optional application-owned localization key describing the exchange health.</summary>
+    public string? TaskSyncStatusKey { get; init; }
+
     /// <summary>Tasks that finished within the "recently completed" window and are still listed.</summary>
     /// <remarks>Derived from <see cref="Tasks"/>, so it needs no extra constructor argument and
     /// expires with the tasks themselves.</remarks>
     /// <remarks>Excludes go-ahead tasks, which have their own count.</remarks>
-    public int DoneCount => Tasks.Count(task => task.Status == AgentTaskStatus.Complete && !IsGoAhead(task));
+    public int DoneCount => Tasks.Concat(RemoteDevices.SelectMany(device => device.Tasks)).Count(task => task.Status == AgentTaskStatus.Complete && !IsGoAhead(task));
 
     /// <summary>Finished tasks where the assistant only asks whether to take a further step: a calm "your call", not an alert.</summary>
     public int GoAheadCount => Tasks.Count(IsGoAhead);
 
     /// <summary>Tasks whose last turn failed within the "recently completed" window.</summary>
-    public int FailedCount => Tasks.Count(task => task.Status == AgentTaskStatus.Failed);
+    public int FailedCount => Tasks.Concat(RemoteDevices.SelectMany(device => device.Tasks)).Count(task => task.Status == AgentTaskStatus.Failed);
 
     static bool IsGoAhead(AgentTask task) =>
         task.Status == AgentTaskStatus.Complete &&

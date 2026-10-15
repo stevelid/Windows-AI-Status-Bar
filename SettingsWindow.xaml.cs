@@ -38,6 +38,8 @@ public partial class SettingsWindow : Window
         CodexPathBox.Text = _settings.CodexExecutablePath ?? "";
         CodexHomeBox.Text = _settings.CodexHomeOverride ?? "";
         ClaudeCodeHomeBox.Text = _settings.ClaudeCodeHomeOverride ?? "";
+        SyncFolderBox.Text = _settings.TaskSyncFolder ?? "";
+        SyncNameBox.Text = _settings.TaskSyncLabel ?? "";
         ClaudeHooksCheckBox.IsChecked = _settings.UseClaudeCodeHooks;
         CoworkRootBox.Text = _settings.CoworkRootOverride ?? "";
         NotificationsCheckBox.IsChecked = _settings.NotificationsEnabled;
@@ -303,6 +305,8 @@ public partial class SettingsWindow : Window
     }
 
     void OnCodexPathLostFocus(object sender, RoutedEventArgs e) => SaveCodexPath();
+    void OnSyncFolderLostFocus(object sender, RoutedEventArgs e) => SavePath(SyncFolderBox, value => _settings.TaskSyncFolder = value);
+    void OnSyncNameLostFocus(object sender, RoutedEventArgs e) => SavePath(SyncNameBox, value => _settings.TaskSyncLabel = value);
     void OnCodexHomeLostFocus(object sender, RoutedEventArgs e) =>
         SavePath(CodexHomeBox, value => _settings.CodexHomeOverride = value);
     void OnClaudeCodeHomeLostFocus(object sender, RoutedEventArgs e) =>
@@ -427,6 +431,10 @@ public partial class SettingsWindow : Window
         CodexPathHint.Text = L10n.T("settings_codex_hint");
         CodexHomeLabel.Text = L10n.T("settings_codex_home");
         ClaudeCodeHomeLabel.Text = L10n.T("settings_claude_code_home");
+        SyncHeading.Text = L10n.T("sync_heading");
+        SyncHint.Text = L10n.T("sync_hint");
+        SyncFolderLabel.Text = L10n.T("sync_folder");
+        SyncNameLabel.Text = L10n.T("sync_name");
         ClaudeHooksCheckBox.Content = L10n.T("settings_claude_hooks");
         ClaudeHooksHint.Text = L10n.T("settings_claude_hooks_hint");
         ClaudeHooksPreview.Text = ClaudeHookSettingsInstaller.BuildPreview();
@@ -485,6 +493,10 @@ public partial class SettingsWindow : Window
         JevStatus.Foreground = ThemeManager.Brush(ThemeManager.SubtleText);
         ClaudeHooksCheckBox.Foreground = fg;
         var subtle = ThemeManager.Brush(ThemeManager.SubtleText);
+        SyncHeading.Foreground = ThemeManager.Brush(ThemeManager.TitleText);
+        SyncHint.Foreground = subtle;
+        SyncFolderLabel.Foreground = fg;
+        SyncNameLabel.Foreground = fg;
         foreach (var hint in new[] { OpacityHint, CodexPathHint, DataFolderHint, ClaudeHooksHint, KeepHistoryHint, SaveUsageHistoryHint, JevHint })
             hint.Foreground = subtle;
 

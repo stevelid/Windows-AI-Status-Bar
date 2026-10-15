@@ -1,5 +1,15 @@
 # Known limitations
 
+## Other PC live sharing
+
+Optional encrypted live sharing publishes every 15 seconds plus Drive sync delay.
+Install/configure both PCs using `docs/REMOTE_PC_SETUP.md`. Remote rows are read-only;
+history, Projects, dismissal and resume links stay local. An initial cached file is
+unconfirmed until the host advances its heartbeat. Two minutes without advancement
+shows Unknown and clears remote working/attention counts, never a false completion.
+Changed peer keys are refused. End-to-end Drive delivery still needs the second PC;
+the Windows smoke harness covers two-device filesystem exchange and restart recovery.
+
 These limits describe the current Codex and Claude Code task collectors. Recon notes are from 2026-09-28; assumptions marked unverified still need a Windows check.
 
 ## Codex tasks

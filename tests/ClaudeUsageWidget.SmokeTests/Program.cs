@@ -371,4 +371,5 @@ Require(chatGpt[0].Utilization == 25.0, "Primary ChatGPT utilization is incorrec
 Require(chatGpt[1].Label == "Weekly limit", "Secondary ChatGPT window label is incorrect.");
 Require(chatGpt[1].Utilization == 40.0, "Secondary ChatGPT utilization is incorrect.");
 
-Console.WriteLine("Smoke tests passed: sanitized OAuth expiry guidance, safe updater failure handling and cleanup, redacted diagnostics, window placement recovery, Claude parser, ChatGPT desktop Codex discovery, Codex JSON-RPC handshake, ChatGPT rate-limit parser.");
+await RemoteTaskSyncSmokeTests.RunAsync();
+Console.WriteLine("Smoke tests passed: encrypted two-PC exchange and restart recovery, sanitized OAuth expiry guidance, safe updater failure handling and cleanup, redacted diagnostics, window placement recovery, Claude parser, ChatGPT desktop Codex discovery, Codex JSON-RPC handshake, ChatGPT rate-limit parser.");

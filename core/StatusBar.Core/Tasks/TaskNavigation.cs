@@ -7,6 +7,7 @@ public static class TaskNavigation
     public static Uri? CreateLink(AgentTask task, string? claudeDesktopSessionId = null)
     {
         ArgumentNullException.ThrowIfNull(task);
+        if (task.IsRemote) return null;
         if (task.Provider == AgentProvider.Codex && task.Id.StartsWith("codex-cloud:", StringComparison.Ordinal) &&
             Codex.CodexCloudTaskParser.IsTaskId(task.SessionReference))
             // ⚠️ A-X9: cloud task URLs use a separate identity from local thread UUIDs.

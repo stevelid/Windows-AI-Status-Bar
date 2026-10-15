@@ -49,6 +49,9 @@ public class Settings
     public bool HistoryExpanded { get; set; } = false;
     /// <summary>Whether the optional subscription-backed project summary worker may launch.</summary>
     public bool ProjectSummariesEnabled { get; set; } = true;
+    /// <summary>Opt-in trusted shared folder for encrypted live task exchange; history and Projects stay local.</summary>
+    public string? TaskSyncFolder { get; set; }
+    public string? TaskSyncLabel { get; set; }
     [JsonIgnore]
     public bool DoNotPersist { get; set; }
 
@@ -102,6 +105,8 @@ public class Settings
         CodexHomeOverride = NormalizeOptionalPath(CodexHomeOverride);
         ClaudeCodeHomeOverride = NormalizeOptionalPath(ClaudeCodeHomeOverride);
         CoworkRootOverride = NormalizeOptionalPath(CoworkRootOverride);
+        TaskSyncFolder = NormalizeOptionalPath(TaskSyncFolder);
+        TaskSyncLabel = NormalizeOptionalPath(TaskSyncLabel);
     }
 
     static string? NormalizeOptionalPath(string? value) =>

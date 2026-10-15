@@ -529,6 +529,7 @@ public partial class DetailsPaneWindow : Window
 
     void RenderTasks()
     {
+        RenderOtherPcs();
         _costs = ComputeCosts();
         var panels = new[] { NeedsYouRows, WorkingRows, UnknownRows, RecentRows };
         foreach (var panel in panels) panel.Children.Clear();
@@ -563,6 +564,36 @@ public partial class DetailsPaneWindow : Window
         EmptyTasks.Visibility = _tasks.Tasks.Count == 0 && HistoryHeader.Visibility != Visibility.Visible
             ? Visibility.Visible
             : Visibility.Collapsed;
+    }
+
+    void RenderOtherPcs()
+    {
+        OtherPcSection.Visibility = _tasks.TaskSyncStatusKey is null ? Visibility.Collapsed : Visibility.Visible;
+        OtherPcHeading.Text = L10n.T("sync_other_pc");
+        OtherPcStatus.Text = _tasks.TaskSyncStatusKey is { } status ? L10n.T(status) : "";
+        OtherPcRows.Children.Clear();
+        foreach (var device in _tasks.RemoteDevices)
+        {
+            OtherPcRows.Children.Add(new TextBlock
+            {
+                Text = L10n.F(device.IsFresh ? "sync_device_live" : "sync_device_stale", device.Label,
+                    TaskRowView.FormatAge(device.ReceivedAt)),
+                FontSize = 10,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Foreground = ThemeManager.Brush(ThemeManager.StatusText),
+                Margin = new Thickness(0, 5, 0, 4),
+            });
+            foreach (var task in device.Tasks.OrderBy(task => task.Status == AgentTaskStatus.NeedsAttention ? 0 :
+                         task.Status == AgentTaskStatus.Working ? 1 : 2))
+            {
+                var row = new TaskRowView();
+                row.Update(task);
+                OtherPcRows.Children.Add(row);
+            }
+            if (device.Tasks.Count == 0)
+                OtherPcRows.Children.Add(new TextBlock { Text = L10n.T("sync_no_tasks"), FontSize = 10,
+                    Foreground = ThemeManager.Brush(ThemeManager.SubtleText) });
+        }
     }
 
     void OnProjectsTabClick(object sender, RoutedEventArgs e) => SetProjectView(true);

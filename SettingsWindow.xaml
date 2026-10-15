@@ -143,6 +143,13 @@
             </DockPanel>
 
             <!-- Data sources -->
+            <TextBlock x:Name="SyncHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
+            <TextBlock x:Name="SyncHint" Style="{StaticResource Hint}"/>
+            <TextBlock x:Name="SyncFolderLabel" Style="{StaticResource FieldLabel}"/>
+            <TextBox x:Name="SyncFolderBox" Padding="6,5" Margin="0,6,0,0" LostFocus="OnSyncFolderLostFocus"/>
+            <TextBlock x:Name="SyncNameLabel" Style="{StaticResource FieldLabel}"/>
+            <TextBox x:Name="SyncNameBox" Padding="6,5" Margin="0,6,0,0" LostFocus="OnSyncNameLostFocus"/>
+
             <TextBlock x:Name="SourcesHeading" Style="{StaticResource SectionHeading}" Margin="0,24,0,2"/>
             <Border x:Name="SourcesRule" Style="{StaticResource SectionRule}"/>
 

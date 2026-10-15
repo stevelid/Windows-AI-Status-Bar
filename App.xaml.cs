@@ -55,6 +55,8 @@ public partial class App : System.Windows.Application
     StatusStripWindow _widget = null!;
     TrayController _trayController = null!;
     StatusBarState _taskState = StatusBarState.Empty;
+    RemoteTaskSyncService? _remoteTaskSync;
+    string? _remoteTaskSyncConfiguration;
     int? _agentStateRetentionMinutes;
     string? _agentStateCodexHomeOverride;
     string? _agentStateClaudeHomeOverride;
@@ -291,6 +293,7 @@ public partial class App : System.Windows.Application
         _usageMonitor.Start();
 
         ConfigureAgentTaskService();
+        ConfigureRemoteTaskSync();
         _systemEvents = new SystemEventsAdapter(
             () => _ = ReconcileTasksQuietlyAsync(),
             () => _usageMonitor?.RefreshNow());
@@ -556,6 +559,7 @@ public partial class App : System.Windows.Application
         _activity.SetPersistence(_settings.SaveUsageHistory);
         ApplyJevSettings();
         ConfigureAgentTaskService();
+        ConfigureRemoteTaskSync();
         UpdateTray();
 
         if (!string.Equals(_chatGptServicePath, _settings.CodexExecutablePath, StringComparison.OrdinalIgnoreCase))
@@ -617,6 +621,7 @@ public partial class App : System.Windows.Application
         _systemEvents?.Dispose();
         _turnEnds?.Dispose();
         _systemEvents = null;
+        if (_remoteTaskSync is not null) await _remoteTaskSync.DisposeAsync();
         if (_usageMonitor is not null)
             await _usageMonitor.DisposeAsync();
         if (_agentStateService is not null)
@@ -1269,10 +1274,39 @@ public partial class App : System.Windows.Application
     {
         if (_usageMonitor is null) return;
         var usage = _usageMonitor.Current;
-        _widget.UpdateState(usage, _taskState);
-        _trayController.UpdateTaskState(_taskState);
+        var visible = VisibleTaskState();
+        _widget.UpdateState(usage, visible);
+        _trayController.UpdateTaskState(visible);
         if (_detailsPane?.IsVisible == true)
-            _detailsPane.UpdateState(usage, _taskState);
+            _detailsPane.UpdateState(usage, visible);
+    }
+
+    StatusBarState VisibleTaskState() => StatusBar.Core.Sync.LiveTaskExchange.Attach(
+        _taskState, _remoteTaskSync?.Current ?? []) with
+    { TaskSyncStatusKey = _remoteTaskSync?.StatusKey ?? (_remoteTaskSyncConfiguration is null ? null : "sync_retrying") };
+
+    async void ConfigureRemoteTaskSync()
+    {
+        var configuration = _settings.DemoTasks || _demoTasksRequested || string.IsNullOrWhiteSpace(_settings.TaskSyncFolder)
+            ? null : _settings.TaskSyncFolder + "|" + _settings.TaskSyncLabel;
+        if (configuration == _remoteTaskSyncConfiguration) return;
+        _remoteTaskSyncConfiguration = configuration;
+        var old = _remoteTaskSync;
+        _remoteTaskSync = null;
+        if (old is not null) await old.DisposeAsync();
+        if (_exitStarted || configuration != _remoteTaskSyncConfiguration || configuration is null) { UpdateStrip(); return; }
+        try
+        {
+            _remoteTaskSync = new RemoteTaskSyncService(_settings.TaskSyncFolder!, _settings.TaskSyncLabel,
+                () => _agentStateService?.Current ?? StatusBarState.Empty, TimeProvider.System);
+            _remoteTaskSync.Changed += () => Dispatcher.BeginInvoke(() => { if (!_exitStarted) UpdateStrip(); });
+        }
+        catch (Exception exception)
+        {
+            // Never include paths, titles, keys or provider payloads in diagnostics.
+            Log.Write($"Task sync unavailable: {exception.GetType().Name}");
+        }
+        UpdateStrip();
     }
 
     // Clicking the strip activates it, which deactivates (and so closes) the open pane on
@@ -1311,7 +1345,7 @@ public partial class App : System.Windows.Application
             _widget.SetPaneOpen(false);
             _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: false);
         };
-        _detailsPane.UpdateState(_usageMonitor.Current, _taskState);
+        _detailsPane.UpdateState(_usageMonitor.Current, VisibleTaskState());
         _detailsPane.ShowAbove(_widget);
         _widget.SetPaneOpen(true);
         _trayController.UpdateVisibility(_widget.IsVisible, paneVisible: true);

@@ -64,4 +64,13 @@ The checksum protects against corrupted or mismatched downloads. Releases are no
 
 ## Reporting a security issue
 
+Optional Other PC sharing treats the selected private Drive directory as the device
+enrollment trust boundary. Devices exchange only public RSA keys there and pin the
+first key seen for each random device ID. Display-only snapshots are AES-256-GCM
+encrypted for each recipient, with RSA-OAEP-SHA256 key wrapping and RSA-PSS-SHA256
+publisher signatures. Private keys, counters and pins are DPAPI-protected locally.
+No account credentials, raw transcripts, tool payloads or full session paths enter
+the exchange. It does not sync the local project/history stores. Refer to
+`REMOTE_PC_SETUP.md` for key replacement and timing limits.
+
 Open a GitHub issue for non-sensitive problems. Do not paste tokens, `auth.json`, `tokens.dat`, browser cookies, or unredacted private logs into a public issue. For a sensitive report, contact the repository owner privately through their GitHub profile until a dedicated security advisory channel is enabled.

@@ -157,6 +157,13 @@
                 <TextBlock x:Name="EmptyTasks" FontSize="11" TextWrapping="Wrap"
                            Margin="0,7,0,0" Visibility="Collapsed"/>
                 </StackPanel>
+                <StackPanel x:Name="OtherPcSection" Visibility="Collapsed" Margin="0,10,0,0">
+                    <TextBlock x:Name="OtherPcHeading" FontSize="11" FontWeight="Bold" Margin="0,0,0,4"
+                               Foreground="{DynamicResource PaneTextBrush}"/>
+                    <TextBlock x:Name="OtherPcStatus" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5"
+                               Foreground="{DynamicResource PaneMutedBrush}"/>
+                    <StackPanel x:Name="OtherPcRows"/>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Border>

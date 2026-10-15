@@ -173,7 +173,7 @@ internal sealed class TaskRowView : Border
     void OnPreviewMouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (IsWithin(e.OriginalSource as DependencyObject, _dismissButton)) return;
-        if (_task is not { } task) return;
+        if (_task is not { IsRemote: false } task) return;
         FocusRequested?.Invoke(task);
         e.Handled = true;
     }
@@ -190,7 +190,7 @@ internal sealed class TaskRowView : Border
     }
 
     void UpdateDismissVisibility() =>
-        _dismissButton.Visibility = _task is not null && IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
+        _dismissButton.Visibility = _task is { IsRemote: false } && IsMouseOver ? Visibility.Visible : Visibility.Collapsed;
 
     static string ConfidenceLabel(StateConfidence confidence) => confidence switch
     {

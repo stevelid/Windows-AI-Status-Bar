@@ -27,6 +27,7 @@ internal static class AppActivator
     public static async Task<FocusResult> TryFocusAsync(AgentTask task)
     {
         ArgumentNullException.ThrowIfNull(task);
+        if (task.IsRemote) return FocusResult.Failed;
         var target = task.Provider == AgentProvider.Codex ? Codex : Claude;
 
         string? desktopSession = null;

@@ -68,4 +68,7 @@ public sealed record AgentTask
 
     /// <summary>Whether this task runs in Codex Cloud rather than the local desktop host.</summary>
     public bool IsCloud { get; init; }
+
+    /// <summary>A display-only task collected on another computer. Never resume it through a local session ID.</summary>
+    public bool IsRemote { get; init; }
 }

@@ -208,7 +208,12 @@ static class Program
                 StatusDetail = "Waiting for input",
             },
         };
-        return new StatusBarState(tasks, 1, 1, new Dictionary<AgentProvider, ProviderHealth>());
+        return StatusBar.Core.Sync.LiveTaskExchange.Attach(
+            new StatusBarState(tasks, 1, 1, new Dictionary<AgentProvider, ProviderHealth>()),
+            [new StatusBar.Core.Sync.RemoteTaskDevice("example-office", "Office PC", now.AddSeconds(-20), true,
+                [tasks[0] with { Id = "remote:example:build", Title = "Fictional remote build", IsRemote = true },
+                 tasks[1] with { Id = "remote:example:review", Title = "Fictional remote review", IsRemote = true }])])
+            with { TaskSyncStatusKey = "sync_connected" };
     }
 
     static ProjectOverviewDocument SampleProjects()

@@ -24,6 +24,17 @@ public static class L10n
 
     static readonly Dictionary<string, (string zh, string en)> Table = new()
     {
+        ["sync_other_pc"] = ("Other PC", "Other PC"),
+        ["sync_waiting"] = ("Waiting for the other PC to connect.", "Waiting for the other PC to connect."),
+        ["sync_connected"] = ("Encrypted live sharing is on. History and Projects stay on this PC.", "Encrypted live sharing is on. History and Projects stay on this PC."),
+        ["sync_retrying"] = ("Sharing delayed or a device key changed. Retrying; local tasks are unaffected.", "Sharing delayed or a device key changed. Retrying; local tasks are unaffected."),
+        ["sync_device_live"] = ("{0} · last received {1}", "{0} · last received {1}"),
+        ["sync_device_stale"] = ("{0} · waiting for a fresh heartbeat · last received {1}", "{0} · waiting for a fresh heartbeat · last received {1}"),
+        ["sync_no_tasks"] = ("No tasks in the last received snapshot.", "No tasks in the last received snapshot."),
+        ["sync_heading"] = ("Other PC", "Other PC"),
+        ["sync_hint"] = ("Choose the same private Drive folder on both PCs. Devices in this folder exchange public keys; task titles and status are encrypted. Leave blank to turn off. Allow for Drive sync delays.", "Choose the same private Drive folder on both PCs. Devices in this folder exchange public keys; task titles and status are encrypted. Leave blank to turn off. Allow for Drive sync delays."),
+        ["sync_folder"] = ("Shared folder", "Shared folder"),
+        ["sync_name"] = ("Name for this PC (optional)", "Name for this PC (optional)"),
         ["task_cloud"] = ("Cloud", "Cloud"),
         ["task_codex_cloud"] = ("Codex Cloud", "Codex Cloud"),
         // widget
