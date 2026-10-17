@@ -2,7 +2,6 @@ using StatusBar.Core.Codex;
 using StatusBar.Core.Diagnostics;
 using StatusBar.Core.Tasks;
 using StatusBar.Core.Judgment;
-using StatusBar.Core.Projects;
 
 namespace StatusBar.Core.Tests.Codex;
 
@@ -10,33 +9,6 @@ public class CodexRolloutParserTests
 {
     static readonly DateTimeOffset FallbackTime = DateTimeOffset.Parse("2026-01-01T12:00:00Z");
     static readonly DateTimeOffset EvaluationTime = FallbackTime.AddSeconds(5);
-
-    [Fact]
-    public void Project_summary_capture_keeps_only_bounded_visible_user_request_in_memory()
-    {
-        var previous = FinalMessageCapture.ProjectOverviewEnabled;
-        try
-        {
-            FinalMessageCapture.ProjectOverviewEnabled = true;
-            var state = new CodexSessionState();
-            var drift = new FormatDriftCounter();
-            CodexRolloutParser.Apply(state,
-                """{"type":"turn_started","timestamp":"2026-01-01T12:00:00Z"}""", FallbackTime, drift);
-            CodexRolloutParser.Apply(state,
-                """{"type":"response_item","payload":{"type":"message","role":"user","content":"Prepare the fictional sample."}}""", FallbackTime, drift);
-            CodexRolloutParser.Apply(state,
-                """{"type":"turn_complete","timestamp":"2026-01-01T12:00:01Z","payload":{"turn_id":"fake-turn","last_agent_message":"Prepared it."}}""", FallbackTime, drift);
-
-            Assert.Equal("Prepare the fictional sample.", state.SummaryContextText);
-            Assert.Null(state.FinalMessageTail);
-            Assert.Equal("Prepared it.", state.SummaryFinalMessageTail);
-            Assert.False(ProjectOverviewDocumentValidator.TryValidate(null, out _));
-        }
-        finally
-        {
-            FinalMessageCapture.ProjectOverviewEnabled = previous;
-        }
-    }
 
     [Theory]
     [InlineData("provisional-turn-running.jsonl", AgentTaskStatus.Working, StateConfidence.Confirmed, null, null)]
@@ -117,18 +89,6 @@ public class CodexRolloutParserTests
         Assert.Equal(0, drift.UnknownCount);
         Assert.Equal(0, drift.MalformedCount);
         Assert.Equal(AgentTaskStatus.Working, CodexTaskMapper.Map(state, EvaluationTime, TaskTimings.Default).Status);
-    }
-
-    [Fact]
-    public void Exact_summary_worker_source_marker_excludes_later_records_from_parser_state()
-    {
-        var (state, _) = ReadFixture("provisional-summary-worker.jsonl");
-
-        Assert.True(state.IsSummaryWorker);
-        Assert.Equal("windows_ai_status_bar_summary", state.ThreadSource);
-        Assert.Equal(CodexTurnStatus.None, state.Turn);
-        Assert.Null(state.TitleCandidate);
-        Assert.Null(state.FinalMessageTail);
     }
 
     [Fact]

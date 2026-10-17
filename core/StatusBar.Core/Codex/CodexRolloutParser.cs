@@ -3,15 +3,12 @@ using System.Text.Json;
 using StatusBar.Core.Common;
 using StatusBar.Core.Diagnostics;
 using StatusBar.Core.Judgment;
-using StatusBar.Core.Projects;
 
 namespace StatusBar.Core.Codex;
 
 /// <summary>Applies one Codex rollout record to the in-memory state for its session.</summary>
 internal static class CodexRolloutParser
 {
-    internal const string SummaryWorkerThreadSource = ProjectSummaryWorkerIdentity.ThreadSource;
-
     internal static void Apply(
         CodexSessionState state,
         string line,
@@ -35,9 +32,6 @@ internal static class CodexRolloutParser
 
         using (document)
         {
-            // Once the exact app-owned source marker is known, discard all further worker records.
-            // This prevents the worker's synthetic prompt and response from becoming task evidence.
-            if (state.IsSummaryWorker) return;
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || !TryGetString(root, "type", out var recordType))
             {
@@ -93,10 +87,6 @@ internal static class CodexRolloutParser
         var source = GetProperty(payload, "source");
         state.Source = source.ValueKind == JsonValueKind.String ? source.GetString() : null;
         state.ThreadSource = ReadString(payload, "thread_source");
-        state.IsSummaryWorker = string.Equals(
-            state.ThreadSource,
-            SummaryWorkerThreadSource,
-            StringComparison.Ordinal);
 
         // ⚠️ A-X6 Confirmed on Steve's machine 2026-09-30: a sub-agent's source is an object,
         // {"subagent":{"thread_spawn":{"parent_thread_id":…}}}, and Codex's approval reviewer is
@@ -232,7 +222,6 @@ internal static class CodexRolloutParser
                 // has replied, the card is no longer waiting on him.
                 if (state.Turn == CodexTurnStatus.Running) state.AskedStructuredQuestion = false;
                 state.TitleCandidate ??= ReadTitleCandidate(payload, "content");
-                state.SummaryContextText = FinalMessageCapture.Context(ReadVisibleText(payload, "content"));
                 return;
             default:
                 drift.RecordUnknown(GetSignature(recordType, itemType));
@@ -309,12 +298,8 @@ internal static class CodexRolloutParser
         state.AbortReason = null;
         state.FinalMessageTail = null;
         state.FinalMessageStart = null;
-        state.SummaryContextText = null;
         state.FinalMessageAt = null;
         state.Verdict = null;
-        state.SummaryFinalMessageTail = null;
-        state.SummaryFinalMessageStart = null;
-        state.SummaryFinalMessageAt = null;
         state.PendingCalls.Clear();
     }
 
@@ -341,9 +326,6 @@ internal static class CodexRolloutParser
             state.FinalMessageTail = FinalMessageCapture.Tail(finalMessage);
             state.FinalMessageStart = FinalMessageCapture.Start(finalMessage);
             state.FinalMessageAt = state.FinalMessageTail is null ? null : state.LastActivity;
-            state.SummaryFinalMessageTail = FinalMessageCapture.SummaryTail(finalMessage);
-            state.SummaryFinalMessageStart = FinalMessageCapture.SummaryStart(finalMessage);
-            state.SummaryFinalMessageAt = state.SummaryFinalMessageTail is null ? null : state.LastActivity;
             state.Verdict = null;
             state.EndedWithStructuredQuestion = state.AskedStructuredQuestion;
         }
@@ -390,25 +372,6 @@ internal static class CodexRolloutParser
         }
 
         return TextSanitizer.SanitizeTitleCandidate(builder.ToString());
-    }
-
-    static string? ReadVisibleText(JsonElement source, string propertyName)
-    {
-        var content = GetProperty(source, propertyName);
-        var builder = new StringBuilder();
-        if (content.ValueKind == JsonValueKind.String)
-            builder.Append(content.GetString());
-        else if (content.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var block in content.EnumerateArray())
-            {
-                if (block.ValueKind == JsonValueKind.String) builder.AppendLine(block.GetString());
-                else if (block.ValueKind == JsonValueKind.Object &&
-                         string.Equals(ReadString(block, "type"), "input_text", StringComparison.Ordinal) &&
-                         TryGetString(block, "text", out var text)) builder.AppendLine(text);
-            }
-        }
-        return builder.ToString();
     }
 
     static void AppendTextBlock(StringBuilder builder, string? text)

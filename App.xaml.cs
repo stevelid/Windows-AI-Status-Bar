@@ -10,7 +10,6 @@ using StatusBar.Core.Codex;
 using StatusBar.Core.Diagnostics;
 using StatusBar.Core.Judgment;
 using StatusBar.Core.Tasks;
-using StatusBar.Core.Projects;
 using StatusBar.Core.Usage;
 using MessageBox = System.Windows.MessageBox;
 using WinForms = System.Windows.Forms;
@@ -32,15 +31,6 @@ public partial class App : System.Windows.Application
     TurnEndMonitor? _turnEnds;
     UsageRateHistory _usageRates = null!;
     TaskActivityLog _activity = null!;
-    ProjectOverviewRepository _projectOverviewRepository = null!;
-    ProjectOverviewDocument _projectOverviewDocument = new();
-    readonly object _projectOverviewGate = new();
-    readonly ProjectSummaryQueue _projectSummaryQueue = new(TimeProvider.System);
-    readonly SemaphoreSlim _summaryQueueSignal = new(0);
-    readonly CancellationTokenSource _summaryLifetime = new();
-    CancellationTokenSource? _activeSummaryCancellation;
-    readonly object _summaryRunGate = new();
-    IProjectSummaryProvider? _projectSummaryProvider;
     HttpClient? _jevHttp;
     JevTurnEndClassifier? _jevClassifier;
     string? _jevKeyInUse;
@@ -193,19 +183,11 @@ public partial class App : System.Windows.Application
 
     void StartupCore()
     {
-        FinalMessageCapture.ProjectOverviewEnabled = true;
         _settings = Settings.Load();
         _history = new TaskHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "history.json"), _settings.KeepHistory);
         _usageRates = new UsageRateHistory(TimeProvider.System, Path.Combine(AppPaths.DataDir, "usage-history.json"), _settings.SaveUsageHistory);
         _activity = new TaskActivityLog(TimeProvider.System, Path.Combine(AppPaths.DataDir, "activity-history.json"), _settings.SaveUsageHistory);
-        _projectOverviewRepository = new ProjectOverviewRepository(AppPaths.DataDir);
-        var projectLoad = _projectOverviewRepository.Load();
-        _projectOverviewDocument = projectLoad.Document;
-        if (projectLoad.DiagnosticCode is not null)
-            Log.Write($"Project overview data: {projectLoad.DiagnosticCode}");
-        _projectSummaryProvider = new ProjectSummaryFallbackProvider(
-            new ClaudeCliProjectSummaryProvider(), new CodexCliProjectSummaryProvider(AppPaths.DataDir), TimeProvider.System);
-        _ = Task.Run(ProjectSummaryQueueLoopAsync);
+        DeleteWithdrawnProjectData();
         _turnEnds = new TurnEndMonitor(
             () => _jevClassifier,
             Log.Write,
@@ -638,7 +620,6 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        _summaryLifetime.Cancel();
         _activationWait?.Unregister(null);
         _activationWait = null;
         _activationSignal?.Dispose();
@@ -770,7 +751,6 @@ public partial class App : System.Windows.Application
         var initialState = _agentStateService.Current;
         LogTaskChanges(StatusBarState.Empty, initialState);
         _taskState = initialState;
-        PruneProjectOverview(initialState);
         UpdateStrip();
     }
 
@@ -810,32 +790,8 @@ public partial class App : System.Windows.Application
             var next = _agentStateService?.Current ?? state;
             LogTaskChanges(_taskState, next);
             _taskState = next;
-            PruneProjectOverview(next);
             UpdateStrip();
         });
-    }
-
-    void PruneProjectOverview(StatusBarState state)
-    {
-        if (_projectOverviewRepository is null) return;
-        var activeThreadIds = state.Tasks.Select(task => task.Id).ToHashSet(StringComparer.Ordinal);
-        lock (_projectOverviewGate)
-        {
-            var pruned = ProjectOverviewDocumentRules.Prune(_projectOverviewDocument, TimeProvider.System.GetUtcNow(), activeThreadIds);
-            if (_projectOverviewDocument.Projects.SequenceEqual(pruned.Projects) &&
-                _projectOverviewDocument.Memberships.SequenceEqual(pruned.Memberships) &&
-                _projectOverviewDocument.Updates.SequenceEqual(pruned.Updates) &&
-                _projectOverviewDocument.Acknowledgements.SequenceEqual(pruned.Acknowledgements) &&
-                _projectOverviewDocument.Coverage.SequenceEqual(pruned.Coverage) &&
-                _projectOverviewDocument.ThreadReferences.SequenceEqual(pruned.ThreadReferences)) return;
-            try
-            {
-                _projectOverviewRepository.Save(pruned);
-                _projectOverviewDocument = pruned;
-                _detailsPane?.UpdateProjectDocument(pruned);
-            }
-            catch (Exception exception) { Log.Write($"Project overview retention: {exception.GetType().Name}"); }
-        }
     }
 
     void OnEnteredNeedsAttention(AgentTask task)
@@ -879,7 +835,6 @@ public partial class App : System.Windows.Application
         }
         var provider = new CodexTaskProvider(codexHome);
         provider.TurnEnded += OnTurnEnded;
-        provider.ProjectSummaryTurnEnded += QueueProjectSummary;
         provider.WatcherOverflowed += OnCodexWatcherOverflow;
         provider.Trace += OnCodexTrace;
         _codexTaskProvider = provider;
@@ -893,7 +848,6 @@ public partial class App : System.Windows.Application
         var provider = new ClaudeCodeTaskProvider(claudeHome, hookPath);
         provider.Trace += OnClaudeTrace;
         provider.TurnEnded += OnTurnEnded;
-        provider.ProjectSummaryTurnEnded += QueueProjectSummary;
         _claudeTaskProvider = provider;
         return provider;
     }
@@ -919,161 +873,6 @@ public partial class App : System.Windows.Application
     static void OnCodexTrace(string message) => Log.Write("Codex: " + message);
 
     static void OnClaudeTrace(string message) => Log.Write("Claude: " + message);
-
-    void QueueProjectSummary(StatusBar.Core.Judgment.TurnEndInfo info)
-    {
-        if (_projectSummaryProvider is null || string.IsNullOrWhiteSpace(info.StableTaskId) ||
-            string.IsNullOrWhiteSpace(info.EvidenceKey) || info.StableTaskId.Length > ProjectTextLimits.MaximumEvidenceIdLength ||
-            info.EvidenceKey.Length > ProjectTextLimits.MaximumEvidenceIdLength) return;
-
-        var task = _taskState.Tasks.FirstOrDefault(item => item.Id == info.StableTaskId);
-        var title = ProjectSummaryTextSanitizer.Sanitize(info.DisplayTitle ?? task?.Title ?? "AI conversation", 120) ?? "AI conversation";
-        var assistantText = (info.Start is null ? string.Empty : "[message start]\n" + info.Start + "\n[message end]\n") + info.Text;
-        string[] candidateNames;
-        string? priorSummary;
-        lock (_projectOverviewGate)
-        {
-            candidateNames = _projectOverviewDocument.Projects.Select(project => project.Name)
-                .Take(ProjectSummaryValidator.MaximumCandidateProjectNames).ToArray();
-            var existingProjectIds = _projectOverviewDocument.Memberships
-                .Where(item => item.ThreadId == info.StableTaskId)
-                .Select(item => item.ProjectId).ToHashSet(StringComparer.Ordinal);
-            priorSummary = _projectOverviewDocument.Projects
-                .Where(project => existingProjectIds.Contains(project.Id))
-                .Select(project => project.CurrentSummary).FirstOrDefault(summary => !string.IsNullOrWhiteSpace(summary));
-        }
-        var request = new ProjectSummaryRequest(
-            info.StableTaskId,
-            info.EvidenceKey,
-            title,
-            ProjectSummaryTextSanitizer.Sanitize(info.ContextText, 1200),
-            ProjectSummaryTextSanitizer.Sanitize(assistantText, 1800) ?? string.Empty,
-            candidateNames,
-            ProjectSummaryTextSanitizer.Sanitize(priorSummary, 1000),
-            OccurredAt: info.OccurredAt ?? DateTimeOffset.UtcNow,
-            EarlierEvidence: []);
-        if (!ProjectSummaryValidator.IsValidRequest(request)) return;
-
-        lock (_projectOverviewGate)
-        {
-            if (_projectOverviewDocument.Coverage.Any(item => item.ThreadId == request.ThreadId && item.TurnId == request.EvidenceId &&
-                (item.ProjectId is not null || item.PromptVersion == "project-overview-v2"))) return;
-            if (_projectSummaryQueue.Enqueue(request)) _summaryQueueSignal.Release();
-        }
-    }
-
-    async Task ProjectSummaryQueueLoopAsync()
-    {
-        while (!_summaryLifetime.IsCancellationRequested)
-        {
-            try
-            {
-                await _summaryQueueSignal.WaitAsync(_summaryLifetime.Token);
-                await Task.Delay(TimeSpan.FromSeconds(35), _summaryLifetime.Token);
-                if (!_settings.ProjectSummariesEnabled) continue;
-                while (_projectSummaryQueue.TryDequeue(out var work))
-                {
-                    if (!_settings.ProjectSummariesEnabled)
-                    {
-                        _projectSummaryQueue.Requeue(work);
-                        break;
-                    }
-                    if (!await WaitForSummaryBudgetAsync(_summaryLifetime.Token))
-                    {
-                        _projectSummaryQueue.Requeue(work);
-                        break;
-                    }
-                    if (!_settings.ProjectSummariesEnabled)
-                    {
-                        _projectSummaryQueue.Requeue(work);
-                        break;
-                    }
-                    using var launchCancellation = CancellationTokenSource.CreateLinkedTokenSource(_summaryLifetime.Token);
-                    try
-                    {
-                        var provider = _projectSummaryProvider;
-                        if (provider is null) break;
-                        lock (_summaryRunGate)
-                        {
-                            if (!_settings.ProjectSummariesEnabled)
-                            {
-                                _projectSummaryQueue.Requeue(work);
-                                break;
-                            }
-                            _activeSummaryCancellation = launchCancellation;
-                        }
-                        _projectSummaryQueue.RecordLaunch();
-                        var result = await provider.SummarizeAsync(work.Request, launchCancellation.Token);
-                        if (!_settings.ProjectSummariesEnabled)
-                        {
-                            _projectSummaryQueue.Requeue(work);
-                            break;
-                        }
-                        if (result is not null && ProjectSummaryValidator.TryValidate(work.Request, result))
-                        {
-                            if (_projectSummaryQueue.IsCurrent(work))
-                            {
-                                _projectSummaryQueue.RecordSuccess();
-                                _detailsPane?.UpdateProjectSummaryStatus(true);
-                                CommitProjectSummary(work, result);
-                            }
-                        }
-                        else
-                        {
-                            _projectSummaryQueue.RecordFailure();
-                            _detailsPane?.UpdateProjectSummaryStatus(true, unavailable: true);
-                        }
-                    }
-                    catch (OperationCanceledException) when (_summaryLifetime.IsCancellationRequested) { return; }
-                    catch (OperationCanceledException) when (!_settings.ProjectSummariesEnabled)
-                    {
-                        _projectSummaryQueue.Requeue(work);
-                        break;
-                    }
-                    catch (Exception exception)
-                    {
-                        // Log only a fixed failure category; never include worker text, paths or raw diagnostics.
-                        _projectSummaryQueue.RecordFailure();
-                        _detailsPane?.UpdateProjectSummaryStatus(true, unavailable: true);
-                        Log.Write($"Project summary worker: {(exception is ProjectSummaryWorkerException workerFailure ? workerFailure.Code : exception.GetType().Name)}");
-                    }
-                    finally
-                    {
-                        lock (_summaryRunGate)
-                            if (ReferenceEquals(_activeSummaryCancellation, launchCancellation)) _activeSummaryCancellation = null;
-                        _projectSummaryQueue.Complete(work);
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (_summaryLifetime.IsCancellationRequested) { return; }
-            catch (Exception exception) { Log.Write($"Project summary queue: {exception.GetType().Name}"); }
-        }
-    }
-
-    async Task<bool> WaitForSummaryBudgetAsync(CancellationToken cancellationToken)
-    {
-        while (true)
-        {
-            if (!_settings.ProjectSummariesEnabled) return false;
-            var delay = _projectSummaryQueue.GetLaunchDelay();
-            if (delay <= TimeSpan.Zero) return true;
-            var signaled = await _summaryQueueSignal.WaitAsync(delay, cancellationToken);
-            if (signaled && !_settings.ProjectSummariesEnabled) return false;
-        }
-    }
-
-    void CommitProjectSummary(ProjectSummaryWorkItem work, ProjectSummaryResult result)
-    {
-        ProjectOverviewDocument updated;
-        lock (_projectOverviewGate)
-        {
-            if (!_projectSummaryQueue.IsCurrent(work)) return;
-            updated = ProjectSummaryReducer.Apply(_projectOverviewDocument, work.Request, result, TimeProvider.System);
-            _projectOverviewRepository.Save(updated);
-            _projectOverviewDocument = updated;
-        }
-        Dispatcher.BeginInvoke(() => _detailsPane?.UpdateProjectDocument(updated));
-    }
 
     void OnTurnEnded(TurnEndInfo info)
     {
@@ -1112,149 +911,31 @@ public partial class App : System.Windows.Application
         FinalMessageCapture.Enabled = _jevClassifier is not null;
     }
 
+    // The withdrawn Projects feature (P7) left encrypted summaries and a worker folder in the data directory.
+    // Best effort: a locked file is retried on the next start, and only the exception type is logged.
+    static void DeleteWithdrawnProjectData()
+    {
+        foreach (var name in new[]
+                 {
+                     "projects.dat", "projects.recovery.dat", "projects.pending.dat",
+                     "projects.unreadable.dat", "projects-recovery.unreadable.dat",
+                 })
+        {
+            try { File.Delete(Path.Combine(AppPaths.DataDir, name)); }
+            catch (Exception ex) { Log.Write($"Withdrawn project data cleanup: {ex.GetType().Name}"); }
+        }
+        foreach (var directory in new[]
+                 {
+                     Path.Combine(AppPaths.DataDir, "summary-worker"),
+                     Path.Combine(Path.GetTempPath(), "windows-ai-status-bar-summary"),
+                 })
+        {
+            try { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
+            catch (Exception ex) { Log.Write($"Withdrawn project data cleanup: {ex.GetType().Name}"); }
+        }
+    }
+
     void OnDismissTaskRequested(string taskId) => _agentStateService?.Dismiss(taskId);
-
-    void OnProjectUpdateOpened(ProjectAcknowledgement acknowledgement)
-    {
-        lock (_projectOverviewGate)
-        {
-            if (!_projectOverviewDocument.Updates.Any(update => update.Id == acknowledgement.UpdateId && update.Revision == acknowledgement.Revision)) return;
-            var acknowledgements = _projectOverviewDocument.Acknowledgements
-                .Where(item => !(item.UpdateId == acknowledgement.UpdateId && item.Revision == acknowledgement.Revision))
-                .Append(acknowledgement).ToList();
-            var updated = _projectOverviewDocument with { Acknowledgements = acknowledgements };
-            try
-            {
-                _projectOverviewRepository.Save(updated);
-                _projectOverviewDocument = updated;
-                _detailsPane?.UpdateProjectDocument(updated);
-            }
-            catch (Exception exception) { Log.Write($"Project overview save: {exception.GetType().Name}"); }
-        }
-    }
-
-    void OnProjectMarkAllSeen()
-    {
-        lock (_projectOverviewGate)
-        {
-            var updated = ProjectOverviewDocumentRules.AcknowledgeAll(_projectOverviewDocument);
-            try
-            {
-                _projectOverviewRepository.Save(updated);
-                _projectOverviewDocument = updated;
-                _detailsPane?.UpdateProjectDocument(updated);
-            }
-            catch (Exception exception) { Log.Write($"Project overview save: {exception.GetType().Name}"); }
-        }
-    }
-
-    async void OnProjectUpdateOpenRequested(ProjectAcknowledgement acknowledgement, AgentTask task)
-    {
-        var result = await AppActivator.TryFocusAsync(task);
-        Log.Write($"Focus {task.Provider} ({task.Status}): {result switch
-        {
-            AppActivator.FocusResult.SessionLinkDispatched => "session link dispatched",
-            AppActivator.FocusResult.AppFocused => "app activated (session link unavailable)",
-            _ => "activation failed",
-        }}");
-        if (result == AppActivator.FocusResult.Failed) return;
-        OnProjectUpdateOpened(acknowledgement);
-        _detailsPane?.Close();
-    }
-
-    void OnProjectAssignmentRequested(string threadId, string? projectId)
-    {
-        lock (_projectOverviewGate)
-        {
-            if (projectId is not null && !_projectOverviewDocument.Projects.Any(project => project.Id == projectId)) return;
-            // Keep prior associations so their summaries and source links remain valid history;
-            // the one current manual choice takes precedence in the Core projection.
-            var memberships = _projectOverviewDocument.Memberships.Select(item =>
-                item.ThreadId == threadId && item.Source == ProjectMembershipSource.Manual && !item.IsUnassigned
-                    ? item with { Source = ProjectMembershipSource.Suggested }
-                    : item).ToList();
-            memberships.RemoveAll(item => item.ThreadId == threadId && item.IsUnassigned);
-            if (projectId is not null)
-            {
-                memberships.RemoveAll(item => item.ThreadId == threadId && item.ProjectId == projectId && item.Source != ProjectMembershipSource.Manual);
-                memberships.Add(new ProjectMembership(projectId, threadId, ProjectMembershipSource.Manual));
-            }
-            else memberships.Add(new ProjectMembership(string.Empty, threadId, ProjectMembershipSource.Manual, IsUnassigned: true));
-            var updated = _projectOverviewDocument with
-            {
-                Memberships = memberships,
-            };
-            SaveProjectDocument(updated);
-        }
-    }
-
-    void OnProjectDeleteRequested(string projectId)
-    {
-        lock (_projectOverviewGate)
-        {
-            try
-            {
-                InvalidateProjectSummaryWork();
-                var updated = ProjectOverviewDocumentRules.DeleteProject(_projectOverviewDocument, projectId);
-                _projectOverviewRepository.DeleteProject(updated, projectId);
-                _projectOverviewDocument = updated;
-                _detailsPane?.UpdateProjectDocument(updated);
-            }
-            catch (Exception exception) { Log.Write($"Project overview delete: {exception.GetType().Name}"); }
-        }
-    }
-
-    void OnProjectOverviewClearRequested()
-    {
-        lock (_projectOverviewGate)
-        {
-            try
-            {
-                InvalidateProjectSummaryWork();
-                _projectOverviewRepository.Clear();
-                _projectOverviewDocument = ProjectOverviewDocumentRules.Clear();
-                _detailsPane?.UpdateProjectDocument(_projectOverviewDocument);
-            }
-            catch (Exception exception) { Log.Write($"Project overview clear: {exception.GetType().Name}"); }
-        }
-    }
-
-    void OnProjectSummaryToggleRequested()
-    {
-        lock (_summaryRunGate)
-        {
-            _settings.ProjectSummariesEnabled = !_settings.ProjectSummariesEnabled;
-            if (!_settings.ProjectSummariesEnabled) _activeSummaryCancellation?.Cancel();
-        }
-        _settings.Save();
-        if (_settings.ProjectSummariesEnabled)
-        {
-            _summaryQueueSignal.Release();
-            _detailsPane?.UpdateProjectSummaryStatus(true);
-        }
-        else
-        {
-            _detailsPane?.UpdateProjectSummaryStatus(false);
-        }
-    }
-
-    void InvalidateProjectSummaryWork()
-    {
-        _projectSummaryQueue.InvalidateAll();
-        lock (_summaryRunGate) _activeSummaryCancellation?.Cancel();
-    }
-
-    void SaveProjectDocument(ProjectOverviewDocument updated)
-    {
-        try
-        {
-            if (!ProjectOverviewDocumentValidator.TryValidate(updated, out var error)) throw new InvalidDataException(error);
-            _projectOverviewRepository.Save(updated);
-            _projectOverviewDocument = updated;
-            _detailsPane?.UpdateProjectDocument(updated);
-        }
-        catch (Exception exception) { Log.Write($"Project overview save: {exception.GetType().Name}"); }
-    }
 
     async void OnFocusTaskRequested(AgentTask task)
     {
@@ -1328,17 +1009,11 @@ public partial class App : System.Windows.Application
         if (_detailsPaneClosedAtMs is long closedAt &&
             Environment.TickCount64 - closedAt < PaneReopenGuardMs) return;
         if (!_widget.IsVisible || _usageMonitor is null) return;
-        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory, _usageRates, _activity, _projectOverviewDocument);
+        _detailsPane = new DetailsPaneWindow(_settings, _activeHistory, _usageRates, _activity);
         _detailsPane.ClearFinishedRequested += () => _agentStateService?.DismissFinished();
         _detailsPane.OpenHistoryTaskRequested += OnFocusTaskRequested;
         _detailsPane.DismissTaskRequested += OnDismissTaskRequested;
         _detailsPane.FocusTaskRequested += OnFocusTaskRequested;
-        _detailsPane.ProjectUpdateOpenRequested += OnProjectUpdateOpenRequested;
-        _detailsPane.ProjectMarkAllSeenRequested += OnProjectMarkAllSeen;
-        _detailsPane.ProjectAssignmentRequested += OnProjectAssignmentRequested;
-        _detailsPane.ProjectDeleteRequested += OnProjectDeleteRequested;
-        _detailsPane.ClearProjectOverviewRequested += OnProjectOverviewClearRequested;
-        _detailsPane.ProjectSummaryToggleRequested += OnProjectSummaryToggleRequested;
         _detailsPane.Closed += (_, _) =>
         {
             _detailsPaneClosedAtMs = Environment.TickCount64;

@@ -53,7 +53,6 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
         _sessions = new CodexSessionReader(paths, time, _timings);
         _sessions.Trace += message => Trace?.Invoke(message);
         _sessions.TurnEnded += info => TurnEnded?.Invoke(info);
-        _sessions.ProjectSummaryTurnEnded += info => ProjectSummaryTurnEnded?.Invoke(info);
         _current = Snapshot([], new ProviderHealth(ProviderHealthState.Starting, "NotStarted", null));
         _diagnostics = new CodexTaskDiagnostics(
             _current.Health,
@@ -80,9 +79,6 @@ public sealed class CodexTaskProvider : IAgentTaskProvider
 
     /// <summary>Raised when a live turn finishes and the optional AI check is on; carries the final message tail.</summary>
     public event StatusBar.Core.Judgment.TurnEndHandler? TurnEnded;
-
-    /// <summary>Raised for bounded project-summary input, independently from the optional Jev classifier.</summary>
-    public event StatusBar.Core.Judgment.TurnEndHandler? ProjectSummaryTurnEnded;
 
     /// <inheritdoc />
     public ProviderTaskSnapshot Current
